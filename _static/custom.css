@@ -1,0 +1,11 @@
+/* Hide default author/copyright footer block */
+.bd-footer-content .component-author,
+.bd-footer-content .copyright {
+  display: none !important;
+}
+
+/* Defensive fallback for theme variations */
+.bd-footer-content .footer-item:nth-child(1),
+.bd-footer-content .footer-item:nth-child(2) {
+  display: none !important;
+}
