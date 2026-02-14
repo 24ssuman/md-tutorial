@@ -1,0 +1,1048 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Module 8: Multi-Particle Simulations: Lennard-Jones Fluid with ASE &#8212; Molecular Dynamics Tutorial for Beginners</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="../../../_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_build/jupyter_execute/notebooks/8_ase_LJ_fluid_simulation';</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../intro.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Molecular Dynamics Tutorial for Beginners</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../intro.html">
+                    Molecular Dynamics Tutorial for Beginners
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/1_intro_to_MD.html">Module 1: Introduction to Molecular Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/2_physics_of_MD.html">Module 2: The Physics Behind MD</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/3_non_bonded_interactions.html">Module 3: Non-Bonded Interactions and Long-Range Electrostatics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/4_1D_simulations.html">Module 4: Simulating Simple 1D Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/5_sampling_challenge.html">Module 5: The Challenge of Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/5.5_chossing_CVs.html">Lesson 5.2a: Choosing Good Collective Variables for Multi-Dimensional Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/6_umbrella_sampling.html">Module 6: Enhanced Sampling I - Umbrella Sampling (US) &amp; PMF Reconstruction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/6.1_WHAM_detailed.html">WHAM, step by step (with plots)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/7_meta_dynamics.html">Module 7: Enhanced Sampling II - Metadynamics (MetaD)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/8_ase_LJ_fluid_simulation.html">Module 8: Multi-Particle Simulations: Lennard-Jones Fluid with ASE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/9_ase_waterbox_simulation_not_working.html">Module 9: Simulating Molecular Systems: Water Box with ASE</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-launch-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
+    <i class="fas fa-rocket"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://mybinder.org/v2/gh/YOUR_USERNAME/YOUR_REPO/main?urlpath=lab/tree/./_build/jupyter_execute/notebooks/8_ase_LJ_fluid_simulation.ipynb" target="_blank"
+   class="btn btn-sm dropdown-item"
+   title="Launch on Binder"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  
+    <img alt="Binder logo" src="../../../_static/images/logo_binder.svg">
+  </span>
+<span class="btn__text-container">Binder</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="initThebeSBT()"
+  class="btn btn-sm btn-launch-thebe dropdown-item"
+  title="Launch Thebe"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-play"></i>
+  </span>
+<span class="btn__text-container">Live Code</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO/issues/new?title=Issue%20on%20page%20%2F_build/jupyter_execute/notebooks/8_ase_LJ_fluid_simulation.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../../_sources/_build/jupyter_execute/notebooks/8_ase_LJ_fluid_simulation.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Module 8: Multi-Particle Simulations: Lennard-Jones Fluid with ASE</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-8-1-introduction-to-ase-atomic-simulation-environment">Lesson 8.1: Introduction to ASE (Atomic Simulation Environment)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#importing-ase-modules">Importing ASE modules</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-8-2-setting-up-the-lj-system">Lesson 8.2: Setting up the LJ System</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#create-initial-configuration-apply-pbc">1. Create Initial Configuration &amp; Apply PBC</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#set-up-the-lennard-jones-calculator">2. Set up the Lennard-Jones Calculator</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#assign-initial-velocities">3. Assign Initial Velocities</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-8-3-running-nvt-simulations-with-ase">Lesson 8.3: Running NVT Simulations with ASE</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-8-4-analysis-of-lj-system-properties">Lesson 8.4: Analysis of LJ System Properties</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#calculating-the-rdf">Calculating the RDF</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#visualizing-trajectories">Visualizing Trajectories</a></li>
+</ul>
+</li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="module-8-multi-particle-simulations-lennard-jones-fluid-with-ase">
+<h1>Module 8: Multi-Particle Simulations: Lennard-Jones Fluid with ASE<a class="headerlink" href="#module-8-multi-particle-simulations-lennard-jones-fluid-with-ase" title="Link to this heading">#</a></h1>
+<p>Welcome to Module 8! Having explored 1D systems and enhanced sampling, we now move to simulating more realistic, multi-particle systems in 3D. Writing efficient MD code for many particles is complex, involving neighbor lists, parallelization, and robust integrators. Therefore, we will use a powerful library designed for this purpose: the <strong>Atomic Simulation Environment (ASE)</strong>.</p>
+<p>In this module, we will learn the basics of ASE by setting up, running, and analyzing a simulation of a classic model system: the Lennard-Jones (LJ) fluid. This system, composed of particles interacting via the LJ potential, serves as a fundamental model for simple liquids and gases.</p>
+<section id="lesson-8-1-introduction-to-ase-atomic-simulation-environment">
+<h2>Lesson 8.1: Introduction to ASE (Atomic Simulation Environment)<a class="headerlink" href="#lesson-8-1-introduction-to-ase-atomic-simulation-environment" title="Link to this heading">#</a></h2>
+<p><strong>What is ASE?</strong>
+ASE is a Python library for setting up, manipulating, running, visualizing, and analyzing atomistic simulations. It doesn’t perform the core calculations itself (like integrating equations of motion or calculating forces for complex potentials) but acts as a powerful interface or “glue” connecting various external simulation codes (like LAMMPS, GPAW, VASP, Quantum Espresso) and internal calculators (like the Lennard-Jones calculator we’ll use).</p>
+<p><strong>Key Features:</strong></p>
+<ul class="simple">
+<li><p><strong>Atoms Object:</strong> A central object representing a collection of atoms with positions, momenta, cell dimensions, boundary conditions, etc.</p></li>
+<li><p><strong>Calculators:</strong> Objects attached to <code class="docutils literal notranslate"><span class="pre">Atoms</span></code> that compute energy and forces (e.g., LJ potential, EMT potential, interfaces to DFT codes or complex force fields via OpenMM/LAMMPS).</p></li>
+<li><p><strong>Dynamics/Optimization:</strong> Modules for running MD simulations (NVE, NVT, NPT using various integrators/thermostats) or performing structure optimization.</p></li>
+<li><p><strong>Input/Output:</strong> Reading and writing various file formats common in atomistic simulations.</p></li>
+<li><p><strong>Analysis Tools:</strong> Built-in functions for common analysis tasks (e.g., RDF).</p></li>
+<li><p><strong>Building Tools:</strong> Functions for creating common structures (surfaces, bulk crystals, nanotubes, etc.).</p></li>
+</ul>
+<p><strong>Installation:</strong>
+If you haven’t installed ASE yet, you can typically do so via pip:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>ase
+</pre></div>
+</div>
+<p>Or conda:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>ase
+</pre></div>
+</div>
+<p><strong>Basic ASE Objects:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ase.Atoms</span></code>: Stores the state of the system (positions, numbers, cell, pbc, calculator, momenta).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ase.calculators</span></code>: Contains modules for different ways to calculate energy and forces. We’ll use <code class="docutils literal notranslate"><span class="pre">ase.calculators.lj.LennardJones</span></code>.</p></li>
+</ul>
+<section id="importing-ase-modules">
+<h3>Importing ASE modules<a class="headerlink" href="#importing-ase-modules" title="Link to this heading">#</a></h3>
+<p>Let’s import the necessary ASE modules along with NumPy and Matplotlib.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="o">!</span>pip<span class="w"> </span>install<span class="w"> </span>ase
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Collecting ase
+  Downloading ase-3.25.0-py3-none-any.whl.metadata (4.2 kB)
+Requirement already satisfied: numpy&gt;=1.19.5 in /usr/local/lib/python3.11/dist-packages (from ase) (2.0.2)
+Requirement already satisfied: scipy&gt;=1.6.0 in /usr/local/lib/python3.11/dist-packages (from ase) (1.15.2)
+Requirement already satisfied: matplotlib&gt;=3.3.4 in /usr/local/lib/python3.11/dist-packages (from ase) (3.10.0)
+Requirement already satisfied: contourpy&gt;=1.0.1 in /usr/local/lib/python3.11/dist-packages (from matplotlib&gt;=3.3.4-&gt;ase) (1.3.2)
+Requirement already satisfied: cycler&gt;=0.10 in /usr/local/lib/python3.11/dist-packages (from matplotlib&gt;=3.3.4-&gt;ase) (0.12.1)
+Requirement already satisfied: fonttools&gt;=4.22.0 in /usr/local/lib/python3.11/dist-packages (from matplotlib&gt;=3.3.4-&gt;ase) (4.57.0)
+Requirement already satisfied: kiwisolver&gt;=1.3.1 in /usr/local/lib/python3.11/dist-packages (from matplotlib&gt;=3.3.4-&gt;ase) (1.4.8)
+Requirement already satisfied: packaging&gt;=20.0 in /usr/local/lib/python3.11/dist-packages (from matplotlib&gt;=3.3.4-&gt;ase) (24.2)
+Requirement already satisfied: pillow&gt;=8 in /usr/local/lib/python3.11/dist-packages (from matplotlib&gt;=3.3.4-&gt;ase) (11.2.1)
+Requirement already satisfied: pyparsing&gt;=2.3.1 in /usr/local/lib/python3.11/dist-packages (from matplotlib&gt;=3.3.4-&gt;ase) (3.2.3)
+Requirement already satisfied: python-dateutil&gt;=2.7 in /usr/local/lib/python3.11/dist-packages (from matplotlib&gt;=3.3.4-&gt;ase) (2.9.0.post0)
+Requirement already satisfied: six&gt;=1.5 in /usr/local/lib/python3.11/dist-packages (from python-dateutil&gt;=2.7-&gt;matplotlib&gt;=3.3.4-&gt;ase) (1.17.0)
+Downloading ase-3.25.0-py3-none-any.whl (3.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ <span class=" -Color -Color-Green">3.0/3.0 MB</span> <span class=" -Color -Color-Red">37.4 MB/s</span> eta <span class=" -Color -Color-Cyan">0:00:00</span>
+?25hInstalling collected packages: ase
+Successfully installed ase-3.25.0
+</pre></div>
+</div>
+</div>
+</div>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+
+<span class="c1"># ASE imports</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">ase</span><span class="w"> </span><span class="kn">import</span> <span class="n">Atoms</span><span class="p">,</span> <span class="n">units</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">ase.calculators.lj</span><span class="w"> </span><span class="kn">import</span> <span class="n">LennardJones</span> <span class="c1"># LJ potential calculator</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">ase.md.langevin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Langevin</span> <span class="c1"># Langevin dynamics integrator</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">ase.md.velocitydistribution</span><span class="w"> </span><span class="kn">import</span> <span class="n">MaxwellBoltzmannDistribution</span><span class="p">,</span> <span class="n">Stationary</span><span class="p">,</span> <span class="n">ZeroRotation</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">ase.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">BFGS</span> <span class="c1"># For potential energy minimization</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">ase.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read</span><span class="p">,</span> <span class="n">write</span><span class="p">,</span> <span class="n">Trajectory</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">ase.build</span><span class="w"> </span><span class="kn">import</span> <span class="n">bulk</span> <span class="c1"># For creating initial bulk structure</span>
+    <span class="c1"># For RDF calculation</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">ase.geometry.analysis</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_rdf</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;ASE modules imported successfully.&quot;</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error importing ASE modules: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Please ensure ASE is installed (&#39;pip install ase&#39;)&quot;</span><span class="p">)</span>
+
+<span class="c1"># Plotting style</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">use</span><span class="p">(</span><span class="s1">&#39;seaborn-v0_8-darkgrid&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;figure.figsize&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>ASE modules imported successfully.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="lesson-8-2-setting-up-the-lj-system">
+<h2>Lesson 8.2: Setting up the LJ System<a class="headerlink" href="#lesson-8-2-setting-up-the-lj-system" title="Link to this heading">#</a></h2>
+<p>We’ll simulate Argon (Ar), a noble gas often modeled using the Lennard-Jones potential. The LJ potential is:
+$<span class="math notranslate nohighlight">\( V_{LJ}(r) = 4\epsilon \left[ \left(\frac{\sigma}{r}\right)^{12} - \left(\frac{\sigma}{r}\right)^{6} \right] \)</span>$
+For Argon, typical parameters are:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(\sigma \approx 3.405\)</span> Å (Angstroms)</p></li>
+<li><p><span class="math notranslate nohighlight">\(\epsilon \approx 0.0103\)</span> eV (electron Volts) or <span class="math notranslate nohighlight">\(119.8\)</span> K <span class="math notranslate nohighlight">\(\times k_B\)</span></p></li>
+</ul>
+<p>ASE uses specific units internally (eV for energy, Å for length).</p>
+<p><strong>Steps:</strong></p>
+<ol class="arabic simple">
+<li><p>Create an initial configuration of Ar atoms (e.g., start from a face-centered cubic (fcc) lattice).</p></li>
+<li><p>Define the simulation box and apply Periodic Boundary Conditions (PBC).</p></li>
+<li><p>Set up the Lennard-Jones calculator with the appropriate parameters.</p></li>
+<li><p>Assign initial velocities corresponding to a desired temperature.</p></li>
+</ol>
+<section id="create-initial-configuration-apply-pbc">
+<h3>1. Create Initial Configuration &amp; Apply PBC<a class="headerlink" href="#create-initial-configuration-apply-pbc" title="Link to this heading">#</a></h3>
+<p>We can use <code class="docutils literal notranslate"><span class="pre">ase.build.bulk</span></code> to create a unit cell and then repeat it to get a larger system. We choose a lattice constant <code class="docutils literal notranslate"><span class="pre">a</span></code> appropriate for the desired density. The density affects the phase (solid, liquid, gas). Let’s aim for a liquid-like density.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Parameters for Argon LJ potential</span>
+<span class="n">sigma_Ar</span> <span class="o">=</span> <span class="mf">3.405</span> <span class="c1"># Angstrom</span>
+<span class="n">epsilon_Ar</span> <span class="o">=</span> <span class="mf">0.0103</span> <span class="c1"># eV (approx 120 K * kB)</span>
+
+<span class="c1"># Simulation box setup</span>
+<span class="n">N_side</span> <span class="o">=</span> <span class="mi">5</span> <span class="c1"># Number of unit cells per side (N = 4 * N_side^3 atoms for fcc)</span>
+<span class="n">lattice_constant</span> <span class="o">=</span> <span class="mf">5.7</span> <span class="c1"># Angstroms (chosen for liquid-like density)</span>
+
+<span class="c1"># Create the bulk fcc structure and repeat it</span>
+<span class="n">atoms</span> <span class="o">=</span> <span class="n">bulk</span><span class="p">(</span><span class="s1">&#39;Ar&#39;</span><span class="p">,</span> <span class="s1">&#39;fcc&#39;</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">lattice_constant</span><span class="p">,</span> <span class="n">cubic</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">atoms</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">repeat</span><span class="p">((</span><span class="n">N_side</span><span class="p">,</span> <span class="n">N_side</span><span class="p">,</span> <span class="n">N_side</span><span class="p">))</span>
+<span class="n">N_atoms</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PBC enabled: </span><span class="si">{</span><span class="n">atoms</span><span class="o">.</span><span class="n">pbc</span><span class="o">.</span><span class="n">all</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of atoms: </span><span class="si">{</span><span class="n">N_atoms</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Simulation box dimensions:</span><span class="si">{</span><span class="n">atoms</span><span class="o">.</span><span class="n">cell</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">box_volume</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_volume</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial volume: </span><span class="si">{</span><span class="n">box_volume</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> A^3&quot;</span><span class="p">)</span>
+
+<span class="c1"># Calculate initial density</span>
+<span class="n">mass_Ar_amu</span> <span class="o">=</span> <span class="mf">39.948</span> <span class="c1"># amu</span>
+<span class="n">mass_Ar_ase</span> <span class="o">=</span> <span class="n">mass_Ar_amu</span> <span class="o">*</span> <span class="n">units</span><span class="o">.</span><span class="n">_amu</span> <span class="c1"># ASE mass unit</span>
+<span class="n">number_density</span> <span class="o">=</span> <span class="n">N_atoms</span> <span class="o">/</span> <span class="n">box_volume</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number density: </span><span class="si">{</span><span class="n">number_density</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> atoms/A^3&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>PBC enabled: True
+Number of atoms: 500
+Simulation box dimensions:Cell([28.5, 28.5, 28.5])
+Initial volume: 23149.12 A^3
+Number density: 0.0216 atoms/A^3
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="set-up-the-lennard-jones-calculator">
+<h3>2. Set up the Lennard-Jones Calculator<a class="headerlink" href="#set-up-the-lennard-jones-calculator" title="Link to this heading">#</a></h3>
+<p>Attach the <code class="docutils literal notranslate"><span class="pre">LennardJones</span></code> calculator to the <code class="docutils literal notranslate"><span class="pre">Atoms</span></code> object. ASE’s LJ calculator uses <span class="math notranslate nohighlight">\(\sigma\)</span> and <span class="math notranslate nohighlight">\(\epsilon\)</span>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Set the calculator</span>
+<span class="n">atoms</span><span class="o">.</span><span class="n">calc</span> <span class="o">=</span> <span class="n">LennardJones</span><span class="p">(</span><span class="n">sigma</span><span class="o">=</span><span class="n">sigma_Ar</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="n">epsilon_Ar</span><span class="p">,</span> <span class="n">rc</span><span class="o">=</span><span class="n">sigma_Ar</span> <span class="o">*</span> <span class="mf">3.0</span><span class="p">)</span> <span class="c1"># rc is cutoff radius</span>
+
+<span class="c1"># Check initial energy and forces (should be non-zero due to initial lattice)</span>
+<span class="n">initial_potential_energy</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
+<span class="n">initial_forces</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_forces</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial Potential Energy: </span><span class="si">{</span><span class="n">initial_potential_energy</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="c1"># print(f&quot;Max initial force component: {np.max(np.abs(initial_forces)):.4f} eV/A&quot;)</span>
+
+<span class="c1"># Optional: Minimize energy to get a more stable starting point (removes initial forces)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Minimizing initial structure...&quot;</span><span class="p">)</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">BFGS</span><span class="p">(</span><span class="n">atoms</span><span class="p">,</span> <span class="n">logfile</span><span class="o">=</span><span class="s1">&#39;minimization.log&#39;</span><span class="p">)</span>
+<span class="n">optimizer</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">fmax</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span> <span class="c1"># Run until max force component is below 0.01 eV/A</span>
+<span class="n">minimized_potential_energy</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Minimized Potential Energy: </span><span class="si">{</span><span class="n">minimized_potential_energy</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="n">write</span><span class="p">(</span><span class="s1">&#39;minimized_structure.xyz&#39;</span><span class="p">,</span> <span class="n">atoms</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Initial Potential Energy: -34.9023 eV
+Minimizing initial structure...
+Minimized Potential Energy: -34.9023 eV
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="assign-initial-velocities">
+<h3>3. Assign Initial Velocities<a class="headerlink" href="#assign-initial-velocities" title="Link to this heading">#</a></h3>
+<p>Use <code class="docutils literal notranslate"><span class="pre">MaxwellBoltzmannDistribution</span></code> to assign velocities corresponding to a target temperature. It’s also good practice to remove any center-of-mass motion.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Target temperature for initialization (and simulation)</span>
+<span class="n">target_temperature_K</span> <span class="o">=</span> <span class="mf">90.0</span> <span class="c1"># Kelvin (liquid Argon range)</span>
+<span class="n">target_temperature_eV</span> <span class="o">=</span> <span class="n">target_temperature_K</span> <span class="o">*</span> <span class="n">units</span><span class="o">.</span><span class="n">kB</span> <span class="c1"># Convert K to eV using ase.units</span>
+
+<span class="c1"># Set initial velocities</span>
+<span class="n">MaxwellBoltzmannDistribution</span><span class="p">(</span><span class="n">atoms</span><span class="p">,</span> <span class="n">temperature_K</span><span class="o">=</span><span class="n">target_temperature_K</span><span class="p">)</span>
+<span class="c1"># Remove center-of-mass motion (avoids box drifting)</span>
+<span class="n">Stationary</span><span class="p">(</span><span class="n">atoms</span><span class="p">)</span>
+<span class="c1"># Remove rotation (optional, less critical for fluids)</span>
+<span class="c1"># ZeroRotation(atoms)</span>
+
+<span class="c1"># Check initial kinetic energy and temperature</span>
+<span class="n">initial_kinetic_energy</span> <span class="o">=</span> <span class="n">atoms</span><span class="o">.</span><span class="n">get_kinetic_energy</span><span class="p">()</span>
+<span class="n">initial_temperature</span> <span class="o">=</span> <span class="n">initial_kinetic_energy</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.5</span> <span class="o">*</span> <span class="n">units</span><span class="o">.</span><span class="n">kB</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">atoms</span><span class="p">))</span> <span class="c1"># 3N DOF -&gt; 1.5 N kB T</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial Target Temperature: </span><span class="si">{</span><span class="n">target_temperature_K</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> K (</span><span class="si">{</span><span class="n">target_temperature_eV</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV)&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial Kinetic Energy: </span><span class="si">{</span><span class="n">initial_kinetic_energy</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> eV&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Initial Temperature (from KE): </span><span class="si">{</span><span class="n">initial_temperature</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> K&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Initial Target Temperature: 90.0 K (0.0078 eV)
+Initial Kinetic Energy: 5.6850 eV
+Initial Temperature (from KE): 88.0 K
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="lesson-8-3-running-nvt-simulations-with-ase">
+<h2>Lesson 8.3: Running NVT Simulations with ASE<a class="headerlink" href="#lesson-8-3-running-nvt-simulations-with-ase" title="Link to this heading">#</a></h2>
+<p>Now we set up the Molecular Dynamics simulation run itself. We’ll use the <strong>Langevin thermostat</strong> to maintain the target temperature (NVT ensemble).</p>
+<p><strong>Steps:</strong></p>
+<ol class="arabic simple">
+<li><p>Choose simulation parameters (time step, total steps).</p></li>
+<li><p>Create a <code class="docutils literal notranslate"><span class="pre">Langevin</span></code> dynamics object, linking the <code class="docutils literal notranslate"><span class="pre">Atoms</span></code> object, time step, temperature, and friction coefficient.</p></li>
+<li><p>Define how to log data or save the trajectory during the run.</p></li>
+<li><p>Run the simulation using the <code class="docutils literal notranslate"><span class="pre">dyn.run()</span></code> method.</p></li>
+</ol>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Simulation parameters</span>
+<span class="n">time_step_fs</span> <span class="o">=</span> <span class="mf">5.0</span> <span class="c1"># femtoseconds</span>
+<span class="n">time_step</span> <span class="o">=</span> <span class="n">time_step_fs</span> <span class="o">*</span> <span class="n">units</span><span class="o">.</span><span class="n">fs</span>
+<span class="c1"># Define picoseconds numerically based on femtoseconds</span>
+<span class="c1"># This &#39;ps&#39; variable holds the value of 1 picosecond in ASE&#39;s internal time units</span>
+<span class="n">ps</span> <span class="o">=</span> <span class="mf">1000.0</span> <span class="o">*</span> <span class="n">units</span><span class="o">.</span><span class="n">fs</span>
+<span class="n">total_simulation_time_ps</span> <span class="o">=</span> <span class="mf">10.0</span> <span class="c1"># picoseconds</span>
+<span class="n">total_simulation_time</span> <span class="o">=</span> <span class="n">total_simulation_time_ps</span> <span class="o">*</span> <span class="n">ps</span> <span class="c1"># Total time in ASE units</span>
+<span class="n">n_steps</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">total_simulation_time</span> <span class="o">/</span> <span class="n">time_step</span><span class="p">)</span>
+<span class="n">log_interval</span> <span class="o">=</span> <span class="mi">200</span> <span class="c1"># Print status less often</span>
+<span class="n">traj_interval</span> <span class="o">=</span> <span class="mi">1000</span> <span class="c1"># Save trajectory frame less often</span>
+<span class="n">traj_filename</span> <span class="o">=</span> <span class="s1">&#39;lj_argon_nvt.traj&#39;</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Simulation time step: </span><span class="si">{</span><span class="n">time_step_fs</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> fs (</span><span class="si">{</span><span class="n">time_step</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">units</span><span class="o">.</span><span class="n">fs</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ASE time units)&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;1 Picosecond equals: </span><span class="si">{</span><span class="n">ps</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ASE time units&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total simulation time: </span><span class="si">{</span><span class="n">total_simulation_time_ps</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> ps (</span><span class="si">{</span><span class="n">total_simulation_time</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ASE time units)&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of steps: </span><span class="si">{</span><span class="n">n_steps</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Set up Langevin dynamics</span>
+<span class="n">friction_coeff</span> <span class="o">=</span> <span class="mf">0.01</span> <span class="o">/</span> <span class="n">units</span><span class="o">.</span><span class="n">fs</span>
+<span class="n">dyn</span> <span class="o">=</span> <span class="n">Langevin</span><span class="p">(</span><span class="n">atoms</span><span class="p">,</span> <span class="n">timestep</span><span class="o">=</span><span class="n">time_step</span><span class="p">,</span> <span class="n">temperature_K</span><span class="o">=</span><span class="n">target_temperature_K</span><span class="p">,</span> <span class="n">friction</span><span class="o">=</span><span class="n">friction_coeff</span><span class="p">)</span>
+
+<span class="c1"># Function to print progress</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">print_status</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">atoms</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Function called by the dynamics to print status.&quot;&quot;&quot;</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="n">dyn</span><span class="o">.</span><span class="n">get_number_of_steps</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">step</span> <span class="o">%</span> <span class="n">log_interval</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span> <span class="c1"># Print only at log_interval</span>
+        <span class="n">epot</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">get_potential_energy</span><span class="p">()</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="n">ekin</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">get_kinetic_energy</span><span class="p">()</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="c1"># Ensure temperature calculation is safe (avoid division by zero if ekin is zero)</span>
+        <span class="n">temp</span> <span class="o">=</span> <span class="n">ekin</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.5</span> <span class="o">*</span> <span class="n">units</span><span class="o">.</span><span class="n">kB</span><span class="p">)</span> <span class="k">if</span> <span class="n">ekin</span> <span class="o">&gt;</span> <span class="mf">1e-9</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="c1"># Calculate current time in picoseconds using the &#39;ps&#39; variable defined earlier</span>
+        <span class="n">current_time_ps</span> <span class="o">=</span> <span class="p">(</span><span class="n">step</span> <span class="o">*</span> <span class="n">time_step</span><span class="p">)</span> <span class="o">/</span> <span class="n">ps</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Step: </span><span class="si">{</span><span class="n">step</span><span class="si">:</span><span class="s1">6d</span><span class="si">}</span><span class="s1">, Time: </span><span class="si">{</span><span class="n">current_time_ps</span><span class="si">:</span><span class="s1">6.2f</span><span class="si">}</span><span class="s1"> ps, &#39;</span>
+              <span class="sa">f</span><span class="s1">&#39;Epot/N: </span><span class="si">{</span><span class="n">epot</span><span class="si">:</span><span class="s1">.4f</span><span class="si">}</span><span class="s1"> eV, Ekin/N: </span><span class="si">{</span><span class="n">ekin</span><span class="si">:</span><span class="s1">.4f</span><span class="si">}</span><span class="s1"> eV, Temp: </span><span class="si">{</span><span class="n">temp</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1"> K&#39;</span><span class="p">)</span>
+
+<span class="c1"># Attach status printing</span>
+<span class="c1"># The dyn object will call print_status() at each step internally.</span>
+<span class="c1"># The check for log_interval is handled inside print_status.</span>
+<span class="n">dyn</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="n">print_status</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># Attach to be called every step</span>
+
+<span class="c1"># Set up trajectory saving</span>
+<span class="c1"># Check if file exists, delete if you want to overwrite cleanly</span>
+<span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">traj_filename</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">traj_filename</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Removed existing trajectory file: </span><span class="si">{</span><span class="n">traj_filename</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error removing existing trajectory file </span><span class="si">{</span><span class="n">traj_filename</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="c1"># Decide if you want to exit or continue</span>
+        <span class="c1"># exit() or pass</span>
+
+<span class="c1"># Use a try-finally block to ensure the trajectory file is opened and closed properly</span>
+<span class="n">trajectory</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1"># Initialize trajectory to None</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">trajectory</span> <span class="o">=</span> <span class="n">Trajectory</span><span class="p">(</span><span class="n">traj_filename</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">atoms</span><span class="p">)</span>
+    <span class="c1"># Attach trajectory writing with the specified interval</span>
+    <span class="n">dyn</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="n">trajectory</span><span class="o">.</span><span class="n">write</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="n">traj_interval</span><span class="p">)</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Starting NVT simulation for </span><span class="si">{</span><span class="n">n_steps</span><span class="si">}</span><span class="s2"> steps...&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Target Temperature: </span><span class="si">{</span><span class="n">target_temperature_K</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> K&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Trajectory will be saved to: </span><span class="si">{</span><span class="n">traj_filename</span><span class="si">}</span><span class="s2"> every </span><span class="si">{</span><span class="n">traj_interval</span><span class="si">}</span><span class="s2"> steps.&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status will be printed every </span><span class="si">{</span><span class="n">log_interval</span><span class="si">}</span><span class="s2"> steps.&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+
+
+    <span class="c1"># Run the dynamics!</span>
+    <span class="n">sim_start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="n">dyn</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">n_steps</span><span class="p">)</span>
+    <span class="n">sim_end_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NVT simulation finished successfully in </span><span class="si">{</span><span class="n">sim_end_time</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">sim_start_time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> seconds.&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+
+<span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="n">sim_end_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during simulation run after </span><span class="si">{</span><span class="n">sim_end_time</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">sim_start_time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> seconds: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+    <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span> <span class="c1"># Print detailed traceback</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+
+<span class="k">finally</span><span class="p">:</span>
+    <span class="c1"># Important: Always close the trajectory file if it was opened</span>
+    <span class="k">if</span> <span class="n">trajectory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">trajectory</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Trajectory file closed.&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error closing trajectory file: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Simulation time step: 5.0 fs (5.000 ASE time units)
+1 Picosecond equals: 98.227 ASE time units
+Total simulation time: 10.0 ps (982.269 ASE time units)
+Number of steps: 2000
+------------------------------------------------------------
+Starting NVT simulation for 2000 steps...
+Target Temperature: 90.0 K
+Trajectory will be saved to: lj_argon_nvt.traj every 1000 steps.
+Status will be printed every 200 steps.
+------------------------------------------------------------
+Step:      0, Time:   0.00 ps, Epot/N: -0.0698 eV, Ekin/N: 0.0114 eV, Temp: 88.0 K
+Step:    200, Time:   1.00 ps, Epot/N: -0.0620 eV, Ekin/N: 0.0119 eV, Temp: 91.7 K
+Step:    400, Time:   2.00 ps, Epot/N: -0.0612 eV, Ekin/N: 0.0120 eV, Temp: 93.2 K
+Step:    600, Time:   3.00 ps, Epot/N: -0.0606 eV, Ekin/N: 0.0124 eV, Temp: 96.1 K
+Step:    800, Time:   4.00 ps, Epot/N: -0.0603 eV, Ekin/N: 0.0120 eV, Temp: 92.7 K
+Step:   1000, Time:   5.00 ps, Epot/N: -0.0602 eV, Ekin/N: 0.0114 eV, Temp: 88.4 K
+Step:   1200, Time:   6.00 ps, Epot/N: -0.0603 eV, Ekin/N: 0.0114 eV, Temp: 87.8 K
+Step:   1400, Time:   7.00 ps, Epot/N: -0.0604 eV, Ekin/N: 0.0119 eV, Temp: 92.1 K
+Step:   1600, Time:   8.00 ps, Epot/N: -0.0604 eV, Ekin/N: 0.0116 eV, Temp: 89.6 K
+Step:   1800, Time:   9.00 ps, Epot/N: -0.0610 eV, Ekin/N: 0.0117 eV, Temp: 90.3 K
+Step:   2000, Time:  10.00 ps, Epot/N: -0.0605 eV, Ekin/N: 0.0123 eV, Temp: 95.3 K
+------------------------------------------------------------
+NVT simulation finished successfully in 115.31 seconds.
+------------------------------------------------------------
+Trajectory file closed.
+</pre></div>
+</div>
+</div>
+</div>
+<p><strong>Running at Different Temperatures:</strong>
+To observe different phases (solid, liquid, gas), you would typically run similar simulations but change the <code class="docutils literal notranslate"><span class="pre">target_temperature_K</span></code> (and potentially the initial density/lattice constant).</p>
+<ul class="simple">
+<li><p><strong>Solid:</strong> Lower temperature (e.g., 20 K) and potentially slightly higher density.</p></li>
+<li><p><strong>Gas:</strong> Higher temperature (e.g., 300 K) and lower density (larger <code class="docutils literal notranslate"><span class="pre">lattice_constant</span></code> or fewer atoms in the box).
+You would then analyze properties like the RDF (see next section) to characterize the phase.</p></li>
+</ul>
+</section>
+<section id="lesson-8-4-analysis-of-lj-system-properties">
+<h2>Lesson 8.4: Analysis of LJ System Properties<a class="headerlink" href="#lesson-8-4-analysis-of-lj-system-properties" title="Link to this heading">#</a></h2>
+<p>After the simulation, we analyze the results stored in the log files and trajectory.</p>
+<p><strong>Thermodynamic Properties:</strong>
+Temperature, potential energy, kinetic energy, and total energy were printed during the run. We can also extract them from the saved trajectory or log files for plotting time series or calculating averages. Pressure can also be calculated (related to forces and kinetic energy via the virial theorem), especially important for NPT simulations.</p>
+<p><strong>Structural Properties:</strong></p>
+<ul class="simple">
+<li><p><strong>Density:</strong> Calculated from the number of atoms, mass, and box volume. Should remain constant in NVT.</p></li>
+<li><p><strong>Radial Distribution Function (RDF), g(r):</strong> This is a crucial function describing the structure of fluids and solids. <span class="math notranslate nohighlight">\(g(r)\)</span> measures the probability of finding another particle at a distance <span class="math notranslate nohighlight">\(r\)</span> from a reference particle, relative to the probability expected for a uniform random distribution (ideal gas).</p>
+<ul>
+<li><p><strong>Gases:</strong> <span class="math notranslate nohighlight">\(g(r)\)</span> quickly approaches 1 for <span class="math notranslate nohighlight">\(r &gt; \sigma\)</span>, indicating little structure.</p></li>
+<li><p><strong>Liquids:</strong> Show a strong peak around <span class="math notranslate nohighlight">\(r \approx \sigma\)</span> (first solvation shell), followed by damped oscillations approaching 1, indicating short-range order.</p></li>
+<li><p><strong>Solids:</strong> Show sharp, distinct peaks corresponding to crystallographic neighbor distances, indicating long-range order.</p></li>
+</ul>
+</li>
+</ul>
+<p><strong>Calculating RDF using ASE:</strong>
+ASE provides tools to calculate the RDF from an <code class="docutils literal notranslate"><span class="pre">Atoms</span></code> object or a trajectory.</p>
+<section id="calculating-the-rdf">
+<h3>Calculating the RDF<a class="headerlink" href="#calculating-the-rdf" title="Link to this heading">#</a></h3>
+<p>Let’s calculate the RDF for the <em>final</em> state of our simulation. For a proper analysis, one would typically average the RDF over several frames from the production phase of the trajectory.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># --- RDF Calculation ---</span>
+<span class="c1"># We need the final Atoms object from the simulation</span>
+<span class="c1"># The &#39;atoms&#39; object should hold the final state after dyn.run()</span>
+
+<span class="c1"># Parameters for RDF calculation</span>
+<span class="n">rmax</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">atoms</span><span class="o">.</span><span class="n">cell</span><span class="o">.</span><span class="n">lengths</span><span class="p">())</span> <span class="o">/</span> <span class="mf">2.0</span> <span class="o">-</span> <span class="mf">0.1</span> <span class="c1"># Maximum distance (up to half the box size)</span>
+<span class="n">nbins</span> <span class="o">=</span> <span class="mi">100</span> <span class="c1"># Number of bins for the RDF histogram</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Calculating RDF up to rmax = </span><span class="si">{</span><span class="n">rmax</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> A with </span><span class="si">{</span><span class="n">nbins</span><span class="si">}</span><span class="s2"> bins...&quot;</span><span class="p">)</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="c1"># get_rdf returns rdf values and corresponding bin centers (r)</span>
+    <span class="n">rdf</span><span class="p">,</span> <span class="n">r</span> <span class="o">=</span> <span class="n">get_rdf</span><span class="p">(</span><span class="n">atoms</span><span class="p">,</span> <span class="n">rmax</span><span class="p">,</span> <span class="n">nbins</span><span class="p">)</span> <span class="c1"># Use the final &#39;atoms&#39; state</span>
+
+    <span class="c1"># Plot the RDF</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">rdf</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;Distance r (Å)&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;Radial Distribution Function g(r)&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;RDF for LJ Argon at T = </span><span class="si">{</span><span class="n">target_temperature_K</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> K (Final State)&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;grey&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># Reference line for ideal gas</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+    <span class="c1"># Interpretation based on expected liquid state at 90K</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Interpretation:&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;- Expect a strong peak near sigma (~3.4 A) representing the first neighbor shell.&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;- Expect subsequent peaks (oscillations) indicating short-range liquid order.&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;- Expect g(r) to approach 1 at larger distances.&quot;</span><span class="p">)</span>
+
+<span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error calculating RDF: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;This might happen if the simulation state is unusual or ASE version differs.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Calculating RDF up to rmax = 14.15 A with 100 bins...
+</pre></div>
+</div>
+<img alt="../../../_images/138aa8d4dd0816fd22422bd0b01d15db23804dc1d069e662fac7f30a2835ce60.png" src="../../../_images/138aa8d4dd0816fd22422bd0b01d15db23804dc1d069e662fac7f30a2835ce60.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Interpretation:
+- Expect a strong peak near sigma (~3.4 A) representing the first neighbor shell.
+- Expect subsequent peaks (oscillations) indicating short-range liquid order.
+- Expect g(r) to approach 1 at larger distances.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="visualizing-trajectories">
+<h3>Visualizing Trajectories<a class="headerlink" href="#visualizing-trajectories" title="Link to this heading">#</a></h3>
+<p>The trajectory was saved to <code class="docutils literal notranslate"><span class="pre">lj_argon_nvt.traj</span></code>. This file can be opened with external visualization software that understands ASE trajectories, such as:</p>
+<ul class="simple">
+<li><p><strong>Ovito:</strong> (<a class="reference external" href="https://www.ovito.org/">https://www.ovito.org/</a>) Powerful, free (for non-commercial use) scientific visualization and analysis software. Recommended.</p></li>
+<li><p><strong>VMD:</strong> (<a class="reference external" href="https://www.ks.uiuc.edu/Research/vmd/">https://www.ks.uiuc.edu/Research/vmd/</a>) Widely used molecular visualization program, particularly in biophysics. Free.</p></li>
+<li><p><strong>ASE GUI:</strong> ASE has its own simple GUI (<code class="docutils literal notranslate"><span class="pre">ase</span> <span class="pre">gui</span> <span class="pre">lj_argon_nvt.traj</span></code> from the terminal), but it’s less feature-rich than Ovito or VMD.</p></li>
+</ul>
+<p>Visualizing the trajectory helps understand the dynamics, check for equilibration, and observe phase behavior (e.g., melting, evaporation).</p>
+<hr class="docutils" />
+<p>End of Module 7. We have taken a significant step from 1D models to 3D multi-particle simulations using the Atomic Simulation Environment (ASE):</p>
+<ul class="simple">
+<li><p>Introduced <strong>ASE</strong> as a powerful Python interface for atomistic simulations.</p></li>
+<li><p>Learned to set up a <strong>Lennard-Jones fluid</strong> system (Argon) using <code class="docutils literal notranslate"><span class="pre">ase.build</span></code>, applying PBC, and setting the <code class="docutils literal notranslate"><span class="pre">LennardJones</span></code> calculator.</p></li>
+<li><p>Initialized particle velocities using <code class="docutils literal notranslate"><span class="pre">MaxwellBoltzmannDistribution</span></code>.</p></li>
+<li><p>Ran an <strong>NVT simulation</strong> using the <code class="docutils literal notranslate"><span class="pre">Langevin</span></code> dynamics module in ASE.</p></li>
+<li><p>Discussed basic analysis, focusing on calculating and interpreting the <strong>Radial Distribution Function (RDF)</strong> using ASE tools.</p></li>
+<li><p>Mentioned tools for <strong>visualizing</strong> the simulation trajectory.</p></li>
+</ul>
+<p>This module provides a practical starting point for using standard simulation tools to study more complex systems. In the next module, we’ll apply these ASE concepts to simulate a box of water molecules, introducing molecular force fields.</p>
+</section>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "YOUR_USERNAME/YOUR_REPO",
+            ref: "main",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./_build/jupyter_execute/notebooks"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-8-1-introduction-to-ase-atomic-simulation-environment">Lesson 8.1: Introduction to ASE (Atomic Simulation Environment)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#importing-ase-modules">Importing ASE modules</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-8-2-setting-up-the-lj-system">Lesson 8.2: Setting up the LJ System</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#create-initial-configuration-apply-pbc">1. Create Initial Configuration &amp; Apply PBC</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#set-up-the-lennard-jones-calculator">2. Set up the Lennard-Jones Calculator</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#assign-initial-velocities">3. Assign Initial Velocities</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-8-3-running-nvt-simulations-with-ase">Lesson 8.3: Running NVT Simulations with ASE</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-8-4-analysis-of-lj-system-properties">Lesson 8.4: Analysis of LJ System Properties</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#calculating-the-rdf">Calculating the RDF</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#visualizing-trajectories">Visualizing Trajectories</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Your Name
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2023.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

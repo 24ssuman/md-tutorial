@@ -1,0 +1,1303 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Module 6: Enhanced Sampling I - Umbrella Sampling (US) &amp; PMF Reconstruction &#8212; Molecular Dynamics Tutorial for Beginners</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="../../../_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_build/jupyter_execute/notebooks/6_umbrella_sampling';</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../intro.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Molecular Dynamics Tutorial for Beginners</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../intro.html">
+                    Molecular Dynamics Tutorial for Beginners
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/1_intro_to_MD.html">Module 1: Introduction to Molecular Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/2_physics_of_MD.html">Module 2: The Physics Behind MD</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/3_non_bonded_interactions.html">Module 3: Non-Bonded Interactions and Long-Range Electrostatics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/4_1D_simulations.html">Module 4: Simulating Simple 1D Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/5_sampling_challenge.html">Module 5: The Challenge of Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/5.5_chossing_CVs.html">Lesson 5.2a: Choosing Good Collective Variables for Multi-Dimensional Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/6_umbrella_sampling.html">Module 6: Enhanced Sampling I - Umbrella Sampling (US) &amp; PMF Reconstruction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/6.1_WHAM_detailed.html">WHAM, step by step (with plots)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/7_meta_dynamics.html">Module 7: Enhanced Sampling II - Metadynamics (MetaD)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/8_ase_LJ_fluid_simulation.html">Module 8: Multi-Particle Simulations: Lennard-Jones Fluid with ASE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/9_ase_waterbox_simulation_not_working.html">Module 9: Simulating Molecular Systems: Water Box with ASE</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-launch-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
+    <i class="fas fa-rocket"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://mybinder.org/v2/gh/YOUR_USERNAME/YOUR_REPO/main?urlpath=lab/tree/./_build/jupyter_execute/notebooks/6_umbrella_sampling.ipynb" target="_blank"
+   class="btn btn-sm dropdown-item"
+   title="Launch on Binder"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  
+    <img alt="Binder logo" src="../../../_static/images/logo_binder.svg">
+  </span>
+<span class="btn__text-container">Binder</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="initThebeSBT()"
+  class="btn btn-sm btn-launch-thebe dropdown-item"
+  title="Launch Thebe"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-play"></i>
+  </span>
+<span class="btn__text-container">Live Code</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO/issues/new?title=Issue%20on%20page%20%2F_build/jupyter_execute/notebooks/6_umbrella_sampling.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../../_sources/_build/jupyter_execute/notebooks/6_umbrella_sampling.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Module 6: Enhanced Sampling I - Umbrella Sampling (US) & PMF Reconstruction</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-imports-and-functions-from-modules-4-5">Setup: Imports and Functions (from Modules 4 &amp; 5)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-6-1-the-concept-of-biasing">Lesson 6.1: The Concept of Biasing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-6-2-harmonic-bias-potentials-umbrellas">Lesson 6.2: Harmonic Bias Potentials (“Umbrellas”)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-6-3-implementing-umbrella-sampling">Lesson 6.3: Implementing Umbrella Sampling</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#setting-up-umbrella-sampling-windows-parameters">Setting up Umbrella Sampling Windows &amp; Parameters</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-k-rm-us-and-number-of-windows-for-this-system">6.3.1 Choosing <span class="math notranslate nohighlight">\(K_{\rm us}\)</span> and Number of Windows for This System</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#general-guidelines">General Guidelines</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-umbrella-sampling-simulations">Running the Umbrella Sampling Simulations</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-6-4-unbiasing-and-reconstructing-the-pmf-wham-implementation">Lesson 6.4: Unbiasing and Reconstructing the PMF (WHAM Implementation)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preparing-data-for-wham">Preparing Data for WHAM</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-thewham-calculation">Running theWHAM Calculation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#calculating-and-plotting-the-reconstructed-pmf">Calculating and Plotting the Reconstructed PMF</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#convergence-of-pmf-vs-production-length">6.4.1 Convergence of PMF vs. Production Length</a></li>
+</ul>
+</li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="module-6-enhanced-sampling-i-umbrella-sampling-us-pmf-reconstruction">
+<h1>Module 6: Enhanced Sampling I - Umbrella Sampling (US) &amp; PMF Reconstruction<a class="headerlink" href="#module-6-enhanced-sampling-i-umbrella-sampling-us-pmf-reconstruction" title="Link to this heading">#</a></h1>
+<p>Welcome to Module 6! In Module 5, we encountered the <strong>sampling problem</strong> when trying to calculate the Potential of Mean Force (PMF) for the double-well potential using standard NVT simulation.</p>
+<p>This module introduces <strong>Umbrella Sampling (US)</strong>. We will run multiple biased simulations and then use a custom implementation of the <strong>Weighted Histogram Analysis Method (WHAM)</strong> equations to combine the data and reconstruct the true, unbiased PMF, demonstrating how to overcome the sampling barrier.</p>
+<section id="setup-imports-and-functions-from-modules-4-5">
+<h2>Setup: Imports and Functions (from Modules 4 &amp; 5)<a class="headerlink" href="#setup-imports-and-functions-from-modules-4-5" title="Link to this heading">#</a></h2>
+<p>Let’s import libraries and redefine the necessary functions.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span> <span class="c1"># To handle potential log(0) issues</span>
+
+<span class="c1"># Plotting style configuration (optional)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">style</span><span class="o">.</span><span class="n">use</span><span class="p">(</span><span class="s1">&#39;seaborn-v0_8-darkgrid&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;figure.figsize&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span> <span class="c1"># Default figure size</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;lines.linewidth&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span>
+
+<span class="c1"># Assume Boltzmann constant k_B = 1 for simplicity in reduced units</span>
+<span class="n">k_B</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="c1"># Define temperature here as it&#39;s needed globally for WHAM</span>
+<span class="n">temperature</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="c1"># Will be set properly later</span>
+
+<span class="c1"># --- Potential/Force Functions ---</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">potential_dw</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+<span class="w">  </span><span class="sd">&quot;&quot;&quot;Calculates the potential energy of a double-well potential.&quot;&quot;&quot;</span>
+  <span class="k">return</span> <span class="n">a</span> <span class="o">*</span> <span class="n">x</span><span class="o">**</span><span class="mi">4</span> <span class="o">-</span> <span class="n">b</span> <span class="o">*</span> <span class="n">x</span><span class="o">**</span><span class="mi">2</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">force_dw</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+<span class="w">  </span><span class="sd">&quot;&quot;&quot;Calculates the force from a double-well potential.&quot;&quot;&quot;</span>
+  <span class="c1"># Corrected from previous version</span>
+  <span class="k">return</span> <span class="o">-</span><span class="mi">4</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">x</span><span class="o">**</span><span class="mi">3</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">x</span>
+
+<span class="c1"># --- Bias Potential/Force Functions ---</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">potential_bias_us</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">k_us</span><span class="p">,</span> <span class="n">x0_us</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculates the harmonic umbrella sampling bias potential energy.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">k_us</span> <span class="o">*</span> <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">x0_us</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">force_bias_us</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">k_us</span><span class="p">,</span> <span class="n">x0_us</span><span class="p">):</span>
+<span class="w">  </span><span class="sd">&quot;&quot;&quot;Calculates the harmonic umbrella sampling bias force.&quot;&quot;&quot;</span>
+  <span class="k">return</span> <span class="o">-</span><span class="n">k_us</span> <span class="o">*</span> <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">x0_us</span><span class="p">)</span>
+
+<span class="c1"># --- Langevin Integrator (BAOAB) for US ---</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">Velocity_verlet_langevin_US</span><span class="p">(</span><span class="n">x_curr</span><span class="p">,</span> <span class="n">v_curr</span><span class="p">,</span> <span class="n">mass</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">gamma</span><span class="p">,</span> <span class="n">target_temp</span><span class="p">,</span>
+                           <span class="n">force_physical_func</span><span class="p">,</span> <span class="n">force_bias_func</span><span class="p">,</span>
+                           <span class="n">physical_args</span><span class="o">=</span><span class="p">{},</span> <span class="n">bias_args</span><span class="o">=</span><span class="p">{}):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Performs one step of Langevin dynamics with physical + bias forces.</span>
+<span class="sd">    (Same as previous version)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Calculate total force F = F_physical + F_bias</span>
+    <span class="n">f_phys_curr</span> <span class="o">=</span> <span class="n">force_physical_func</span><span class="p">(</span><span class="n">x_curr</span><span class="p">,</span> <span class="o">**</span><span class="n">physical_args</span><span class="p">)</span>
+    <span class="n">f_bias_curr</span> <span class="o">=</span> <span class="n">force_bias_func</span><span class="p">(</span><span class="n">x_curr</span><span class="p">,</span> <span class="o">**</span><span class="n">bias_args</span><span class="p">)</span>
+    <span class="n">f_total_curr</span> <span class="o">=</span> <span class="n">f_phys_curr</span> <span class="o">+</span> <span class="n">f_bias_curr</span>
+    <span class="c1"># Update velocity by half step</span>
+    <span class="n">v_half_b</span> <span class="o">=</span> <span class="n">v_curr</span> <span class="o">+</span> <span class="p">(</span><span class="n">f_total_curr</span> <span class="o">/</span> <span class="n">mass</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">dt</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">)</span>
+    <span class="c1"># Update position by half step</span>
+    <span class="n">x_half_a</span> <span class="o">=</span> <span class="n">x_curr</span> <span class="o">+</span> <span class="n">v_half_b</span> <span class="o">*</span> <span class="p">(</span><span class="n">dt</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">)</span>
+    <span class="c1"># Apply friction and random kick (unchanged)</span>
+    <span class="n">c1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">gamma</span> <span class="o">*</span> <span class="n">dt</span><span class="p">)</span>
+    <span class="n">c2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">k_B</span> <span class="o">*</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">target_temp</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">c1</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">mass</span><span class="p">)</span>
+    <span class="n">random_kick</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">v_half_o</span> <span class="o">=</span> <span class="n">c1</span> <span class="o">*</span> <span class="n">v_half_b</span> <span class="o">+</span> <span class="n">c2</span> <span class="o">*</span> <span class="n">random_kick</span>
+    <span class="c1"># Update position by second half step</span>
+    <span class="n">x_new</span> <span class="o">=</span> <span class="n">x_half_a</span> <span class="o">+</span> <span class="n">v_half_o</span> <span class="o">*</span> <span class="p">(</span><span class="n">dt</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">)</span>
+    <span class="c1"># Calculate total force at *new* position</span>
+    <span class="n">f_phys_new</span> <span class="o">=</span> <span class="n">force_physical_func</span><span class="p">(</span><span class="n">x_new</span><span class="p">,</span> <span class="o">**</span><span class="n">physical_args</span><span class="p">)</span>
+    <span class="n">f_bias_new</span> <span class="o">=</span> <span class="n">force_bias_func</span><span class="p">(</span><span class="n">x_new</span><span class="p">,</span> <span class="o">**</span><span class="n">bias_args</span><span class="p">)</span>
+    <span class="n">f_total_new</span> <span class="o">=</span> <span class="n">f_phys_new</span> <span class="o">+</span> <span class="n">f_bias_new</span>
+    <span class="c1"># Update velocity by second half step</span>
+    <span class="n">v_new</span> <span class="o">=</span> <span class="n">v_half_o</span> <span class="o">+</span> <span class="p">(</span><span class="n">f_total_new</span> <span class="o">/</span> <span class="n">mass</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">dt</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">x_new</span><span class="p">,</span> <span class="n">v_new</span>
+
+<span class="c1"># --- Parameters for Double Well ---</span>
+<span class="n">a_dw</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">b_dw</span> <span class="o">=</span> <span class="mf">4.0</span>
+<span class="n">minima_pos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">b_dw</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">a_dw</span><span class="p">))</span>
+<span class="n">minima_val</span> <span class="o">=</span> <span class="n">potential_dw</span><span class="p">(</span><span class="n">minima_pos</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">a_dw</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b_dw</span><span class="p">)</span>
+<span class="n">barrier_top_val</span> <span class="o">=</span> <span class="n">potential_dw</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">a_dw</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b_dw</span><span class="p">)</span>
+<span class="n">barrier_height</span> <span class="o">=</span> <span class="n">barrier_top_val</span> <span class="o">-</span> <span class="n">minima_val</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Setup complete. Functions and parameters loaded.&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Double-well barrier height: </span><span class="si">{</span><span class="n">barrier_height</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Setup complete. Functions and parameters loaded.
+Double-well barrier height: 4.00
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="lesson-6-1-the-concept-of-biasing">
+<h2>Lesson 6.1: The Concept of Biasing<a class="headerlink" href="#lesson-6-1-the-concept-of-biasing" title="Link to this heading">#</a></h2>
+<p>The core idea behind many enhanced sampling methods is to modify the potential energy landscape the system experiences during the simulation. We add an artificial <strong>bias potential</strong>, <span class="math notranslate nohighlight">\(V_{bias}(q)\)</span>, which depends on our chosen collective variable <span class="math notranslate nohighlight">\(q\)</span> (in our case, <span class="math notranslate nohighlight">\(q=x\)</span>).</p>
+<p>The total potential energy used to calculate forces in the simulation becomes:
+$<span class="math notranslate nohighlight">\( V_{total}(x) = V_{physical}(x) + V_{bias}(x) \)</span><span class="math notranslate nohighlight">\(
+where \)</span>V_{physical}(x)$ is the original double-well potential.</p>
+<p>The corresponding total force is:
+$<span class="math notranslate nohighlight">\( F_{total}(x) = F_{physical}(x) + F_{bias}(x) \)</span><span class="math notranslate nohighlight">\(
+where \)</span>F_{bias}(x) = -\frac{dV_{bias}}{dx}$.</p>
+<p>By carefully choosing <span class="math notranslate nohighlight">\(V_{bias}(x)\)</span>, we can make high-energy regions (like the barrier top) more favorable to visit, effectively “flattening” the energy landscape locally and encouraging transitions.</p>
+<p>Of course, this simulation runs on a <em>modified</em> potential. The data we collect (histograms, averages) are <em>biased</em>. The crucial second step is to mathematically remove the effect of the bias potential afterwards to recover the properties of the original, unbiased system, such as the true PMF. Umbrella Sampling uses a specific form of bias and a method called WHAM to achieve this.</p>
+</section>
+<section id="lesson-6-2-harmonic-bias-potentials-umbrellas">
+<h2>Lesson 6.2: Harmonic Bias Potentials (“Umbrellas”)<a class="headerlink" href="#lesson-6-2-harmonic-bias-potentials-umbrellas" title="Link to this heading">#</a></h2>
+<p>Umbrella Sampling uses a series of simulations, often called <strong>“windows”</strong>. In each window <span class="math notranslate nohighlight">\(i\)</span>, a harmonic bias potential is applied, centered at a specific value <span class="math notranslate nohighlight">\(x_{0,i}\)</span> along the collective variable <span class="math notranslate nohighlight">\(x\)</span>.</p>
+<p>The bias potential for window <span class="math notranslate nohighlight">\(i\)</span> is:
+$<span class="math notranslate nohighlight">\( V_{bias, i}(x) = \frac{1}{2} k_{us} (x - x_{0,i})^2 \)</span><span class="math notranslate nohighlight">\(
+This potential looks like an inverted parabola or an &quot;umbrella&quot; centered at \)</span>x_{0,i}$.</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(k_{us}\)</span> is the <strong>spring constant</strong> of the umbrella potential. It determines how strongly the system is restrained near <span class="math notranslate nohighlight">\(x_{0,i}\)</span>. A stronger spring constant leads to narrower sampling within the window.</p></li>
+<li><p><span class="math notranslate nohighlight">\(x_{0,i}\)</span> is the <strong>center</strong> of the harmonic restraint for window <span class="math notranslate nohighlight">\(i\)</span>.</p></li>
+</ul>
+<p>The corresponding biasing force for window <span class="math notranslate nohighlight">\(i\)</span> is:
+$<span class="math notranslate nohighlight">\( F_{bias, i}(x) = -\frac{dV_{bias, i}}{dx} = -k_{us} (x - x_{0,i}) \)</span>$</p>
+<p>By running multiple simulations with windows centered at different <span class="math notranslate nohighlight">\(x_{0,i}\)</span> values that span the entire range of interest (from one well, across the barrier, to the other well), we can ensure that all regions are adequately sampled, even the high-energy barrier region. The harmonic potential in each window “holds” the system in a specific area, allowing us to gather statistics there. The key is that the histograms from adjacent windows should overlap significantly.</p>
+</section>
+<section id="lesson-6-3-implementing-umbrella-sampling">
+<h2>Lesson 6.3: Implementing Umbrella Sampling<a class="headerlink" href="#lesson-6-3-implementing-umbrella-sampling" title="Link to this heading">#</a></h2>
+<section id="setting-up-umbrella-sampling-windows-parameters">
+<h3>Setting up Umbrella Sampling Windows &amp; Parameters<a class="headerlink" href="#setting-up-umbrella-sampling-windows-parameters" title="Link to this heading">#</a></h3>
+<p>Define the window centers, spring constant, and simulation parameters. We’ll run the simulations now.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Umbrella Sampling Parameters</span>
+<span class="n">num_windows</span> <span class="o">=</span> <span class="mi">10</span> <span class="c1"># Number of umbrella windows &lt;- change this to check the effets</span>
+<span class="n">k_us</span> <span class="o">=</span> <span class="mi">60</span>       <span class="c1"># Umbrella spring constant &lt;- change this to check the effets</span>
+<span class="c1"># for this case best tested one: num_windows = 10 and k_us = 60</span>
+<span class="n">window_centers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">num_windows</span><span class="p">)</span> <span class="c1"># Window center positions</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Umbrella window centers (x0): </span><span class="si">{</span><span class="n">window_centers</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Umbrella spring constant (k_us): </span><span class="si">{</span><span class="n">k_us</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Simulation parameters per window</span>
+<span class="n">mass</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">dt</span> <span class="o">=</span> <span class="mf">0.01</span>
+<span class="n">gamma</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">target_temp_us</span> <span class="o">=</span> <span class="n">barrier_height</span> <span class="o">*</span> <span class="mf">0.1</span> <span class="c1"># Temperature relative to barrier</span>
+<span class="n">temperature</span> <span class="o">=</span> <span class="n">target_temp_us</span> <span class="c1"># Set global temperature for WHAM</span>
+<span class="n">n_steps_per_window</span> <span class="o">=</span> <span class="mi">100000</span> <span class="c1"># Steps per window (adjust as needed)</span>
+<span class="n">record_stride</span> <span class="o">=</span> <span class="mi">20</span> <span class="c1"># Record less frequently to reduce correlation</span>
+<span class="n">n_recorded_per_window</span> <span class="o">=</span> <span class="n">n_steps_per_window</span> <span class="o">//</span> <span class="n">record_stride</span>
+<span class="n">burn_in_steps</span> <span class="o">=</span> <span class="mi">10000</span> <span class="c1"># Steps to discard for equilibration</span>
+<span class="n">n_burn_in_recorded</span> <span class="o">=</span> <span class="n">burn_in_steps</span> <span class="o">//</span> <span class="n">record_stride</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Target Temperature: </span><span class="si">{</span><span class="n">temperature</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Steps per window: </span><span class="si">{</span><span class="n">n_steps_per_window</span><span class="si">}</span><span class="s2">, Record stride: </span><span class="si">{</span><span class="n">record_stride</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Recorded steps per window (after burn-in): </span><span class="si">{</span><span class="n">n_recorded_per_window</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">n_burn_in_recorded</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Data storage for all windows</span>
+<span class="n">all_positions_list</span> <span class="o">=</span> <span class="p">[]</span> <span class="c1"># List to hold position arrays from each window (including burn-in)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Umbrella window centers (x0): [-2.         -1.55555556 -1.11111111 -0.66666667 -0.22222222  0.22222222
+  0.66666667  1.11111111  1.55555556  2.        ]
+Umbrella spring constant (k_us): 60
+Target Temperature: 0.40
+Steps per window: 100000, Record stride: 20
+Recorded steps per window (after burn-in): 4500
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="choosing-k-rm-us-and-number-of-windows-for-this-system">
+<h3>6.3.1 Choosing <span class="math notranslate nohighlight">\(K_{\rm us}\)</span> and Number of Windows for This System<a class="headerlink" href="#choosing-k-rm-us-and-number-of-windows-for-this-system" title="Link to this heading">#</a></h3>
+<p>For our double-well system:</p>
+<ul class="simple">
+<li><p>We used <strong><span class="math notranslate nohighlight">\(K_{\rm us} = 60\)</span></strong> and <strong><span class="math notranslate nohighlight">\(N = 10\)</span></strong> windows spanning <span class="math notranslate nohighlight">\(\xi = -2.0\)</span> to <span class="math notranslate nohighlight">\(+2.0\)</span>.</p></li>
+<li><p>In the umbrella histogram overlay, ensure that adjacent windows’ distributions have significant overlap.</p></li>
+</ul>
+<section id="general-guidelines">
+<h4>General Guidelines<a class="headerlink" href="#general-guidelines" title="Link to this heading">#</a></h4>
+<ul class="simple">
+<li><p>Pick <span class="math notranslate nohighlight">\(K_{\rm us}\)</span> and <span class="math notranslate nohighlight">\(N\)</span> such that adjacent windows overlap significantly.</p></li>
+<li><p>If overlap is too small, decrease <span class="math notranslate nohighlight">\(K_{\rm us}\)</span> or increase <span class="math notranslate nohighlight">\(N\)</span>.</p></li>
+<li><p>If you need tighter restraint while maintaining overlap, increase <span class="math notranslate nohighlight">\(K_{\rm us}\)</span> and adjust <span class="math notranslate nohighlight">\(N\)</span> accordingly.</p></li>
+</ul>
+</section>
+</section>
+<section id="running-the-umbrella-sampling-simulations">
+<h3>Running the Umbrella Sampling Simulations<a class="headerlink" href="#running-the-umbrella-sampling-simulations" title="Link to this heading">#</a></h3>
+<p>Run the simulation for each window using the modified Langevin integrator.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># --- Run Umbrella Sampling Simulations ---</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Running </span><span class="si">{</span><span class="n">num_windows</span><span class="si">}</span><span class="s2"> Umbrella Sampling windows...&quot;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">center</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">window_centers</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Running window </span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">num_windows</span><span class="si">}</span><span class="s2"> centered at x0 = </span><span class="si">{</span><span class="n">center</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Array to store positions for this window</span>
+    <span class="n">positions_window</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_recorded_per_window</span><span class="p">)</span>
+    <span class="n">record_index</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1"># Initial conditions for this window</span>
+    <span class="n">x_curr</span> <span class="o">=</span> <span class="n">center</span> <span class="c1"># Start near the window center</span>
+    <span class="n">v_curr</span> <span class="o">=</span> <span class="mf">0.0</span>    <span class="c1"># Start at rest</span>
+
+    <span class="c1"># Define bias arguments for this window</span>
+    <span class="n">current_bias_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;k_us&#39;</span><span class="p">:</span> <span class="n">k_us</span><span class="p">,</span> <span class="s1">&#39;x0_us&#39;</span><span class="p">:</span> <span class="n">center</span><span class="p">}</span>
+    <span class="n">current_physical_args</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;a&#39;</span><span class="p">:</span> <span class="n">a_dw</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">:</span> <span class="n">b_dw</span><span class="p">}</span>
+
+    <span class="c1"># Simulation loop for this window</span>
+    <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_steps_per_window</span><span class="p">):</span>
+        <span class="n">x_curr</span><span class="p">,</span> <span class="n">v_curr</span> <span class="o">=</span> <span class="n">Velocity_verlet_langevin_US</span><span class="p">(</span>
+            <span class="n">x_curr</span><span class="p">,</span> <span class="n">v_curr</span><span class="p">,</span> <span class="n">mass</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">gamma</span><span class="p">,</span> <span class="n">target_temp_us</span><span class="p">,</span>
+            <span class="n">force_dw</span><span class="p">,</span> <span class="n">force_bias_us</span><span class="p">,</span>
+            <span class="n">physical_args</span><span class="o">=</span><span class="n">current_physical_args</span><span class="p">,</span> <span class="n">bias_args</span><span class="o">=</span><span class="n">current_bias_args</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Record position</span>
+        <span class="k">if</span> <span class="n">step</span> <span class="o">%</span> <span class="n">record_stride</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">record_index</span> <span class="o">&lt;</span> <span class="n">n_recorded_per_window</span><span class="p">:</span>
+                <span class="n">positions_window</span><span class="p">[</span><span class="n">record_index</span><span class="p">]</span> <span class="o">=</span> <span class="n">x_curr</span>
+                <span class="n">record_index</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="c1"># Store the recorded positions for this window (including burn-in)</span>
+    <span class="n">all_positions_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">positions_window</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Umbrella Sampling simulations finished. Collected data for </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">all_positions_list</span><span class="p">)</span><span class="si">}</span><span class="s2"> windows.&quot;</span><span class="p">)</span>
+
+<span class="c1"># Discard burn-in period from each window&#39;s data</span>
+<span class="n">all_positions_production</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="n">n_burn_in_recorded</span><span class="p">:]</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">all_positions_list</span><span class="p">]</span>
+<span class="n">n_i</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">all_positions_production</span><span class="p">])</span> <span class="c1"># Number of production samples per window i</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of production samples per window (n_i): </span><span class="si">{</span><span class="n">n_i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Check if any windows have zero production samples</span>
+<span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">n_i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Warning: Some windows have zero production samples after burn-in!&quot;</span><span class="p">)</span>
+    <span class="c1"># Optionally filter out windows with zero samples here if needed</span>
+    <span class="c1"># valid_windows_mask = n_i &gt; 0</span>
+    <span class="c1"># ... filter window_centers, k_us, n_i, all_positions_production ...</span>
+    <span class="c1"># num_windows = len(window_centers) # Update num_windows</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Running 10 Umbrella Sampling windows...
+  Running window 1/10 centered at x0 = -2.00
+  Running window 2/10 centered at x0 = -1.56
+  Running window 3/10 centered at x0 = -1.11
+  Running window 4/10 centered at x0 = -0.67
+  Running window 5/10 centered at x0 = -0.22
+  Running window 6/10 centered at x0 = 0.22
+  Running window 7/10 centered at x0 = 0.67
+  Running window 8/10 centered at x0 = 1.11
+  Running window 9/10 centered at x0 = 1.56
+  Running window 10/10 centered at x0 = 2.00
+Umbrella Sampling simulations finished. Collected data for 10 windows.
+Number of production samples per window (n_i): [4500 4500 4500 4500 4500 4500 4500 4500 4500 4500]
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="lesson-6-4-unbiasing-and-reconstructing-the-pmf-wham-implementation">
+<h2>Lesson 6.4: Unbiasing and Reconstructing the PMF (WHAM Implementation)<a class="headerlink" href="#lesson-6-4-unbiasing-and-reconstructing-the-pmf-wham-implementation" title="Link to this heading">#</a></h2>
+<p>We now have the biased position data from each window (<span class="math notranslate nohighlight">\(i=1...N_{win}\)</span>). We need to combine this data to get the unbiased PMF using the Weighted Histogram Analysis Method (WHAM).</p>
+<p><strong>WHAM Equations:</strong>
+The core idea is to find the unbiased probability distribution <span class="math notranslate nohighlight">\(P(x)\)</span> and the free energy offsets <span class="math notranslate nohighlight">\(f_i\)</span> for each window that are self-consistent with the observed data. The iterative equations are:</p>
+<ol class="arabic">
+<li><p><strong>Update Unbiased Probability <span class="math notranslate nohighlight">\(P(x_j)\)</span>:</strong> (for each bin <span class="math notranslate nohighlight">\(j\)</span>)</p>
+<div class="math notranslate nohighlight">
+\[P(x_j) = \frac{\sum_{i=1}^{N_{win}} N_{i,j}}{\sum_{i=1}^{N_{win}} n_i \exp\left(\frac{f_i - V_{bias,i}(x_j)}{k_B T}\right)}\]</div>
+</li>
+<li><p><strong>Update Free Energy Offsets <span class="math notranslate nohighlight">\(f_i\)</span>:</strong> (for each window <span class="math notranslate nohighlight">\(i\)</span>)</p>
+<div class="math notranslate nohighlight">
+\[ \exp\left(-\frac{f_i}{k_B T}\right) = \sum_{j=1}^{N_{bins}} P(x_j) \exp\left(-\frac{V_{bias,i}(x_j)}{k_B T}\right) \]</div>
+</li>
+</ol>
+<p>Where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(N_{win}\)</span> is the number of windows.</p></li>
+<li><p><span class="math notranslate nohighlight">\(N_{bins}\)</span> is the number of bins in our histogram.</p></li>
+<li><p><span class="math notranslate nohighlight">\(N_{i,j}\)</span> is the number of counts (samples) from window <span class="math notranslate nohighlight">\(i\)</span> that fall into global bin <span class="math notranslate nohighlight">\(j\)</span>.</p></li>
+<li><p><span class="math notranslate nohighlight">\(n_i\)</span> is the total number of production samples in window <span class="math notranslate nohighlight">\(i\)</span>.</p></li>
+<li><p><span class="math notranslate nohighlight">\(V_{bias,i}(x_j)\)</span> is the value of the bias potential for window <span class="math notranslate nohighlight">\(i\)</span> evaluated at the center <span class="math notranslate nohighlight">\(x_j\)</span> of bin <span class="math notranslate nohighlight">\(j\)</span>.</p></li>
+<li><p><span class="math notranslate nohighlight">\(f_i\)</span> is the free energy offset for window <span class="math notranslate nohighlight">\(i\)</span> (relative to some reference, often <span class="math notranslate nohighlight">\(f_0=0\)</span>).</p></li>
+<li><p><span class="math notranslate nohighlight">\(P(x_j)\)</span> is the estimate of the unbiased probability in bin <span class="math notranslate nohighlight">\(j\)</span>.</p></li>
+</ul>
+<p>We iterate these two equations until the values of <span class="math notranslate nohighlight">\(f_i\)</span> (or <span class="math notranslate nohighlight">\(P(x_j)\)</span>) converge.</p>
+<section id="preparing-data-for-wham">
+<h3>Preparing Data for WHAM<a class="headerlink" href="#preparing-data-for-wham" title="Link to this heading">#</a></h3>
+<p>Calculate the necessary inputs: histograms (<span class="math notranslate nohighlight">\(N_{i,j}\)</span>), total samples per window (<span class="math notranslate nohighlight">\(n_i\)</span>), and bias energies (<span class="math notranslate nohighlight">\(V_{bias,i}(x_j)\)</span>).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># --- Prepare Data for Custom WHAM ---</span>
+
+<span class="c1"># Define bins for the global histogram</span>
+<span class="n">n_bins_global</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="c1"># Determine range from all production data</span>
+<span class="n">min_x_data</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">all_positions_production</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span><span class="o">&gt;</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.1</span>
+<span class="n">max_x_data</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">all_positions_production</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span><span class="o">&gt;</span><span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.1</span>
+<span class="n">bin_edges_global</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">min_x_data</span><span class="p">,</span> <span class="n">max_x_data</span><span class="p">,</span> <span class="n">n_bins_global</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">bin_centers_global</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">bin_edges_global</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">+</span> <span class="n">bin_edges_global</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Global histogram range: </span><span class="si">{</span><span class="n">min_x_data</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="n">max_x_data</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Calculate N_ij (counts per window i in global bin j)</span>
+<span class="n">N_ij</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_windows</span><span class="p">,</span> <span class="n">n_bins_global</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_windows</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">n_i</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span> <span class="c1"># Only histogram windows with data</span>
+        <span class="n">counts</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">histogram</span><span class="p">(</span><span class="n">all_positions_production</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">bins</span><span class="o">=</span><span class="n">bin_edges_global</span><span class="p">)</span>
+        <span class="n">N_ij</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">counts</span>
+
+<span class="c1"># n_i (total samples per window) is already calculated</span>
+
+<span class="c1"># Calculate reduced bias energy V_bias_i(x_j) / (kB*T)</span>
+<span class="c1"># Bias energy = 0.5 * k_us * (x_j - x0_i)^2</span>
+<span class="n">reduced_bias_energies_ij</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_windows</span><span class="p">,</span> <span class="n">n_bins_global</span><span class="p">))</span>
+<span class="n">beta</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">k_B</span> <span class="o">*</span> <span class="n">temperature</span><span class="p">)</span> <span class="c1"># Inverse temperature</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_windows</span><span class="p">):</span>
+    <span class="n">center_i</span> <span class="o">=</span> <span class="n">window_centers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+    <span class="n">V_bias_i_j</span> <span class="o">=</span> <span class="n">potential_bias_us</span><span class="p">(</span><span class="n">bin_centers_global</span><span class="p">,</span> <span class="n">k_us</span><span class="o">=</span><span class="n">k_us</span><span class="p">,</span> <span class="n">x0_us</span><span class="o">=</span><span class="n">center_i</span><span class="p">)</span>
+    <span class="n">reduced_bias_energies_ij</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">beta</span> <span class="o">*</span> <span class="n">V_bias_i_j</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Data prepared for custom WHAM:&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Counts matrix N_ij shape: </span><span class="si">{</span><span class="n">N_ij</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total samples per window n_i shape: </span><span class="si">{</span><span class="n">n_i</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reduced bias energies shape: </span><span class="si">{</span><span class="n">reduced_bias_energies_ij</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># --- Visualize Biased Histograms (Optional but Recommended) ---</span>
+<span class="c1"># plt.figure(figsize=(12, 7))</span>
+<span class="n">plot_hist_success</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_windows</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">n_i</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span> <span class="c1"># Only plot windows with data</span>
+        <span class="c1"># Normalize counts to probability density for plotting</span>
+        <span class="n">bin_width</span> <span class="o">=</span> <span class="n">bin_edges_global</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">bin_edges_global</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">density</span> <span class="o">=</span> <span class="n">N_ij</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_i</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="n">bin_width</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">bin_centers_global</span><span class="p">,</span> <span class="n">density</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Win </span><span class="si">{</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s1"> (x0=</span><span class="si">{</span><span class="n">window_centers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+        <span class="n">plot_hist_success</span> <span class="o">=</span> <span class="kc">True</span>
+
+<span class="k">if</span> <span class="n">plot_hist_success</span><span class="p">:</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Biased Histograms from Umbrella Sampling Windows (Production Data)&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;Position (x)&quot;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;Probability Density P_i(x) (Biased)&quot;</span><span class="p">)</span>
+    <span class="c1"># plt.legend() # Legend might be too crowded</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Observe the overlap between adjacent window histograms.&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;This overlap is crucial for WHAM to connect the windows.&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Skipping histogram plot as no windows had sufficient production data.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Global histogram range: -2.13 to 2.20
+Data prepared for custom WHAM:
+Counts matrix N_ij shape: (10, 100)
+Total samples per window n_i shape: (10,)
+Reduced bias energies shape: (10, 100)
+</pre></div>
+</div>
+<img alt="../../../_images/d9162300dc7287753af1becf31663f30899579eaf5244564ddad2920226533b2.png" src="../../../_images/d9162300dc7287753af1becf31663f30899579eaf5244564ddad2920226533b2.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Observe the overlap between adjacent window histograms.
+This overlap is crucial for WHAM to connect the windows.
+</pre></div>
+</div>
+</div>
+</div>
+<p>###WHAM Implementation</p>
+<p>Here’s a function to perform the iterative WHAM calculation.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">run_wham</span><span class="p">(</span><span class="n">N_ij</span><span class="p">,</span> <span class="n">n_i</span><span class="p">,</span> <span class="n">reduced_bias_energies_ij</span><span class="p">,</span> <span class="n">max_iter</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-7</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Performs the iterative WHAM calculation.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        N_ij (np.ndarray): Counts matrix (num_windows x num_bins).</span>
+<span class="sd">        n_i (np.ndarray): Total samples per window (num_windows).</span>
+<span class="sd">        reduced_bias_energies_ij (np.ndarray): Reduced bias energy V_bias/(kbT)</span>
+<span class="sd">                                               for window i in bin j (num_windows x num_bins).</span>
+<span class="sd">        max_iter (int): Maximum number of iterations.</span>
+<span class="sd">        tolerance (float): Convergence tolerance for free energy offsets (f_i).</span>
+<span class="sd">        verbose (bool): Print iteration info.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple: (P_j, f_i) - Converged unbiased probability distribution (num_bins)</span>
+<span class="sd">                 and window free energy offsets (num_windows), or (None, None) if failed.</span>
+<span class="sd">                 P_j is normalized to sum to 1. f_i is in units of kT.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">num_windows</span><span class="p">,</span> <span class="n">num_bins</span> <span class="o">=</span> <span class="n">N_ij</span><span class="o">.</span><span class="n">shape</span>
+    <span class="n">beta</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="c1"># Assumes reduced_bias_energies are already beta*V</span>
+
+    <span class="c1"># --- Initialization ---</span>
+    <span class="c1"># Initial guess for free energy offsets (relative to window 0)</span>
+    <span class="n">f_i</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_windows</span><span class="p">)</span>
+    <span class="c1"># Initial guess for unbiased probability (proportional to total counts in each bin)</span>
+    <span class="n">P_j</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">N_ij</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+    <span class="c1"># Avoid division by zero if a bin has zero counts across all windows</span>
+    <span class="n">total_counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">P_j</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">total_counts</span> <span class="o">&lt;</span> <span class="mf">1e-9</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Error: Total counts across all bins are zero. Cannot initialize P_j.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+    <span class="n">P_j</span> <span class="o">/=</span> <span class="n">total_counts</span> <span class="c1"># Normalize initial guess</span>
+
+    <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Starting WHAM iterations...&quot;</span><span class="p">)</span>
+
+    <span class="c1"># --- Iteration Loop ---</span>
+    <span class="k">for</span> <span class="n">iteration</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_iter</span><span class="p">):</span>
+        <span class="n">f_i_old</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">f_i</span><span class="p">)</span> <span class="c1"># Store previous f_i for convergence check</span>
+
+        <span class="c1"># --- Update P_j (Equation 1) ---</span>
+        <span class="c1"># Calculate denominator: sum_k [ n_k * exp(f_k - V_bias_k(x_j)) ]</span>
+        <span class="n">exp_f_minus_V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">f_i</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span> <span class="o">-</span> <span class="n">reduced_bias_energies_ij</span><span class="p">)</span> <span class="c1"># Shape (n_win, n_bins)</span>
+        <span class="n">denominator</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">n_i</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span> <span class="o">*</span> <span class="n">exp_f_minus_V</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="c1"># Shape (n_bins,)</span>
+
+        <span class="c1"># Calculate numerator: sum_k N_k,j</span>
+        <span class="n">numerator</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">N_ij</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="c1"># Shape (n_bins,)</span>
+
+        <span class="c1"># Update P_j, handle division by zero for empty bins</span>
+        <span class="n">P_j_new</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">P_j</span><span class="p">)</span>
+        <span class="n">valid_bins</span> <span class="o">=</span> <span class="n">denominator</span> <span class="o">&gt;</span> <span class="mf">1e-12</span> <span class="c1"># Avoid division by tiny numbers</span>
+        <span class="n">P_j_new</span><span class="p">[</span><span class="n">valid_bins</span><span class="p">]</span> <span class="o">=</span> <span class="n">numerator</span><span class="p">[</span><span class="n">valid_bins</span><span class="p">]</span> <span class="o">/</span> <span class="n">denominator</span><span class="p">[</span><span class="n">valid_bins</span><span class="p">]</span>
+
+        <span class="c1"># Normalize P_j to ensure it sums to 1</span>
+        <span class="n">P_j_sum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">P_j_new</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">P_j_sum</span> <span class="o">&gt;</span> <span class="mf">1e-9</span><span class="p">:</span>
+            <span class="n">P_j</span> <span class="o">=</span> <span class="n">P_j_new</span> <span class="o">/</span> <span class="n">P_j_sum</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># This case should ideally not happen if initialization was okay</span>
+            <span class="c1"># but handle it just in case. Could indicate poor overlap or zero counts everywhere.</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: Sum of P_j_new is near zero (</span><span class="si">{</span><span class="n">P_j_sum</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">) at iteration </span><span class="si">{</span><span class="n">iteration</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">. Using previous P_j.&quot;</span><span class="p">)</span>
+            <span class="c1"># Keep the old P_j if the new one collapses to zero</span>
+
+        <span class="c1"># --- Update f_i (Equation 2) ---</span>
+        <span class="c1"># Calculate exp(-f_i) = sum_j [ P(x_j) * exp(-V_bias_i(x_j)) ]</span>
+        <span class="n">exp_minus_V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">reduced_bias_energies_ij</span><span class="p">)</span> <span class="c1"># Shape (n_win, n_bins)</span>
+        <span class="n">sum_P_exp_minus_V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">P_j</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">,</span> <span class="p">:]</span> <span class="o">*</span> <span class="n">exp_minus_V</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># Shape (n_win,)</span>
+
+        <span class="c1"># Update f_i, handle log(0)</span>
+        <span class="c1"># Set f_0 = 0 as reference</span>
+        <span class="n">f_i_new</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">f_i</span><span class="p">)</span>
+        <span class="n">valid_windows</span> <span class="o">=</span> <span class="n">sum_P_exp_minus_V</span> <span class="o">&gt;</span> <span class="mf">1e-12</span>
+        <span class="c1"># Calculate -log only for valid windows, others remain 0 (or handle as error)</span>
+        <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+             <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">)</span>
+             <span class="n">f_i_new</span><span class="p">[</span><span class="n">valid_windows</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">sum_P_exp_minus_V</span><span class="p">[</span><span class="n">valid_windows</span><span class="p">])</span>
+
+        <span class="c1"># Shift f_i so that f_0 = 0 (or another reference window if desired)</span>
+        <span class="n">f_i</span> <span class="o">=</span> <span class="n">f_i_new</span> <span class="o">-</span> <span class="n">f_i_new</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># --- Check Convergence ---</span>
+        <span class="n">delta_f</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">f_i</span> <span class="o">-</span> <span class="n">f_i_old</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">verbose</span> <span class="ow">and</span> <span class="p">(</span><span class="n">iteration</span> <span class="o">%</span> <span class="mi">100</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  Iter </span><span class="si">{</span><span class="n">iteration</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">, Max Delta f_i: </span><span class="si">{</span><span class="n">delta_f</span><span class="si">:</span><span class="s2">.4e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">delta_f</span> <span class="o">&lt;</span> <span class="n">tolerance</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;WHAM converged after </span><span class="si">{</span><span class="n">iteration</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2"> iterations.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">P_j</span><span class="p">,</span> <span class="n">f_i</span> <span class="c1"># Converged</span>
+
+    <span class="c1"># If loop finishes without convergence</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning: WHAM did not converge within </span><span class="si">{</span><span class="n">max_iter</span><span class="si">}</span><span class="s2"> iterations. Max Delta f_i: </span><span class="si">{</span><span class="n">delta_f</span><span class="si">:</span><span class="s2">.4e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">P_j</span><span class="p">,</span> <span class="n">f_i</span> <span class="c1"># Return last values</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Custom WHAM function defined.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Custom WHAM function defined.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="running-thewham-calculation">
+<h3>Running theWHAM Calculation<a class="headerlink" href="#running-thewham-calculation" title="Link to this heading">#</a></h3>
+<p>Execute the <code class="docutils literal notranslate"><span class="pre">run_wham</span></code> function with the prepared data.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># --- Run Custom WHAM ---</span>
+<span class="c1"># Ensure n_i has no zeros if filtering wasn&#39;t done earlier, WHAM needs &gt;0 samples</span>
+<span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">n_i</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Error: Some windows have zero production samples. Cannot run WHAM.&quot;</span><span class="p">)</span>
+    <span class="n">P_j_wham</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">f_i_wham</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">P_j_wham</span><span class="p">,</span> <span class="n">f_i_wham</span> <span class="o">=</span> <span class="n">run_wham</span><span class="p">(</span>
+        <span class="n">N_ij</span><span class="p">,</span> <span class="n">n_i</span><span class="p">,</span> <span class="n">reduced_bias_energies_ij</span><span class="p">,</span>
+        <span class="n">max_iter</span><span class="o">=</span><span class="mi">5000</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span>
+
+<span class="k">if</span> <span class="n">P_j_wham</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Converged Free Energy Offsets (f_i / kT):&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">f_i_wham</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">WHAM calculation failed or did not produce results.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Starting WHAM iterations...
+  Iter 1, Max Delta f_i: 4.6222e-01
+  Iter 101, Max Delta f_i: 1.2822e-02
+  Iter 201, Max Delta f_i: 8.9484e-03
+  Iter 301, Max Delta f_i: 6.8624e-03
+  Iter 401, Max Delta f_i: 5.2097e-03
+  Iter 501, Max Delta f_i: 3.9703e-03
+  Iter 601, Max Delta f_i: 3.0384e-03
+  Iter 701, Max Delta f_i: 2.3322e-03
+  Iter 801, Max Delta f_i: 1.7971e-03
+  Iter 901, Max Delta f_i: 1.3872e-03
+  Iter 1001, Max Delta f_i: 1.0713e-03
+  Iter 1101, Max Delta f_i: 8.2759e-04
+  Iter 1201, Max Delta f_i: 6.3952e-04
+  Iter 1301, Max Delta f_i: 4.9439e-04
+  Iter 1401, Max Delta f_i: 3.8239e-04
+  Iter 1501, Max Delta f_i: 2.9598e-04
+  Iter 1601, Max Delta f_i: 2.2929e-04
+  Iter 1701, Max Delta f_i: 1.7783e-04
+  Iter 1801, Max Delta f_i: 1.3812e-04
+  Iter 1901, Max Delta f_i: 1.0746e-04
+  Iter 2001, Max Delta f_i: 8.3789e-05
+  Iter 2101, Max Delta f_i: 6.5504e-05
+  Iter 2201, Max Delta f_i: 5.1372e-05
+  Iter 2301, Max Delta f_i: 4.0444e-05
+  Iter 2401, Max Delta f_i: 3.1986e-05
+  Iter 2501, Max Delta f_i: 2.5433e-05
+  Iter 2601, Max Delta f_i: 2.0350e-05
+  Iter 2701, Max Delta f_i: 1.6401e-05
+  Iter 2801, Max Delta f_i: 1.3328e-05
+  Iter 2901, Max Delta f_i: 1.0931e-05
+WHAM converged after 2948 iterations.
+
+Converged Free Energy Offsets (f_i / kT):
+[ 0.         -6.44003065 -5.745751   -1.04933547  2.5775264   2.36347157
+ -1.35875211 -5.5568257  -6.37498438  0.26359279]
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="calculating-and-plotting-the-reconstructed-pmf">
+<h3>Calculating and Plotting the Reconstructed PMF<a class="headerlink" href="#calculating-and-plotting-the-reconstructed-pmf" title="Link to this heading">#</a></h3>
+<p>Calculate the PMF from the converged probability <span class="math notranslate nohighlight">\(P_j\)</span> and plot it against the analytical potential.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># --- Calculate PMF from WHAM Probability ---</span>
+<span class="n">pmf_wham</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="k">if</span> <span class="n">P_j_wham</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="c1"># Calculate PMF = -kT * ln(P_j)</span>
+    <span class="c1"># Avoid log(0) for bins with zero probability</span>
+    <span class="n">pmf_wham</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full_like</span><span class="p">(</span><span class="n">P_j_wham</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span> <span class="c1"># Initialize with infinity</span>
+    <span class="n">valid_bins_pmf</span> <span class="o">=</span> <span class="n">P_j_wham</span> <span class="o">&gt;</span> <span class="mf">1e-12</span>
+    <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">)</span>
+        <span class="n">pmf_wham</span><span class="p">[</span><span class="n">valid_bins_pmf</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">k_B</span> <span class="o">*</span> <span class="n">temperature</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">P_j_wham</span><span class="p">[</span><span class="n">valid_bins_pmf</span><span class="p">])</span>
+
+    <span class="c1"># Shift PMF so its minimum is zero</span>
+    <span class="n">min_pmf_val</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">pmf_wham</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">pmf_wham</span><span class="p">)])</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">min_pmf_val</span><span class="p">):</span>
+        <span class="n">pmf_wham</span> <span class="o">-=</span> <span class="n">min_pmf_val</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">PMF calculated. Min value shifted to 0.&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Warning: Could not find finite minimum PMF value. PMF might be invalid.&quot;</span><span class="p">)</span>
+        <span class="n">pmf_wham</span> <span class="o">=</span> <span class="kc">None</span> <span class="c1"># Mark as invalid</span>
+
+
+<span class="c1"># --- Plot Reconstructed PMF ---</span>
+
+<span class="c1"># Calculate analytical potential shifted to have minimum at 0</span>
+<span class="n">analytical_potential_dw_plot</span> <span class="o">=</span> <span class="n">potential_dw</span><span class="p">(</span><span class="n">bin_centers_global</span><span class="p">,</span> <span class="n">a</span><span class="o">=</span><span class="n">a_dw</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">b_dw</span><span class="p">)</span>
+<span class="n">analytical_potential_dw_plot</span> <span class="o">-=</span> <span class="n">minima_val</span> <span class="c1"># Shift minimum to zero</span>
+
+<span class="c1"># Plot analytical potential</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">bin_centers_global</span><span class="p">,</span> <span class="n">analytical_potential_dw_plot</span><span class="p">,</span> <span class="s1">&#39;r--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">2.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Target PMF (Analytical Potential)&quot;</span><span class="p">)</span>
+
+<span class="c1"># Plot custom WHAM PMF if available</span>
+<span class="k">if</span> <span class="n">pmf_wham</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">bin_centers_global</span><span class="p">,</span> <span class="n">pmf_wham</span><span class="p">,</span> <span class="s1">&#39;bo-&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;PMF from US + Custom WHAM&quot;</span><span class="p">)</span>
+    <span class="c1"># Estimate barrier height from calculated PMF</span>
+    <span class="n">barrier_region_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">bin_centers_global</span> <span class="o">&gt;</span> <span class="o">-</span><span class="n">minima_pos</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">bin_centers_global</span> <span class="o">&lt;</span> <span class="n">minima_pos</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">barrier_region_mask</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">pmf_wham</span><span class="p">)):</span>
+         <span class="n">pmf_barrier_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">pmf_wham</span><span class="p">[</span><span class="n">barrier_region_mask</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">pmf_wham</span><span class="p">)])</span>
+         <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PMF Barrier Height (Custom WHAM, approx): </span><span class="si">{</span><span class="n">pmf_barrier_max</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Could not estimate PMF barrier height (no finite points in barrier region).&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">barrier_height</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;PMF Calculation Failed or Skipped.&quot;</span><span class="p">,</span> <span class="n">ha</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+
+
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;Position (x)&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;Free Energy / Potential (shifted, $k_B T$ units)&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;PMF from Umbrella Sampling + Custom WHAM vs Analytical Potential&quot;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">barrier_height</span> <span class="o">*</span> <span class="mf">1.5</span> <span class="k">if</span> <span class="n">barrier_height</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">5</span><span class="p">)</span> <span class="c1"># Adjust ylim</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Compare the blue line (PMF from simulation) to the red dashed line (analytical potential).&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Ideally, they should match closely, demonstrating successful reconstruction across the barrier.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>PMF calculated. Min value shifted to 0.
+PMF Barrier Height (Custom WHAM, approx): 4.09
+</pre></div>
+</div>
+<img alt="../../../_images/b5844305feab6162d6f30f04e6f76809710085fffd8c8d3edd4469661872fe5b.png" src="../../../_images/b5844305feab6162d6f30f04e6f76809710085fffd8c8d3edd4469661872fe5b.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Compare the blue line (PMF from simulation) to the red dashed line (analytical potential).
+Ideally, they should match closely, demonstrating successful reconstruction across the barrier.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+<section id="convergence-of-pmf-vs-production-length">
+<h3>6.4.1 Convergence of PMF vs. Production Length<a class="headerlink" href="#convergence-of-pmf-vs-production-length" title="Link to this heading">#</a></h3>
+<p>After reconstructing the PMF with WHAM on the full dataset, verify convergence by running WHAM on increasing subsets of the umbrella trajectories. We vary the number of frames per window (<span class="math notranslate nohighlight">\(M\)</span> = 100, 200, … up to the full length) and track:</p>
+<ul class="simple">
+<li><p>The free-energy difference between the two minima (<code class="docutils literal notranslate"><span class="pre">ΔG_minima</span></code>)</p></li>
+<li><p>The free-energy barrier height (<code class="docutils literal notranslate"><span class="pre">ΔG_barrier</span></code>)</p></li>
+</ul>
+<p><strong>Important points to note</strong>:</p>
+<ul class="simple">
+<li><p><strong>Physically relevant points</strong>: In a real-world scenario, you would carefully choose the points for your convergence analysis based on the specific system you are studying and the quantities you want to compute. It could be the free energy difference between two states, the barrier height between them, or other properties of interest.</p></li>
+<li><p><strong>Assumptions</strong>: In this example, we’ve assumed knowledge of the minima positions and barrier position for the double-well potential. In practice, you might need to use other techniques to find these points beforehand.
+Convergence indicators: We’re still tracking the deltaG_minima and deltaG_barrier_min1 values to assess convergence. You might need to monitor other quantities depending on your system and requirements.</p></li>
+</ul>
+<p>Plotting these as a function of <span class="math notranslate nohighlight">\(M\)</span> shows whether the PMF has stabilized.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+<span class="c1"># --- Setup ---</span>
+<span class="n">max_frames</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">all_positions_production</span><span class="p">)</span>
+<span class="n">nsteps</span> <span class="o">=</span> <span class="mi">200</span>
+<span class="n">step_size</span>  <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_frames</span> <span class="o">//</span> <span class="n">nsteps</span><span class="p">)</span>
+<span class="n">steps</span>      <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">step_size</span><span class="p">,</span> <span class="n">max_frames</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">step_size</span><span class="p">))</span>
+<span class="k">if</span> <span class="n">steps</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">max_frames</span><span class="p">:</span>
+    <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">max_frames</span><span class="p">)</span>
+
+<span class="c1"># Precompute target indices</span>
+<span class="n">min1_pos</span>    <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">b_dw</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">a_dw</span><span class="p">))</span>
+<span class="n">min2_pos</span>    <span class="o">=</span>  <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">b_dw</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">a_dw</span><span class="p">))</span>
+<span class="n">barrier_pos</span> <span class="o">=</span>  <span class="mf">0.0</span>
+
+<span class="n">idx_min1</span>    <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">bin_centers_global</span> <span class="o">-</span> <span class="n">min1_pos</span><span class="p">))</span>
+<span class="n">idx_min2</span>    <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">bin_centers_global</span> <span class="o">-</span> <span class="n">min2_pos</span><span class="p">))</span>
+<span class="n">idx_barrier</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">bin_centers_global</span> <span class="o">-</span> <span class="n">barrier_pos</span><span class="p">))</span>
+
+<span class="c1"># Containers</span>
+<span class="n">deltaG_minima</span>       <span class="o">=</span> <span class="p">[]</span>
+<span class="n">deltaG_barrier_min1</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="n">deltaG_barrier_min2</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="c1"># --- Convergence loop ---</span>
+<span class="k">for</span> <span class="n">M</span> <span class="ow">in</span> <span class="n">steps</span><span class="p">:</span>
+    <span class="c1"># build counts up to frame M for each window</span>
+    <span class="n">N_ij_M</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">histogram</span><span class="p">(</span><span class="n">pos</span><span class="p">[:</span><span class="n">M</span><span class="p">],</span> <span class="n">bins</span><span class="o">=</span><span class="n">bin_edges_global</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">all_positions_production</span>
+    <span class="p">])</span>
+    <span class="n">n_i_M</span> <span class="o">=</span> <span class="n">N_ij_M</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># run WHAM</span>
+    <span class="n">P_j_M</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">run_wham</span><span class="p">(</span><span class="n">N_ij_M</span><span class="p">,</span> <span class="n">n_i_M</span><span class="p">,</span> <span class="n">reduced_bias_energies_ij</span><span class="p">,</span>
+                        <span class="n">max_iter</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span><span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1"># compute PMF</span>
+    <span class="n">pmf_M</span> <span class="o">=</span> <span class="o">-</span><span class="n">k_B</span> <span class="o">*</span> <span class="n">temperature</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">P_j_M</span> <span class="o">+</span> <span class="mf">1e-18</span><span class="p">)</span>
+
+    <span class="c1"># record free‐energy differences</span>
+    <span class="n">deltaG_minima</span><span class="o">.</span><span class="n">append</span>       <span class="p">(</span><span class="n">pmf_M</span><span class="p">[</span><span class="n">idx_min2</span><span class="p">]</span>    <span class="o">-</span> <span class="n">pmf_M</span><span class="p">[</span><span class="n">idx_min1</span><span class="p">])</span>
+    <span class="n">deltaG_barrier_min1</span><span class="o">.</span><span class="n">append</span> <span class="p">(</span><span class="n">pmf_M</span><span class="p">[</span><span class="n">idx_barrier</span><span class="p">]</span> <span class="o">-</span> <span class="n">pmf_M</span><span class="p">[</span><span class="n">idx_min1</span><span class="p">])</span>
+    <span class="n">deltaG_barrier_min2</span><span class="o">.</span><span class="n">append</span> <span class="p">(</span><span class="n">pmf_M</span><span class="p">[</span><span class="n">idx_barrier</span><span class="p">]</span> <span class="o">-</span> <span class="n">pmf_M</span><span class="p">[</span><span class="n">idx_min2</span><span class="p">])</span>
+
+<span class="c1"># --- Plot ---</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">deltaG_minima</span><span class="p">,</span>       <span class="s1">&#39;o-&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;ΔG between minima&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">deltaG_barrier_min1</span><span class="p">,</span> <span class="s1">&#39;s-&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Barrier from min1&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">deltaG_barrier_min2</span><span class="p">,</span> <span class="s1">&#39;^-&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Barrier from min2&#39;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;k&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Actual ΔG (0)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">barrier_height</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">,</span>
+            <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Actual barrier (</span><span class="si">{</span><span class="n">barrier_height</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Frames per window&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Free‐energy difference ($k_B T$)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Convergence of PMF with increasing data&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Warning: WHAM did not converge within 5000 iterations. Max Delta f_i: 1.0116e-04
+</pre></div>
+</div>
+<img alt="../../../_images/7f0521ed297e89e1fc76044fa37e8965c679f9dca565a2f0ac2ccb54bb875b73.png" src="../../../_images/7f0521ed297e89e1fc76044fa37e8965c679f9dca565a2f0ac2ccb54bb875b73.png" />
+</div>
+</div>
+<hr class="docutils" />
+<p>End of Module 5. We have successfully implemented Umbrella Sampling and used a custom WHAM implementation to reconstruct the PMF:</p>
+<ul class="simple">
+<li><p><strong>Umbrella Sampling (US):</strong> Used harmonic bias potentials (“umbrellas”) to force sampling across the double-well potential.</p></li>
+<li><p><strong>Data Processing:</strong> Handled burn-in and prepared histogram counts and bias energies.</p></li>
+<li><p><strong>Custom WHAM:</strong> Implemented the iterative WHAM equations to combine data from all windows and calculate the unbiased probability distribution.</p></li>
+<li><p><strong>PMF Reconstruction:</strong> Calculated the unbiased PMF from the WHAM probability and visualized how it reproduces the true potential energy landscape, overcoming the sampling limitations of standard MD.</p></li>
+</ul>
+<p>In Module 6, we will explore another powerful enhanced sampling technique: <strong>Metadynamics</strong>.</p>
+</section>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "YOUR_USERNAME/YOUR_REPO",
+            ref: "main",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./_build/jupyter_execute/notebooks"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#setup-imports-and-functions-from-modules-4-5">Setup: Imports and Functions (from Modules 4 &amp; 5)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-6-1-the-concept-of-biasing">Lesson 6.1: The Concept of Biasing</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-6-2-harmonic-bias-potentials-umbrellas">Lesson 6.2: Harmonic Bias Potentials (“Umbrellas”)</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-6-3-implementing-umbrella-sampling">Lesson 6.3: Implementing Umbrella Sampling</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#setting-up-umbrella-sampling-windows-parameters">Setting up Umbrella Sampling Windows &amp; Parameters</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-k-rm-us-and-number-of-windows-for-this-system">6.3.1 Choosing <span class="math notranslate nohighlight">\(K_{\rm us}\)</span> and Number of Windows for This System</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#general-guidelines">General Guidelines</a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-the-umbrella-sampling-simulations">Running the Umbrella Sampling Simulations</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-6-4-unbiasing-and-reconstructing-the-pmf-wham-implementation">Lesson 6.4: Unbiasing and Reconstructing the PMF (WHAM Implementation)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#preparing-data-for-wham">Preparing Data for WHAM</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#running-thewham-calculation">Running theWHAM Calculation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#calculating-and-plotting-the-reconstructed-pmf">Calculating and Plotting the Reconstructed PMF</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#convergence-of-pmf-vs-production-length">6.4.1 Convergence of PMF vs. Production Length</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Your Name
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2023.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

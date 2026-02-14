@@ -1,0 +1,38 @@
+# Book settings
+title: Molecular Dynamics Tutorial for Beginners
+author: Your Name
+logo: ""
+
+# Force re-execution disabled for faster builds
+execute:
+  execute_notebooks: "off"
+
+# Parse and render settings
+parse:
+  myst_enable_extensions:
+    - amsmath
+    - dollarmath
+
+# Launch buttons for interactivity
+launch_buttons:
+  binderhub_url: "https://mybinder.org"
+  notebook_interface: "jupyterlab"
+  thebe: true
+
+# Repository metadata (edit these before publishing)
+repository:
+  url: https://github.com/24ssuman/md-tutorial
+  path_to_book: .
+  branch: main
+
+html:
+  use_repository_button: true
+  use_issues_button: true
+  home_page_in_navbar: true
+
+sphinx:
+  config:
+    exclude_patterns:
+      - README.md
+      - _build
+      - _build/**

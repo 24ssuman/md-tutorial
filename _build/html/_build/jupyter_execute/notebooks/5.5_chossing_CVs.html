@@ -1,0 +1,910 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Lesson 5.2a: Choosing Good Collective Variables for Multi-Dimensional Systems &#8212; Molecular Dynamics Tutorial for Beginners</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="../../../_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_build/jupyter_execute/notebooks/5.5_chossing_CVs';</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../intro.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Molecular Dynamics Tutorial for Beginners</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../intro.html">
+                    Molecular Dynamics Tutorial for Beginners
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/1_intro_to_MD.html">Module 1: Introduction to Molecular Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/2_physics_of_MD.html">Module 2: The Physics Behind MD</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/3_non_bonded_interactions.html">Module 3: Non-Bonded Interactions and Long-Range Electrostatics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/4_1D_simulations.html">Module 4: Simulating Simple 1D Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/5_sampling_challenge.html">Module 5: The Challenge of Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/5.5_chossing_CVs.html">Lesson 5.2a: Choosing Good Collective Variables for Multi-Dimensional Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/6_umbrella_sampling.html">Module 6: Enhanced Sampling I - Umbrella Sampling (US) &amp; PMF Reconstruction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/6.1_WHAM_detailed.html">WHAM, step by step (with plots)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/7_meta_dynamics.html">Module 7: Enhanced Sampling II - Metadynamics (MetaD)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/8_ase_LJ_fluid_simulation.html">Module 8: Multi-Particle Simulations: Lennard-Jones Fluid with ASE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/9_ase_waterbox_simulation_not_working.html">Module 9: Simulating Molecular Systems: Water Box with ASE</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-launch-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
+    <i class="fas fa-rocket"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://mybinder.org/v2/gh/YOUR_USERNAME/YOUR_REPO/main?urlpath=lab/tree/./_build/jupyter_execute/notebooks/5.5_chossing_CVs.ipynb" target="_blank"
+   class="btn btn-sm dropdown-item"
+   title="Launch on Binder"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  
+    <img alt="Binder logo" src="../../../_static/images/logo_binder.svg">
+  </span>
+<span class="btn__text-container">Binder</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="initThebeSBT()"
+  class="btn btn-sm btn-launch-thebe dropdown-item"
+  title="Launch Thebe"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-play"></i>
+  </span>
+<span class="btn__text-container">Live Code</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO/issues/new?title=Issue%20on%20page%20%2F_build/jupyter_execute/notebooks/5.5_chossing_CVs.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../../_sources/_build/jupyter_execute/notebooks/5.5_chossing_CVs.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Lesson 5.2a: Choosing Good Collective Variables for Multi-Dimensional Systems</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#introduction-the-dimensionality-dilemma">1. Introduction: The Dimensionality Dilemma</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulating-a-2d-system-conceptual">2. Simulating a 2D System (Conceptual)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#d-surface-plot-of-the-2d-pmf">3D Surface Plot of the 2D PMF</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#interpreting-the-2d-pmf">3. Interpreting the 2D PMF</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#slicing-the-pmf-projecting-onto-1d-cvs">4. “Slicing” the PMF: Projecting onto 1D CVs</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#quantitative-comparison-barrier-heights">Quantitative Comparison: Barrier Heights</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#comparing-cvs-which-one-is-good-and-which-is-bad">5. Comparing CVs: Which One is “Good” and Which is “Bad”?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-makes-a-cv-good">6. What Makes a CV “Good”?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-cvs-in-real-systems-an-iterative-process">7. Choosing CVs in Real Systems - An Iterative Process</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conclusion">8. Conclusion</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="lesson-5-2a-choosing-good-collective-variables-for-multi-dimensional-systems">
+<h1>Lesson 5.2a: Choosing Good Collective Variables for Multi-Dimensional Systems<a class="headerlink" href="#lesson-5-2a-choosing-good-collective-variables-for-multi-dimensional-systems" title="Link to this heading">#</a></h1>
+<p><strong>Corresponding Module in Course Outline:</strong> Module 5: The Challenge of Sampling
+<strong>Prerequisites:</strong> Understanding of basic MD concepts, Potential Energy Surfaces (PES), and an introduction to Collective Variables (CVs) from Lesson 5.2. Familiarity with Python, NumPy, and Matplotlib is assumed for running the code cells.</p>
+<section id="introduction-the-dimensionality-dilemma">
+<h2>1. Introduction: The Dimensionality Dilemma<a class="headerlink" href="#introduction-the-dimensionality-dilemma" title="Link to this heading">#</a></h2>
+<p>In molecular simulations, we often deal with systems containing many atoms. For <span class="math notranslate nohighlight">\(N\)</span> atoms in 3D space, the system has <span class="math notranslate nohighlight">\(3N\)</span> degrees of freedom (excluding overall translation and rotation if not relevant). Describing the complex conformational changes, reactions, or binding events in this high-dimensional space is incredibly challenging.</p>
+<p><strong>Collective Variables (CVs)</strong> are functions of the atomic coordinates that help us reduce this dimensionality. They are chosen to capture the essential slow motions or important transitions in the system. We often want to understand the system’s behavior in terms of a few (typically 1 to 3) CVs, allowing us to visualize and analyze the free energy landscape.</p>
+<p>However, the choice of CVs is crucial. A poor choice can obscure important features of the landscape, while a good choice can reveal the underlying mechanisms of the process we are studying.</p>
+<p><strong>Why is visualization a challenge?</strong>
+We can typically visualize:</p>
+<ul class="simple">
+<li><p>1 CV: A 1D plot (e.g., PMF along a coordinate).</p></li>
+<li><p>2 CVs: A 2D contour plot or surface plot (e.g., PMF as a function of two CVs).</p></li>
+<li><p>3 CVs: This is already difficult, often requiring slices or projections.</p></li>
+</ul>
+<p>Since our simulation data is <span class="math notranslate nohighlight">\(3N\)</span>-dimensional, and we can only effectively visualize landscapes in 2D or 3D (using 2 CVs for the axes and the PMF as the third dimension/color), we need to be very careful about which aspects of the <span class="math notranslate nohighlight">\(3N\)</span>-dimensional space our chosen CVs represent.</p>
+<p>In this notebook, we’ll explore how to evaluate the “goodness” of CVs by looking at a 2D PMF and then examining 1D “slices” or projections along different potential CVs.</p>
+</section>
+<section id="simulating-a-2d-system-conceptual">
+<h2>2. Simulating a 2D System (Conceptual)<a class="headerlink" href="#simulating-a-2d-system-conceptual" title="Link to this heading">#</a></h2>
+<p>Imagine we have run a long MD simulation of a system that can be effectively described by two coordinates, let’s call them <span class="math notranslate nohighlight">\(q_1\)</span> and <span class="math notranslate nohighlight">\(q_2\)</span>. From this simulation, we can calculate the probability distribution <span class="math notranslate nohighlight">\(P(q_1, q_2)\)</span> of finding the system at particular values of <span class="math notranslate nohighlight">\(q_1\)</span> and <span class="math notranslate nohighlight">\(q_2\)</span>. The Potential of Mean Force (PMF) is then given by:</p>
+<p><span class="math notranslate nohighlight">\(F(q_1, q_2) = -k_B T \ln P(q_1, q_2)\)</span></p>
+<p>(For simplicity, we’ll often set <span class="math notranslate nohighlight">\(k_B T = 1\)</span> and ignore the constant offset, focusing on relative free energies: <span class="math notranslate nohighlight">\(F(q_1, q_2) \propto -\ln P(q_1, q_2)\)</span>).</p>
+<p>For this notebook, instead of running a full MD simulation and calculating the PMF (which is computationally intensive), we will generate a synthetic 2D PMF that mimics a system with two stable states separated by an energy barrier. This will allow us to focus on the principles of CV selection.</p>
+<p>Let’s define our synthetic 2D probability distribution <span class="math notranslate nohighlight">\(P(x,y)\)</span> as the sum of two Gaussian functions. This represents a system with two preferred regions (basins) in the <span class="math notranslate nohighlight">\((x,y)\)</span> plane.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">multivariate_normal</span>
+
+<span class="c1"># --- Configuration for the 2D PMF ---</span>
+<span class="c1"># Define the means (centers) of the two basins</span>
+<span class="n">mean1</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+<span class="n">mean2</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]</span> <span class="c1"># Slightly offset in y for a bit more complexity</span>
+
+<span class="c1"># Define the covariance matrices (spread and orientation)</span>
+<span class="c1"># Making them slightly elliptical and differently oriented</span>
+<span class="n">cov1</span> <span class="o">=</span> <span class="p">[[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">]]</span>
+<span class="n">cov2</span> <span class="o">=</span> <span class="p">[[</span><span class="mf">1.2</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.3</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">]]</span>
+
+<span class="c1"># Amplitudes of the Gaussians (can be adjusted)</span>
+<span class="n">amp1</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">amp2</span> <span class="o">=</span> <span class="mf">0.8</span>
+
+<span class="c1"># Create a grid of points</span>
+<span class="n">x_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">y_coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">X</span><span class="p">,</span> <span class="n">Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">x_coords</span><span class="p">,</span> <span class="n">y_coords</span><span class="p">)</span>
+<span class="n">pos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dstack</span><span class="p">((</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">))</span>
+
+<span class="c1"># Create the multivariate Gaussian distributions</span>
+<span class="n">rv1</span> <span class="o">=</span> <span class="n">multivariate_normal</span><span class="p">(</span><span class="n">mean1</span><span class="p">,</span> <span class="n">cov1</span><span class="p">)</span>
+<span class="n">rv2</span> <span class="o">=</span> <span class="n">multivariate_normal</span><span class="p">(</span><span class="n">mean2</span><span class="p">,</span> <span class="n">cov2</span><span class="p">)</span>
+
+<span class="c1"># Calculate the probability distribution P(x,y)</span>
+<span class="c1"># This is a sum of two Gaussians, representing two populated states</span>
+<span class="n">P_xy</span> <span class="o">=</span> <span class="n">amp1</span> <span class="o">*</span> <span class="n">rv1</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="o">+</span> <span class="n">amp2</span> <span class="o">*</span> <span class="n">rv2</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span>
+
+<span class="c1"># Calculate the PMF F(x,y) = -log(P(x,y))</span>
+<span class="c1"># Adding a small epsilon to avoid log(0) if P_xy can be zero</span>
+<span class="n">epsilon</span> <span class="o">=</span> <span class="mf">1e-10</span>
+<span class="n">F_xy</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">P_xy</span> <span class="o">+</span> <span class="n">epsilon</span><span class="p">)</span>
+
+<span class="c1"># Normalize PMF to have a minimum of 0 for easier visualization</span>
+<span class="n">F_xy</span> <span class="o">=</span> <span class="n">F_xy</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">F_xy</span><span class="p">)</span>
+
+<span class="c1"># --- Plotting the 2D PMF ---</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+<span class="n">contour</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">contourf</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">F_xy</span><span class="p">,</span> <span class="n">levels</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis_r&#39;</span><span class="p">)</span> <span class="c1"># &#39;_r&#39; reverses the colormap</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">contour</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Free Energy (arbitrary units)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;2D Potential of Mean Force (PMF): $F(x, y)$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Collective Variable $q_1$ (e.g., x-coordinate)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Collective Variable $q_2$ (e.g., y-coordinate)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">scatter</span><span class="p">([</span><span class="n">mean1</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">mean2</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="p">[</span><span class="n">mean1</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">mean2</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Basin Centers&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Shape of X: </span><span class="si">{</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Shape of Y: </span><span class="si">{</span><span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Shape of F_xy: </span><span class="si">{</span><span class="n">F_xy</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Min F_xy: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">F_xy</span><span class="p">)</span><span class="si">}</span><span class="s2">, Max F_xy: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">F_xy</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../../../_images/21c6808f1b7066d04e5facbd17f422694c86b97258a0e54c387afc34b8ebd35d.png" src="../../../_images/21c6808f1b7066d04e5facbd17f422694c86b97258a0e54c387afc34b8ebd35d.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Shape of X: (100, 100)
+Shape of Y: (100, 100)
+Shape of F_xy: (100, 100)
+Min F_xy: 0.0, Max F_xy: 21.326964502688934
+</pre></div>
+</div>
+</div>
+</div>
+<section id="d-surface-plot-of-the-2d-pmf">
+<h3>3D Surface Plot of the 2D PMF<a class="headerlink" href="#d-surface-plot-of-the-2d-pmf" title="Link to this heading">#</a></h3>
+<p>Below is a 3D surface representation of our 2D PMF. This view can help visualize the height of barriers and depth of basins more intuitively.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">mpl_toolkits.mplot3d</span><span class="w"> </span><span class="kn">import</span> <span class="n">Axes3D</span>
+
+<span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+<span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="mi">111</span><span class="p">,</span> <span class="n">projection</span><span class="o">=</span><span class="s1">&#39;3d&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">plot_surface</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">F_xy</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;3D Surface of the 2D PMF&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$q_1$&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;$q_2$&#39;</span><span class="p">)</span>
+<span class="n">ax</span><span class="o">.</span><span class="n">set_zlabel</span><span class="p">(</span><span class="s1">&#39;Free Energy (a.u.)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../../../_images/6f3675888c4697d5af48107ab506a30697d14cf09e58b04979c8b43bc06e30e9.png" src="../../../_images/6f3675888c4697d5af48107ab506a30697d14cf09e58b04979c8b43bc06e30e9.png" />
+</div>
+</div>
+</section>
+</section>
+<section id="interpreting-the-2d-pmf">
+<h2>3. Interpreting the 2D PMF<a class="headerlink" href="#interpreting-the-2d-pmf" title="Link to this heading">#</a></h2>
+<p>The plot above shows our synthetic 2D PMF.</p>
+<ul class="simple">
+<li><p>The dark regions represent low free energy (stable states or basins).</p></li>
+<li><p>The lighter regions represent high free energy (energy barriers or unstable regions).</p></li>
+<li><p>We can see two main basins, indicating two preferred states of our system.</p></li>
+<li><p>The “path” between these basins goes over an energy barrier (a saddle point).</p></li>
+</ul>
+<p>Our goal is to find a single CV that can effectively describe the transition between these two basins. If we had to pick just <em>one</em> CV from <span class="math notranslate nohighlight">\(q_1\)</span> (x-coordinate) or <span class="math notranslate nohighlight">\(q_2\)</span> (y-coordinate), which one would be better?</p>
+</section>
+<section id="slicing-the-pmf-projecting-onto-1d-cvs">
+<h2>4. “Slicing” the PMF: Projecting onto 1D CVs<a class="headerlink" href="#slicing-the-pmf-projecting-onto-1d-cvs" title="Link to this heading">#</a></h2>
+<p>If we only consider one CV, say <span class="math notranslate nohighlight">\(q_1\)</span>, we are essentially looking at a “projection” or an “average” of the 2D PMF onto the <span class="math notranslate nohighlight">\(q_1\)</span> axis. The 1D PMF along <span class="math notranslate nohighlight">\(q_1\)</span>, <span class="math notranslate nohighlight">\(F(q_1)\)</span>, can be obtained by integrating out the other variable <span class="math notranslate nohighlight">\(q_2\)</span>:</p>
+<p><span class="math notranslate nohighlight">\(P(q_1) = \int P(q_1, q_2) dq_2\)</span>
+<span class="math notranslate nohighlight">\(F(q_1) = -k_B T \ln P(q_1)\)</span></p>
+<p>Similarly for <span class="math notranslate nohighlight">\(F(q_2)\)</span>:</p>
+<p><span class="math notranslate nohighlight">\(P(q_2) = \int P(q_1, q_2) dq_1\)</span>
+<span class="math notranslate nohighlight">\(F(q_2) = -k_B T \ln P(q_2)\)</span></p>
+<p>In practice, with gridded data, this integration becomes a summation over the rows or columns of our <span class="math notranslate nohighlight">\(P(q_1, q_2)\)</span> matrix.</p>
+<p>Let’s consider two candidate CVs:</p>
+<ol class="arabic simple">
+<li><p><strong>CV A:</strong> The <span class="math notranslate nohighlight">\(x\)</span>-coordinate (<span class="math notranslate nohighlight">\(q_1\)</span>).</p></li>
+<li><p><strong>CV B:</strong> The <span class="math notranslate nohighlight">\(y\)</span>-coordinate (<span class="math notranslate nohighlight">\(q_2\)</span>).</p></li>
+</ol>
+<p>We will now calculate and plot the 1D PMF profiles along each of these candidate CVs.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># --- Calculate 1D PMFs by integrating (summing) P_xy ---</span>
+
+<span class="c1"># P(q1) = sum over q2 of P(q1, q2)</span>
+<span class="c1"># Remember P_xy has shape (len(y_coords), len(x_coords)) because of meshgrid output</span>
+<span class="c1"># So, to sum over y_coords (q2), we sum along axis 0</span>
+<span class="n">P_q1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">P_xy</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">y_coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">y_coords</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="c1"># Multiply by dy for integral approximation</span>
+<span class="n">F_q1</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">P_q1</span> <span class="o">+</span> <span class="n">epsilon</span><span class="p">)</span> <span class="c1"># epsilon defined in previous cell</span>
+<span class="n">F_q1</span> <span class="o">=</span> <span class="n">F_q1</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">F_q1</span><span class="p">)</span> <span class="c1"># Normalize</span>
+
+<span class="c1"># P(q2) = sum over q1 of P(q1, q2)</span>
+<span class="c1"># To sum over x_coords (q1), we sum along axis 1</span>
+<span class="n">P_q2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">P_xy</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">x_coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">x_coords</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="c1"># Multiply by dx for integral approximation</span>
+<span class="n">F_q2</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">P_q2</span> <span class="o">+</span> <span class="n">epsilon</span><span class="p">)</span>
+<span class="n">F_q2</span> <span class="o">=</span> <span class="n">F_q2</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">F_q2</span><span class="p">)</span> <span class="c1"># Normalize</span>
+
+<span class="c1"># --- Plotting the 1D PMFs ---</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">axs</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span><span class="mi">6</span><span class="p">),</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="c1"># Plot F(q1)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_coords</span><span class="p">,</span> <span class="n">F_q1</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;dodgerblue&#39;</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;1D PMF along $q_1$ (x-coordinate)&#39;</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$q_1$ (x-coordinate)&#39;</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Free Energy (a.u.)&#39;</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">x_coords</span><span class="p">,</span> <span class="n">F_q1</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;dodgerblue&#39;</span><span class="p">)</span>
+
+<span class="c1"># Plot F(q2)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">y_coords</span><span class="p">,</span> <span class="n">F_q2</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;orangered&#39;</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;1D PMF along $q_2$ (y-coordinate)&#39;</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$q_2$ (y-coordinate)&#39;</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Free Energy (a.u.)&#39;</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">axs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">fill_between</span><span class="p">(</span><span class="n">y_coords</span><span class="p">,</span> <span class="n">F_q2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;orangered&#39;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="c1"># --- Alternative: Taking a direct slice (less rigorous but illustrative) ---</span>
+<span class="c1"># For example, a slice along x_coords at y_coords=0 (or closest y_coords to 0)</span>
+<span class="n">y_slice_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">y_coords</span> <span class="o">-</span> <span class="mi">0</span><span class="p">))</span>
+<span class="n">F_slice_q1_at_y0</span> <span class="o">=</span> <span class="n">F_xy</span><span class="p">[</span><span class="n">y_slice_idx</span><span class="p">,</span> <span class="p">:]</span>
+<span class="n">F_slice_q1_at_y0</span> <span class="o">=</span> <span class="n">F_slice_q1_at_y0</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">F_slice_q1_at_y0</span><span class="p">)</span>
+
+<span class="c1"># A slice along y_coords at x_coords=0 (or closest x_coords to 0)</span>
+<span class="n">x_slice_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">x_coords</span> <span class="o">-</span> <span class="mi">0</span><span class="p">))</span>
+<span class="n">F_slice_q2_at_x0</span> <span class="o">=</span> <span class="n">F_xy</span><span class="p">[:,</span> <span class="n">x_slice_idx</span><span class="p">]</span>
+<span class="n">F_slice_q2_at_x0</span> <span class="o">=</span> <span class="n">F_slice_q2_at_x0</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">F_slice_q2_at_x0</span><span class="p">)</span>
+
+<span class="n">fig</span><span class="p">,</span> <span class="n">axs_slice</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">sharex</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">x_coords</span><span class="p">,</span> <span class="n">F_slice_q1_at_y0</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;darkgreen&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Slice at $q_2 </span><span class="se">\\</span><span class="s1">approx </span><span class="si">{</span><span class="n">y_coords</span><span class="p">[</span><span class="n">y_slice_idx</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">$&#39;</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;1D PMF slice along $q_1$ (at a fixed $q_2$)&#39;</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$q_1$ (x-coordinate)&#39;</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Free Energy (a.u.)&#39;</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">y_coords</span><span class="p">,</span> <span class="n">F_slice_q2_at_x0</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;purple&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Slice at $q_1 </span><span class="se">\\</span><span class="s1">approx </span><span class="si">{</span><span class="n">x_coords</span><span class="p">[</span><span class="n">x_slice_idx</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">$&#39;</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;1D PMF slice along $q_2$ (at a fixed $q_1$)&#39;</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;$q_2$ (y-coordinate)&#39;</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Free Energy (a.u.)&#39;</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">axs_slice</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">()</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../../../_images/0641289121734f67cd6635343aab72398df5d77e90512d418e982477b6eb468b.png" src="../../../_images/0641289121734f67cd6635343aab72398df5d77e90512d418e982477b6eb468b.png" />
+<img alt="../../../_images/d376f1076df971362a3b872384d514a93f42ad87fc20935dcbc0098f6b7605e2.png" src="../../../_images/d376f1076df971362a3b872384d514a93f42ad87fc20935dcbc0098f6b7605e2.png" />
+</div>
+</div>
+<section id="quantitative-comparison-barrier-heights">
+<h3>Quantitative Comparison: Barrier Heights<a class="headerlink" href="#quantitative-comparison-barrier-heights" title="Link to this heading">#</a></h3>
+<p>Let’s compute and compare the energy barrier heights along each CV. A higher barrier indicates better resolution of transitions.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Compute global barrier heights as max minus min of each PMF</span>
+<span class="n">barrier_height_q1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">F_q1</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">F_q1</span><span class="p">)</span>
+<span class="n">barrier_height_q2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">F_q2</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">F_q2</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Barrier height along $q_1$: </span><span class="si">{</span><span class="n">barrier_height_q1</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> a.u.&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Barrier height along $q_2$: </span><span class="si">{</span><span class="n">barrier_height_q2</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> a.u.&quot;</span><span class="p">)</span>
+
+<span class="c1"># Plotting barrier heights</span>
+<span class="n">cv_names</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;q_1&#39;</span><span class="p">,</span> <span class="s1">&#39;q_2&#39;</span><span class="p">]</span>
+<span class="n">heights</span> <span class="o">=</span> <span class="p">[</span><span class="n">barrier_height_q1</span><span class="p">,</span> <span class="n">barrier_height_q2</span><span class="p">]</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span><span class="n">cv_names</span><span class="p">,</span> <span class="n">heights</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Comparison of Barrier Heights for Candidate CVs&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Barrier Height (a.u.)&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s1">&#39;Collective Variable&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Barrier height along $q_1$: 4.52 a.u.
+Barrier height along $q_2$: 9.19 a.u.
+</pre></div>
+</div>
+<img alt="../../../_images/178f50eb19aa2b794e246fb39101d80554f390aa358e746a292c60df6b1d64d1.png" src="../../../_images/178f50eb19aa2b794e246fb39101d80554f390aa358e746a292c60df6b1d64d1.png" />
+</div>
+</div>
+</section>
+</section>
+<section id="comparing-cvs-which-one-is-good-and-which-is-bad">
+<h2>5. Comparing CVs: Which One is “Good” and Which is “Bad”?<a class="headerlink" href="#comparing-cvs-which-one-is-good-and-which-is-bad" title="Link to this heading">#</a></h2>
+<p>Now, let’s analyze the 1D PMF profiles we generated.</p>
+<p><strong>Looking at <span class="math notranslate nohighlight">\(F(q_1)\)</span> (PMF along the x-coordinate):</strong></p>
+<ul class="simple">
+<li><p>This profile clearly shows two distinct minima (low free energy regions).</p></li>
+<li><p>It also shows a significant energy barrier separating these two minima.</p></li>
+<li><p>This profile captures the essential features of our 2D landscape: the existence of two stable states and the energy cost to transition between them.</p></li>
+<li><p>Therefore, <span class="math notranslate nohighlight">\(q_1\)</span> (the x-coordinate) appears to be a <strong>“good” CV</strong> for describing the transition between the two basins in our synthetic system.</p></li>
+</ul>
+<p><strong>Looking at <span class="math notranslate nohighlight">\(F(q_2)\)</span> (PMF along the y-coordinate):</strong></p>
+<ul class="simple">
+<li><p>This profile might show one broad minimum, or perhaps some minor wiggles, but it <em>does not</em> clearly resolve the two distinct stable states we saw in the 2D PMF.</p></li>
+<li><p>The energy barrier between the states is not apparent when looking only along <span class="math notranslate nohighlight">\(q_2\)</span>.</p></li>
+<li><p>If we only used <span class="math notranslate nohighlight">\(q_2\)</span> as our CV, we might mistakenly conclude that there’s only one main state or that the energy landscape is relatively flat or uninteresting.</p></li>
+<li><p>Therefore, <span class="math notranslate nohighlight">\(q_2\)</span> (the y-coordinate) appears to be a <strong>“bad” CV</strong> for describing the primary transition in this particular system. It averages out or obscures the important features.</p></li>
+</ul>
+<p><strong>What about the “direct slice” plots?</strong>
+The second set of plots shows 1D PMFs taken as direct slices through the 2D PMF (e.g., <span class="math notranslate nohighlight">\(F(q_1, q_2=0)\)</span>).</p>
+<ul class="simple">
+<li><p>The slice along <span class="math notranslate nohighlight">\(q_1\)</span> (at <span class="math notranslate nohighlight">\(q_2 \approx 0\)</span>) still captures the two-well nature because the main separation of basins is along <span class="math notranslate nohighlight">\(q_1\)</span>.</p></li>
+<li><p>The slice along <span class="math notranslate nohighlight">\(q_2\)</span> (at <span class="math notranslate nohighlight">\(q_1 \approx 0\)</span>) might cut through the barrier region or one of the basins, but it likely won’t show the full picture of transitioning between the two distinct states.</p></li>
+<li><p>While slices can be informative, projecting the full probability (by integrating) is generally a more robust way to obtain the 1D PMF along a CV, as it accounts for all contributions from the dimension being integrated out.</p></li>
+</ul>
+</section>
+<section id="what-makes-a-cv-good">
+<h2>6. What Makes a CV “Good”?<a class="headerlink" href="#what-makes-a-cv-good" title="Link to this heading">#</a></h2>
+<p>A “good” CV should ideally:</p>
+<ol class="arabic simple">
+<li><p><strong>Distinguish between important metastable states:</strong> The PMF along a good CV should show distinct minima corresponding to these states.</p></li>
+<li><p><strong>Capture the transition pathway:</strong> It should clearly show the energy barriers that separate these states.</p></li>
+<li><p><strong>Represent the slowest motions:</strong> Often, the important conformational changes or reactions are the slowest processes in the system. A good CV should align with these slow degrees of freedom.</p></li>
+<li><p><strong>Be physically interpretable:</strong> While not strictly necessary for a mathematically sound CV, it’s highly desirable if the CV corresponds to an understandable geometric feature or physical process (e.g., a distance, an angle, a coordination number).</p></li>
+<li><p><strong>Lead to converged PMFs:</strong> Enhanced sampling methods (like Umbrella Sampling or Metadynamics, which you’ll learn about soon) rely on CVs. A good CV will allow these methods to efficiently sample the landscape and converge to a reliable PMF.</p></li>
+</ol>
+<p><strong>Why was <span class="math notranslate nohighlight">\(q_1\)</span> good and <span class="math notranslate nohighlight">\(q_2\)</span> bad in our example?</strong>
+Our synthetic 2D PMF was constructed such that the two main basins were primarily separated along the <span class="math notranslate nohighlight">\(q_1\)</span> (x-axis) direction. The variation along <span class="math notranslate nohighlight">\(q_2\)</span> (y-axis) was less significant for distinguishing these two main states.</p>
+</section>
+<section id="choosing-cvs-in-real-systems-an-iterative-process">
+<h2>7. Choosing CVs in Real Systems - An Iterative Process<a class="headerlink" href="#choosing-cvs-in-real-systems-an-iterative-process" title="Link to this heading">#</a></h2>
+<p>In real molecular simulations, you don’t have a pre-defined 2D PMF to look at before choosing your CVs. The process is often iterative and requires chemical intuition:</p>
+<ol class="arabic simple">
+<li><p><strong>Hypothesize CVs:</strong> Based on your understanding of the system and the process you’re studying (e.g., protein folding, ligand binding, chemical reaction), propose a set of candidate CVs. These could be distances between key atoms, dihedral angles, radius of gyration, number of hydrogen bonds, etc.</p></li>
+<li><p><strong>Run Simulations:</strong> Perform initial (often unbiased) MD simulations or short biased simulations using your candidate CVs.</p></li>
+<li><p><strong>Analyze Trajectories:</strong> Project your simulation trajectories onto these CVs.</p>
+<ul class="simple">
+<li><p>Look at the time evolution of the CVs. Do they show transitions between different states?</p></li>
+<li><p>Calculate preliminary 1D or 2D PMFs (if possible, using techniques like histogramming or WHAM if you have biased data).</p></li>
+</ul>
+</li>
+<li><p><strong>Evaluate CVs:</strong></p>
+<ul class="simple">
+<li><p>Does the PMF along a CV show clear states and barriers?</p></li>
+<li><p>If using two CVs, does the 2D PMF reveal a sensible landscape?</p></li>
+<li><p>Are there other, potentially better, CVs that might capture motions you’re missing? For example, if your 2D PMF shows distinct basins but they are not well separated along either of your chosen CV axes alone, perhaps a linear combination of them, or a different CV altogether, is needed.</p></li>
+</ul>
+</li>
+<li><p><strong>Refine and Repeat:</strong> Based on the analysis, refine your choice of CVs and repeat the process. You might try adding more CVs, removing uninformative ones, or defining new, more complex CVs.</p></li>
+</ol>
+<p>This process can be challenging and is often a critical part of studying complex molecular events. Tools like Principal Component Analysis (PCA) or Time-lagged Independent Component Analysis (TICA) can sometimes help identify good CVs from simulation data by finding the directions of highest variance or slowest dynamics, respectively.</p>
+</section>
+<section id="conclusion">
+<h2>8. Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading">#</a></h2>
+<p>Choosing appropriate collective variables is fundamental for understanding complex processes in molecular simulations. By reducing the high dimensionality of the system to a few key coordinates, we can visualize free energy landscapes, identify important states and transition pathways, and apply powerful enhanced sampling techniques.</p>
+<p>As we saw in this notebook, a “good” CV provides a clear and informative projection of the system’s behavior, while a “bad” CV can obscure important details. The example of projecting a 2D PMF onto 1D profiles illustrates how different CV choices can lead to vastly different interpretations of the underlying free energy landscape. Always critically assess your CVs and be prepared to iterate on your choices!</p>
+<p><strong>Next Steps:</strong></p>
+<ul class="simple">
+<li><p>Experiment with the parameters in the Python code (e.g., <code class="docutils literal notranslate"><span class="pre">mean1</span></code>, <code class="docutils literal notranslate"><span class="pre">mean2</span></code>, <code class="docutils literal notranslate"><span class="pre">cov1</span></code>, <code class="docutils literal notranslate"><span class="pre">cov2</span></code>) to see how the 2D PMF and the resulting 1D projections change.</p></li>
+<li><p>Consider what would happen if the basins were separated diagonally. Would <span class="math notranslate nohighlight">\(q_1\)</span> or <span class="math notranslate nohighlight">\(q_2\)</span> alone be good CVs? What might be a better CV in that case? (Hint: a combination of <span class="math notranslate nohighlight">\(q_1\)</span> and <span class="math notranslate nohighlight">\(q_2\)</span>).</p></li>
+<li><p>Think about real chemical systems you know. What CVs might be appropriate to describe their important conformational changes?</p></li>
+</ul>
+<p>This understanding will be crucial as you move on to learn about enhanced sampling methods like Umbrella Sampling and Metadynamics, which heavily rely on well-chosen CVs.</p>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "YOUR_USERNAME/YOUR_REPO",
+            ref: "main",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./_build/jupyter_execute/notebooks"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#introduction-the-dimensionality-dilemma">1. Introduction: The Dimensionality Dilemma</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulating-a-2d-system-conceptual">2. Simulating a 2D System (Conceptual)</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#d-surface-plot-of-the-2d-pmf">3D Surface Plot of the 2D PMF</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#interpreting-the-2d-pmf">3. Interpreting the 2D PMF</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#slicing-the-pmf-projecting-onto-1d-cvs">4. “Slicing” the PMF: Projecting onto 1D CVs</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#quantitative-comparison-barrier-heights">Quantitative Comparison: Barrier Heights</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#comparing-cvs-which-one-is-good-and-which-is-bad">5. Comparing CVs: Which One is “Good” and Which is “Bad”?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-makes-a-cv-good">6. What Makes a CV “Good”?</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choosing-cvs-in-real-systems-an-iterative-process">7. Choosing CVs in Real Systems - An Iterative Process</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conclusion">8. Conclusion</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Your Name
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2023.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

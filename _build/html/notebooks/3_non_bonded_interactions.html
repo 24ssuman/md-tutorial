@@ -1,0 +1,1028 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Module 3: Non-Bonded Interactions and Long-Range Electrostatics &#8212; Molecular Dynamics Tutorial for Beginners</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../_static/togglebutton.js?v=1ae7504c"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="../_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'notebooks/3_non_bonded_interactions';</script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Module 4: Simulating Simple 1D Systems" href="4_1D_simulations.html" />
+    <link rel="prev" title="Module 2: The Physics Behind MD" href="2_physics_of_MD.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../intro.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Molecular Dynamics Tutorial for Beginners</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../intro.html">
+                    Molecular Dynamics Tutorial for Beginners
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="1_intro_to_MD.html">Module 1: Introduction to Molecular Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="2_physics_of_MD.html">Module 2: The Physics Behind MD</a></li>
+
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Module 3: Non-Bonded Interactions and Long-Range Electrostatics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="4_1D_simulations.html">Module 4: Simulating Simple 1D Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="5_sampling_challenge.html">Module 5: The Challenge of Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="5.5_chossing_CVs.html">Lesson 5.2a: Choosing Good Collective Variables for Multi-Dimensional Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="6_umbrella_sampling.html">Module 6: Enhanced Sampling I - Umbrella Sampling (US) &amp; PMF Reconstruction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="6.1_WHAM_detailed.html">WHAM, step by step (with plots)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="7_meta_dynamics.html">Module 7: Enhanced Sampling II - Metadynamics (MetaD)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="8_ase_LJ_fluid_simulation.html">Module 8: Multi-Particle Simulations: Lennard-Jones Fluid with ASE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="9_ase_waterbox_simulation_not_working.html">Module 9: Simulating Molecular Systems: Water Box with ASE</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-launch-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
+    <i class="fas fa-rocket"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://mybinder.org/v2/gh/YOUR_USERNAME/YOUR_REPO/main?urlpath=lab/tree/./notebooks/3_non_bonded_interactions.ipynb" target="_blank"
+   class="btn btn-sm dropdown-item"
+   title="Launch on Binder"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  
+    <img alt="Binder logo" src="../_static/images/logo_binder.svg">
+  </span>
+<span class="btn__text-container">Binder</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="initThebeSBT()"
+  class="btn btn-sm btn-launch-thebe dropdown-item"
+  title="Launch Thebe"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-play"></i>
+  </span>
+<span class="btn__text-container">Live Code</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO/issues/new?title=Issue%20on%20page%20%2Fnotebooks/3_non_bonded_interactions.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../_sources/notebooks/3_non_bonded_interactions.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Module 3: Non-Bonded Interactions and Long-Range Electrostatics</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#introduction">Introduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-1-lennard-jones-lj-potential-and-cutoffs">Lesson 3.1: Lennard-Jones (LJ) Potential and Cutoffs</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-need-for-cutoffs-in-lj-interactions">The Need for Cutoffs in LJ Interactions</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-2-coulomb-interactions-and-the-challenge-of-long-range-forces">Lesson 3.2: Coulomb Interactions and the Challenge of Long-Range Forces</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#why-simple-cutoffs-fail-miserably-for-coulomb-interactions">Why Simple Cutoffs Fail Miserably for Coulomb Interactions</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-3-the-ewald-summation-method">Lesson 3.3: The Ewald Summation Method</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#reciprocal-space-term-in-ewald-summation">Reciprocal Space Term in Ewald Summation</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-4-particle-mesh-ewald-pme-method">Lesson 3.4: Particle Mesh Ewald (PME) Method</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-5-summary-key-takeaways-for-module-3">Lesson 3.5: Summary &amp; Key Takeaways for Module 3</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#conceptual-exercises-further-thought">Conceptual Exercises &amp; Further Thought</a></li>
+</ul>
+</li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="module-3-non-bonded-interactions-and-long-range-electrostatics">
+<h1>Module 3: Non-Bonded Interactions and Long-Range Electrostatics<a class="headerlink" href="#module-3-non-bonded-interactions-and-long-range-electrostatics" title="Link to this heading">#</a></h1>
+<section id="introduction">
+<h2>Introduction<a class="headerlink" href="#introduction" title="Link to this heading">#</a></h2>
+<p>Welcome to Module 3! In molecular dynamics (MD) simulations, <strong>non-bonded interactions</strong> are the forces between atoms that are not directly linked by chemical bonds (like covalent bonds). These interactions, primarily van der Waals forces and electrostatic forces, are the ‘glue’ that holds molecules together in condensed phases and dictates their structural and dynamic behavior. While often weaker on an individual basis than bonded interactions, their sheer number in a typical simulation makes their accurate and efficient calculation paramount.</p>
+<p>This interactive notebook will guide you through:</p>
+<ol class="arabic simple">
+<li><p><strong>The Lennard-Jones (LJ) Potential:</strong> Understanding its mathematical form, physical meaning, and the practical necessity of using cutoffs.</p></li>
+<li><p><strong>The Coulomb Potential:</strong> Recognizing the challenges posed by its long-range nature and why simple cutoffs, effective for LJ, are insufficient here.</p></li>
+<li><p><strong>The Ewald Summation Method:</strong> Introducing a foundational technique to correctly handle long-range electrostatic interactions in periodic systems.</p></li>
+<li><p><strong>The Particle Mesh Ewald (PME) Method:</strong> Discussing a highly efficient and widely used algorithm based on Ewald summation, enabling simulations of large biomolecular systems.</p></li>
+<li><p><strong>Visualizing Functional Forms:</strong> Plotting key mathematical functions involved in these methods to build intuition.</p></li>
+</ol>
+<p>Let’s dive in!</p>
+</section>
+<section id="lesson-3-1-lennard-jones-lj-potential-and-cutoffs">
+<h2>Lesson 3.1: Lennard-Jones (LJ) Potential and Cutoffs<a class="headerlink" href="#lesson-3-1-lennard-jones-lj-potential-and-cutoffs" title="Link to this heading">#</a></h2>
+<p>The Lennard-Jones potential is a relatively simple yet powerful model used to describe the non-bonded interaction between two neutral atoms or non-polar molecules. It elegantly captures two fundamental forces:</p>
+<ul class="simple">
+<li><p><strong>Short-range repulsion:</strong> Arising from Pauli exclusion principle when electron clouds overlap.</p></li>
+<li><p><strong>Long-range attraction:</strong> Arising from induced dipole-induced dipole interactions (London dispersion forces).</p></li>
+</ul>
+<p>The mathematical form of the LJ potential <span class="math notranslate nohighlight">\(V_{LJ}(r)\)</span> between two particles separated by a distance <span class="math notranslate nohighlight">\(r\)</span> is:</p>
+<div class="math notranslate nohighlight">
+\[V_{LJ}(r) = 4\epsilon \left[ \left(\frac{\sigma}{r}\right)^{12} - \left(\frac{\sigma}{r}\right)^{6} \right]\]</div>
+<p>Where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(\epsilon\)</span> (epsilon): The depth of the potential well. This parameter represents the strength of the attraction. A larger <span class="math notranslate nohighlight">\(\epsilon\)</span> means a stronger attraction.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\sigma\)</span> (sigma): The finite distance at which the inter-particle potential <span class="math notranslate nohighlight">\(V_{LJ}(r)\)</span> is zero. It is often considered the effective ‘size’ or diameter of the particle.</p></li>
+<li><p><span class="math notranslate nohighlight">\(r\)</span>: The distance between the centers of the two interacting particles.</p></li>
+</ul>
+<p>The <span class="math notranslate nohighlight">\((1/r)^{12}\)</span> term models the repulsion, and the <span class="math notranslate nohighlight">\(-(1/r)^6\)</span> term models the attraction. The high power of 12 for repulsion makes it a very steep potential at short distances, effectively preventing atoms from overlapping too much.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+
+<span class="c1"># Define the Lennard-Jones potential function</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">lj_potential</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">sigma</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculates the Lennard-Jones potential.&quot;&quot;&quot;</span>
+    <span class="c1"># Ensure r is not zero or too small to avoid division by zero/overflow</span>
+    <span class="c1"># For r values very close to 0, the potential should be very large (repulsive)</span>
+    <span class="c1"># We&#39;ll handle this by clipping r or returning a large value for r &lt; some_threshold * sigma</span>
+    <span class="c1"># For plotting, it&#39;s often fine to start r from a small positive value.</span>
+    <span class="c1"># For actual simulation, very small r would lead to huge forces.</span>
+
+    <span class="c1"># Create a safe version of r to avoid division by zero or very small numbers</span>
+    <span class="c1"># For r values smaller than a fraction of sigma (e.g., 0.5*sigma), the potential is extremely repulsive.</span>
+    <span class="c1"># We can cap the potential or filter r for plotting.</span>
+    <span class="n">r_safe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">)</span> <span class="c1"># Prevent r=0, use a small floor</span>
+
+    <span class="n">term12</span> <span class="o">=</span> <span class="p">(</span><span class="n">sigma</span> <span class="o">/</span> <span class="n">r_safe</span><span class="p">)</span><span class="o">**</span><span class="mi">12</span>
+    <span class="n">term6</span> <span class="o">=</span> <span class="p">(</span><span class="n">sigma</span> <span class="o">/</span> <span class="n">r_safe</span><span class="p">)</span><span class="o">**</span><span class="mi">6</span>
+    <span class="n">potential</span> <span class="o">=</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">epsilon</span> <span class="o">*</span> <span class="p">(</span><span class="n">term12</span> <span class="o">-</span> <span class="n">term6</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">potential</span>
+
+<span class="c1"># Parameters for the LJ potential (using generic epsilon=1, sigma=1 for easy interpretation)</span>
+<span class="n">epsilon_lj</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># Arbitrary energy unit</span>
+<span class="n">sigma_lj</span> <span class="o">=</span> <span class="mf">1.0</span>    <span class="c1"># Arbitrary length unit</span>
+
+<span class="c1"># Generate a range of distances for plotting</span>
+<span class="c1"># Start r slightly above 0 to avoid extreme repulsive values at r=0 if not handled by lj_potential</span>
+<span class="n">r_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.8</span> <span class="o">*</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="mf">3.5</span> <span class="o">*</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+
+<span class="c1"># Calculate the LJ potential</span>
+<span class="n">potential_lj_values</span> <span class="o">=</span> <span class="n">lj_potential</span><span class="p">(</span><span class="n">r_values</span><span class="p">,</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">sigma_lj</span><span class="p">)</span>
+
+<span class="c1"># Find the minimum of the potential</span>
+<span class="n">r_min</span> <span class="o">=</span> <span class="n">sigma_lj</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span><span class="o">**</span><span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="mi">6</span><span class="p">))</span>  <span class="c1"># Distance at which V_LJ is minimum</span>
+<span class="n">V_min</span> <span class="o">=</span> <span class="n">lj_potential</span><span class="p">(</span><span class="n">r_min</span><span class="p">,</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">sigma_lj</span><span class="p">)</span> <span class="c1"># Should be -epsilon_lj</span>
+
+<span class="c1"># Plotting the LJ potential</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_values</span> <span class="o">/</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="n">potential_lj_values</span> <span class="o">/</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;$V_</span><span class="si">{LJ}</span><span class="s1">(r) / \epsilon$&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;dodgerblue&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="c1"># Add a horizontal line at V=0</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;$V_</span><span class="si">{LJ}</span><span class="s1">(r) = 0$&#39;</span><span class="p">)</span>
+
+<span class="c1"># Mark sigma on the x-axis (where V_LJ = 0)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;grey&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;$r = \sigma$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;ko&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span> <span class="c1"># Mark the point (sigma, 0)</span>
+
+<span class="c1"># Mark the minimum of the potential well</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">r_min</span> <span class="o">/</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;$r = r_</span><span class="si">{min}</span><span class="s1"> \approx 1.122\sigma$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_min</span> <span class="o">/</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="n">V_min</span> <span class="o">/</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="s1">&#39;ro&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span> <span class="c1"># Mark the minimum point</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="n">r_min</span> <span class="o">/</span> <span class="n">sigma_lj</span> <span class="o">+</span> <span class="mf">0.05</span><span class="p">,</span> <span class="n">V_min</span> <span class="o">/</span> <span class="n">epsilon_lj</span> <span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;Minimum (</span><span class="si">{</span><span class="n">r_min</span><span class="o">/</span><span class="n">sigma_lj</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">$\sigma$, </span><span class="si">{</span><span class="o">-</span><span class="n">epsilon_lj</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">$\epsilon$)&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Lennard-Jones Potential ($V_</span><span class="si">{LJ}</span><span class="s1">$)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;Distance ($r / \sigma$)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;Potential Energy ($V_</span><span class="si">{LJ}</span><span class="s1"> / \epsilon$)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">)</span> <span class="c1"># Adjust y-limits for better visualization of the well</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mf">0.75</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">)</span> <span class="c1"># Adjust x-limits to focus on the relevant part</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The potential is zero at r = </span><span class="si">{</span><span class="n">sigma_lj</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> sigma.&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The potential minimum occurs at r_min = </span><span class="si">{</span><span class="n">r_min</span><span class="o">/</span><span class="n">sigma_lj</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> sigma, where V_LJ = </span><span class="si">{</span><span class="n">V_min</span><span class="o">/</span><span class="n">epsilon_lj</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> epsilon.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/2c1441d1893291114b8b9c3a4f11156c4cc81755a795fe1491822c5cad023c0e.png" src="../_images/2c1441d1893291114b8b9c3a4f11156c4cc81755a795fe1491822c5cad023c0e.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>The potential is zero at r = 1.0 sigma.
+The potential minimum occurs at r_min = 1.122 sigma, where V_LJ = -1.0 epsilon.
+</pre></div>
+</div>
+</div>
+</div>
+<section id="the-need-for-cutoffs-in-lj-interactions">
+<h3>The Need for Cutoffs in LJ Interactions<a class="headerlink" href="#the-need-for-cutoffs-in-lj-interactions" title="Link to this heading">#</a></h3>
+<p>In a simulation with <span class="math notranslate nohighlight">\(N\)</span> particles, calculating all pairwise interactions involves <span class="math notranslate nohighlight">\(N(N-1)/2\)</span> pairs, which scales as <span class="math notranslate nohighlight">\(O(N^2)\)</span>. For large <span class="math notranslate nohighlight">\(N\)</span> (e.g., thousands to millions of atoms), this becomes computationally prohibitive.</p>
+<p>Fortunately, the attractive part of the LJ potential decays as <span class="math notranslate nohighlight">\(r^{-6}\)</span>. This is relatively fast, meaning that beyond a certain distance, the interaction energy and force become negligible. We can exploit this by introducing a <strong>cutoff radius (<span class="math notranslate nohighlight">\(r_c\)</span>)</strong>.</p>
+<p>If the distance <span class="math notranslate nohighlight">\(r\)</span> between two particles is greater than <span class="math notranslate nohighlight">\(r_c\)</span>, their LJ interaction is assumed to be zero:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split} V_{LJ,cutoff}(r) = \begin{cases} V_{LJ}(r) &amp; \text{if } r \le r_c \\ 0 &amp; \text{if } r &gt; r_c \end{cases} \end{split}\]</div>
+<p>A common choice for <span class="math notranslate nohighlight">\(r_c\)</span> is around <span class="math notranslate nohighlight">\(2.5\sigma\)</span> to <span class="math notranslate nohighlight">\(3.5\sigma\)</span>. At <span class="math notranslate nohighlight">\(r = 2.5\sigma\)</span>, <span class="math notranslate nohighlight">\(V_{LJ}(r) \approx -0.016\epsilon\)</span>, which is only about 1.6% of the well depth.</p>
+<p><strong>Issues with Simple Truncation:</strong>
+Simply setting the potential to zero beyond <span class="math notranslate nohighlight">\(r_c\)</span> (a “truncated potential”) creates a discontinuity in the potential energy if <span class="math notranslate nohighlight">\(V_{LJ}(r_c) \neq 0\)</span>. This, in turn, leads to an infinite force (<span class="math notranslate nohighlight">\(F = -dV/dr\)</span>) at <span class="math notranslate nohighlight">\(r_c\)</span>, which is unphysical and can cause problems in simulations, such as poor energy conservation.</p>
+<p><strong>Correction: Shifted Potential</strong>
+To address the discontinuity in energy, the potential can be shifted so that it becomes zero at the cutoff:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}V_{LJ,shifted}(r) = \begin{cases} V_{LJ}(r) - V_{LJ}(r_c) &amp; \text{if } r \le r_c \\ 0 &amp; \text{if } r &gt; r_c \end{cases}\end{split}\]</div>
+<p>This ensures <span class="math notranslate nohighlight">\(V_{LJ,shifted}(r_c) = 0\)</span>, making the potential energy continuous. However, the <em>force</em> (the derivative of the potential) might still be discontinuous at <span class="math notranslate nohighlight">\(r_c\)</span> unless <span class="math notranslate nohighlight">\(dV_{LJ}/dr|_{r=r_c} = 0\)</span>, which is generally not true. More sophisticated switching functions can make both the potential and force go smoothly to zero, but a shifted potential is a common and simpler improvement over simple truncation.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Define a cutoff radius</span>
+<span class="n">rc_lj</span> <span class="o">=</span> <span class="mf">2.5</span> <span class="o">*</span> <span class="n">sigma_lj</span>  <span class="c1"># A common cutoff value</span>
+
+<span class="c1"># Calculate potential at the cutoff for shifting</span>
+<span class="n">V_at_rc</span> <span class="o">=</span> <span class="n">lj_potential</span><span class="p">(</span><span class="n">rc_lj</span><span class="p">,</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">sigma_lj</span><span class="p">)</span>
+
+<span class="c1"># Calculate LJ potential with simple truncation and with shifting</span>
+<span class="n">potential_truncated_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">lj_potential</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">sigma_lj</span><span class="p">)</span> <span class="k">if</span> <span class="n">r</span> <span class="o">&lt;=</span> <span class="n">rc_lj</span> <span class="k">else</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">r_values</span><span class="p">])</span>
+<span class="n">potential_shifted_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([(</span><span class="n">lj_potential</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">sigma_lj</span><span class="p">)</span> <span class="o">-</span> <span class="n">V_at_rc</span><span class="p">)</span> <span class="k">if</span> <span class="n">r</span> <span class="o">&lt;=</span> <span class="n">rc_lj</span> <span class="k">else</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">r_values</span><span class="p">])</span>
+
+<span class="c1"># Plotting to compare</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_values</span> <span class="o">/</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="n">potential_lj_values</span> <span class="o">/</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;Full $V_</span><span class="si">{LJ}</span><span class="s1">(r)$&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;lightgrey&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_values</span> <span class="o">/</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="n">potential_truncated_values</span> <span class="o">/</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;Truncated $V_</span><span class="si">{LJ}</span><span class="s1">(r)$ at $r_c=2.5\sigma$&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;coral&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_values</span> <span class="o">/</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="n">potential_shifted_values</span> <span class="o">/</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;Shifted $V_</span><span class="si">{LJ}</span><span class="s1">(r)$ at $r_c=2.5\sigma$&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;forestgreen&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="c1"># Add a horizontal line at V=0</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+
+<span class="c1"># Mark the cutoff radius on the x-axis</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axvline</span><span class="p">(</span><span class="n">rc_lj</span> <span class="o">/</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;purple&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-.&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;$r_c = </span><span class="si">{</span><span class="n">rc_lj</span><span class="o">/</span><span class="n">sigma_lj</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">\sigma$&#39;</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;LJ Potential: Truncated vs. Shifted at Cutoff&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;Distance ($r / \sigma$)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;Potential Energy ($V_</span><span class="si">{LJ}</span><span class="s1"> / \epsilon$)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">1.2</span> <span class="o">*</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">*</span> <span class="n">epsilon_lj</span><span class="p">)</span> <span class="c1"># Adjusted ylim</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mf">0.75</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">)</span> <span class="c1"># Adjusted xlim</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Value of original LJ potential at cutoff r_c=</span><span class="si">{</span><span class="n">rc_lj</span><span class="o">/</span><span class="n">sigma_lj</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> sigma: V_LJ(r_c) = </span><span class="si">{</span><span class="n">V_at_rc</span><span class="o">/</span><span class="n">epsilon_lj</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> epsilon&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Value of shifted LJ potential at cutoff r_c=</span><span class="si">{</span><span class="n">rc_lj</span><span class="o">/</span><span class="n">sigma_lj</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> sigma: V_LJ_shifted(r_c) = </span><span class="si">{</span><span class="p">(</span><span class="n">V_at_rc</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">V_at_rc</span><span class="p">)</span><span class="o">/</span><span class="n">epsilon_lj</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> epsilon&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/ecd14b478f4a860e6e5df20c4d4d1cde61d3b9f5d2b0d364af412c2f97dbd692.png" src="../_images/ecd14b478f4a860e6e5df20c4d4d1cde61d3b9f5d2b0d364af412c2f97dbd692.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Value of original LJ potential at cutoff r_c=2.5 sigma: V_LJ(r_c) = -0.0163 epsilon
+Value of shifted LJ potential at cutoff r_c=2.5 sigma: V_LJ_shifted(r_c) = 0.0 epsilon
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="lesson-3-2-coulomb-interactions-and-the-challenge-of-long-range-forces">
+<h2>Lesson 3.2: Coulomb Interactions and the Challenge of Long-Range Forces<a class="headerlink" href="#lesson-3-2-coulomb-interactions-and-the-challenge-of-long-range-forces" title="Link to this heading">#</a></h2>
+<p>Electrostatic interactions are fundamental in many, if not most, molecular systems, especially those involving ions, polar molecules (like water), or biomolecules (proteins, DNA have many charged groups).</p>
+<p>The Coulomb potential <span class="math notranslate nohighlight">\(V_C(r)\)</span> between two point charges <span class="math notranslate nohighlight">\(q_i\)</span> and <span class="math notranslate nohighlight">\(q_j\)</span> separated by a distance <span class="math notranslate nohighlight">\(r_{ij}\)</span> in a vacuum is given by:</p>
+<div class="math notranslate nohighlight">
+\[V_C(r_{ij}) = \frac{1}{4\pi\epsilon_0} \frac{q_i q_j}{r_{ij}}\]</div>
+<p>Where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(q_i, q_j\)</span> are the magnitudes of the charges.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\epsilon_0\)</span> is the permittivity of free space (a fundamental physical constant).</p></li>
+<li><p><span class="math notranslate nohighlight">\(r_{ij}\)</span> is the distance between the charges.</p></li>
+</ul>
+<p>In simulation units, the constant term <span class="math notranslate nohighlight">\(1/(4\pi\epsilon_0)\)</span> is often absorbed into a single constant, let’s call it <span class="math notranslate nohighlight">\(k_e\)</span> (Coulomb’s constant), or units are chosen such that it’s 1.</p>
+<div class="math notranslate nohighlight">
+\[V_C(r_{ij}) = k_e \frac{q_i q_j}{r_{ij}}\]</div>
+<p>The most critical characteristic of the Coulomb potential is its <strong>long-range nature</strong>: it decays as <span class="math notranslate nohighlight">\(1/r\)</span>. This decay is much, much slower than the <span class="math notranslate nohighlight">\(1/r^6\)</span> decay of the attractive part of the LJ potential.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Define the Coulomb potential function (simplified k_e*q_i*q_j = 1 for plotting shape)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">coulomb_potential</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">strength</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculates a simplified Coulomb-like potential (1/r).&quot;&quot;&quot;</span>
+    <span class="c1"># Avoid division by zero for r=0</span>
+    <span class="n">r_safe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">strength</span> <span class="o">/</span> <span class="n">r_safe</span>
+
+<span class="c1"># Generate distances for plotting</span>
+<span class="n">r_coul_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span> <span class="c1"># Start further from 0 for 1/r</span>
+
+<span class="c1"># Calculate potentials for comparison</span>
+<span class="n">potential_coulomb</span> <span class="o">=</span> <span class="n">coulomb_potential</span><span class="p">(</span><span class="n">r_coul_values</span><span class="p">)</span>
+<span class="n">potential_lj_attraction_part</span> <span class="o">=</span> <span class="o">-</span><span class="n">lj_potential</span><span class="p">(</span><span class="n">r_coul_values</span><span class="p">,</span> <span class="n">epsilon_lj</span><span class="p">,</span> <span class="n">sigma_lj</span><span class="p">)</span> <span class="c1"># Focus on attractive part of LJ for decay comparison</span>
+<span class="c1"># Or more simply, just plot 1/r^6 vs 1/r</span>
+<span class="n">lj_decay_comparison</span> <span class="o">=</span> <span class="p">(</span><span class="n">sigma_lj</span> <span class="o">/</span> <span class="n">r_coul_values</span><span class="p">)</span><span class="o">**</span><span class="mi">6</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_coul_values</span> <span class="o">/</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="n">potential_coulomb</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">potential_coulomb</span><span class="p">[</span><span class="n">r_coul_values</span><span class="o">/</span><span class="n">sigma_lj</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">]),</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;$1/r$ (Coulomb-like decay)&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;crimson&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_coul_values</span> <span class="o">/</span> <span class="n">sigma_lj</span><span class="p">,</span> <span class="n">lj_decay_comparison</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">lj_decay_comparison</span><span class="p">[</span><span class="n">r_coul_values</span><span class="o">/</span><span class="n">sigma_lj</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">]),</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;$1/r^6$ (LJ-like attraction decay)&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;mediumblue&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Comparison of Potential Decay Rates&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;Distance ($r / \sigma$)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Normalized Potential Magnitude&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">yscale</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">)</span> <span class="c1"># Log scale is essential to see the difference at larger r</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="mf">1e-4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="c1"># Adjust y limits for log scale</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span> <span class="c1"># Show a wider range for decay</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s2">&quot;both&quot;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span> <span class="c1"># Grid for both major and minor ticks on log scale</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Note how much slower the 1/r decay is compared to 1/r^6, especially at larger distances.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/6248064081dd20fd650df2dc53c951e7f89c8fe360658a3c0a90934fb4ba1c04.png" src="../_images/6248064081dd20fd650df2dc53c951e7f89c8fe360658a3c0a90934fb4ba1c04.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>Note how much slower the 1/r decay is compared to 1/r^6, especially at larger distances.
+</pre></div>
+</div>
+</div>
+</div>
+<section id="why-simple-cutoffs-fail-miserably-for-coulomb-interactions">
+<h3>Why Simple Cutoffs Fail Miserably for Coulomb Interactions<a class="headerlink" href="#why-simple-cutoffs-fail-miserably-for-coulomb-interactions" title="Link to this heading">#</a></h3>
+<p>The slow <span class="math notranslate nohighlight">\(1/r\)</span> decay of the Coulomb potential means that interactions from distant charges can still be significant. Applying a simple spherical cutoff (like we did for LJ interactions) to Coulomb interactions in a periodic system leads to severe problems:</p>
+<ol class="arabic simple">
+<li><p><strong>Significant Neglected Interactions:</strong> The sum of <span class="math notranslate nohighlight">\(q_i q_j / r_{ij}\)</span> over all pairs in a truly infinite system (or one with periodic boundary conditions, PBC) converges very slowly, and its value is <em>conditionally convergent</em>. This means the sum depends on the order of summation or, equivalently, the shape of the boundary assumed for the summation. Truncating it at a typical molecular cutoff (e.g., 10-15 Å) means you are ignoring a substantial, non-negligible portion of the total electrostatic energy and forces. This isn’t just a small error; it can fundamentally change the physics.</p></li>
+<li><p><strong>Artificial Structuring and Anisotropy:</strong> In a system with PBC, if you use a spherical cutoff for Coulomb forces, a charge <span class="math notranslate nohighlight">\(q_i\)</span> interacts with charges <span class="math notranslate nohighlight">\(q_j\)</span> within its cutoff sphere. However, it does <em>not</em> see the periodic images of <span class="math notranslate nohighlight">\(q_j\)</span> that lie outside this sphere, nor does it see charges beyond the sphere that are part of the bulk periodic system. This creates an artificial boundary and can lead to:</p>
+<ul class="simple">
+<li><p><strong>Distortion of solvent structure:</strong> Polar molecules like water might artificially orient themselves with respect to the cutoff sphere rather than the true long-range field of the system.</p></li>
+<li><p><strong>Incorrect dielectric properties:</strong> The system’s response to electric fields will be wrong.</p></li>
+<li><p><strong>Spurious effects on charged species:</strong> Ions might experience artificial forces or accumulate near these imaginary boundaries.</p></li>
+<li><p><strong>System-size dependent artifacts:</strong> Properties can change unphysically if you change the box size but keep the cutoff the same.</p></li>
+</ul>
+</li>
+<li><p><strong>No Net Charge Neutrality within the Cutoff Sphere:</strong> Even if the overall simulation box is charge neutral, the region within an arbitrary cutoff sphere around a given particle is generally <em>not</em> charge neutral. This means each particle effectively sees a net charged environment if only interactions within the cutoff are considered, which is unphysical for a bulk, neutral system.</p></li>
+<li><p><strong>Severe Energy Drift:</strong> A sharp cutoff in the Coulomb potential creates very large discontinuities in the forces at <span class="math notranslate nohighlight">\(r_c\)</span>. This leads to extremely poor energy conservation in MD simulations, making the simulation unreliable.</p></li>
+</ol>
+<p><strong>Consider this:</strong> The number of particles in a shell of thickness <span class="math notranslate nohighlight">\(dr\)</span> at distance <span class="math notranslate nohighlight">\(r\)</span> grows as <span class="math notranslate nohighlight">\(4\pi r^2 dr\)</span>. The interaction energy with these particles would be proportional to <span class="math notranslate nohighlight">\((r^2 dr) \times (1/r) = r dr\)</span>. Integrating this, <span class="math notranslate nohighlight">\(\int r dr = r^2/2\)</span>, suggests that distant shells contribute <em>more</em> to the potential, not less! This simple argument is for a uniform distribution and needs refinement for specific lattices, but it highlights the danger of truncation.</p>
+<p><strong>Conclusion for Coulomb:</strong> Using a simple spherical cutoff (even with shifting) for Coulomb interactions is <strong>fundamentally flawed</strong> for most simulations, especially those involving charged or polar species in periodic boundary conditions. It can lead to qualitatively incorrect results. Specialized methods are absolutely essential.</p>
+</section>
+</section>
+<section id="lesson-3-3-the-ewald-summation-method">
+<h2>Lesson 3.3: The Ewald Summation Method<a class="headerlink" href="#lesson-3-3-the-ewald-summation-method" title="Link to this heading">#</a></h2>
+<p>The Ewald summation method, developed by Paul Peter Ewald in the early 20th century (initially for calculating electrostatic energies of ionic crystals), provides a mathematically sound way to calculate the electrostatic energy (and forces) of an infinite, periodic system of charges. It elegantly sidesteps the conditional convergence problem of the direct <span class="math notranslate nohighlight">\(1/r\)</span> sum.</p>
+<p><strong>The Core Idea: Splitting the Sum</strong></p>
+<p>The Ewald method cleverly splits the problematic <span class="math notranslate nohighlight">\(1/r_{ij}\)</span> sum into two parts, each of which converges much more rapidly:</p>
+<ol class="arabic simple">
+<li><p>A <strong>short-ranged real-space sum</strong>.</p></li>
+<li><p>A <strong>smooth, long-ranged reciprocal-space (Fourier space) sum</strong>.</p></li>
+</ol>
+<p>This is achieved by a mathematical trick: imagine each point charge <span class="math notranslate nohighlight">\(q_j\)</span> is surrounded by a diffuse Gaussian charge distribution of the <em>opposite</em> sign (<span class="math notranslate nohighlight">\(-q_j\)</span>). This Gaussian cloud effectively screens the point charge, making its interaction with other charges decay much faster. The interaction between these screened charges and the original point charges is calculated directly in real space (this is the real-space sum) and can now be truncated with a cutoff.</p>
+<p>However, we’ve artificially added these screening Gaussians. To compensate, we must subtract their effect. This is done by adding a <em>second</em> set of Gaussian charge distributions, this time with the <em>same</em> sign (<span class="math notranslate nohighlight">\(+q_j\)</span>) as the original charges. This sum of diffuse, identical Gaussians creates a smooth, periodic potential throughout the simulation cell. Because this potential is smooth and periodic, it can be efficiently represented by a rapidly converging Fourier series, which is calculated in reciprocal space (this is the reciprocal-space sum).</p>
+<p><strong>The Ewald Sum Components:</strong>
+The total electrostatic energy <span class="math notranslate nohighlight">\(U_{total}\)</span> in an Ewald summation is typically expressed as the sum of several terms:</p>
+<div class="math notranslate nohighlight">
+\[ U_{total} = U_{real} + U_{reciprocal} + U_{self} + U_{dipole} \text{ (if applicable)} \]</div>
+<ul class="simple">
+<li><p><strong><span class="math notranslate nohighlight">\(U_{real}\)</span> (Real-space term):</strong> This is the sum of interactions between charges, where each charge is screened by its neutralizing Gaussian. The interaction potential takes the form <span class="math notranslate nohighlight">\(q_i q_j \frac{\text{erfc}(\alpha r_{ij})}{r_{ij}}\)</span>, where <span class="math notranslate nohighlight">\(\text{erfc}\)</span> is the complementary error function and <span class="math notranslate nohighlight">\(\alpha\)</span> is the Ewald splitting parameter. This sum is short-ranged and can be truncated at a cutoff <span class="math notranslate nohighlight">\(r_c\)</span>.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[V_{real}(r_{ij}) = k_e \frac{q_i q_j}{r_{ij}} \text{erfc}(\alpha r_{ij})\]</div>
+<ul class="simple">
+<li><p><strong><span class="math notranslate nohighlight">\(U_{reciprocal}\)</span> (Reciprocal-space term):</strong> This term accounts for the interaction of the smooth, compensating Gaussian charge distributions. It’s calculated as a sum over reciprocal lattice vectors <span class="math notranslate nohighlight">\(\mathbf{k}\)</span>.</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[ U_{recip} = \frac{k_e}{2V} \sum_{ \mathbf{k} \neq 0} \frac{4\pi}{k^2} |S(\mathbf{k})|^2 \exp(-k^2 / 4\alpha^2) \]</div>
+<p>where <span class="math notranslate nohighlight">\(V\)</span> is the cell volume, <span class="math notranslate nohighlight">\(S(\mathbf{k}) = \sum_j q_j \exp(i \mathbf{k} \cdot \mathbf{r}_j)\)</span> is the structure factor, and <span class="math notranslate nohighlight">\(k = |\mathbf{k}|\)</span>. This sum converges quickly if <span class="math notranslate nohighlight">\(\alpha\)</span> is chosen appropriately.</p>
+<ul class="simple">
+<li><p><strong><span class="math notranslate nohighlight">\(U_{self}\)</span> (Self-interaction correction):</strong> An artifact of the method is that each charge interacts with its own screening Gaussian. This unphysical self-interaction must be subtracted.
+$<span class="math notranslate nohighlight">\( U_{self} = -k_e \frac{\alpha}{\sqrt{\pi}} \sum_j q_j^2 \)</span>$</p></li>
+<li><p><strong><span class="math notranslate nohighlight">\(U_{dipole}\)</span> (Surface/Dipole term - optional):</strong> If the simulation cell has a net dipole moment, an additional term might be needed depending on the assumed boundary conditions at infinity (e.g., vacuum, or surrounded by a perfect conductor). For systems with no net dipole, or when using “tin-foil” (conducting) boundary conditions, this term is often zero or handled implicitly.</p></li>
+</ul>
+<p><strong>The Ewald Splitting Parameter (<span class="math notranslate nohighlight">\(\alpha\)</span> or <span class="math notranslate nohighlight">\(\kappa\)</span>):</strong>
+This crucial parameter (often denoted <span class="math notranslate nohighlight">\(\alpha\)</span>, sometimes <span class="math notranslate nohighlight">\(\kappa\)</span> or <span class="math notranslate nohighlight">\(\beta\)</span>) controls the width of the Gaussian charge distributions. It dictates the balance of computational effort between the real-space and reciprocal-space sums:</p>
+<ul class="simple">
+<li><p><strong>Large <span class="math notranslate nohighlight">\(\alpha\)</span>:</strong> Narrow Gaussians, meaning the real-space interaction <span class="math notranslate nohighlight">\(q_i q_j \text{erfc}(\alpha r_{ij})/r_{ij}\)</span> decays very quickly (fewer terms needed in the real-space sum, smaller <span class="math notranslate nohighlight">\(r_c\)</span>). However, the compensating charge distribution in reciprocal space becomes broader, so the reciprocal sum converges more slowly (more <span class="math notranslate nohighlight">\(\mathbf{k}\)</span>-vectors needed).</p></li>
+<li><p><strong>Small <span class="math notranslate nohighlight">\(\alpha\)</span>:</strong> Wide Gaussians. The real-space sum converges slowly (larger <span class="math notranslate nohighlight">\(r_c\)</span> needed). The reciprocal-space sum converges quickly (fewer <span class="math notranslate nohighlight">\(\mathbf{k}\)</span>-vectors needed).
+The optimal choice of <span class="math notranslate nohighlight">\(\alpha\)</span> (along with <span class="math notranslate nohighlight">\(r_c\)</span> and the <span class="math notranslate nohighlight">\(k\)</span>-space cutoff <span class="math notranslate nohighlight">\(k_{max}\)</span>) is one that minimizes the total computational cost for a desired accuracy.</p></li>
+</ul>
+<p><strong>Advantages of Ewald Summation:</strong></p>
+<ul class="simple">
+<li><p>Provides a mathematically rigorous and accurate way to calculate long-range electrostatic interactions in periodic systems.</p></li>
+<li><p>Converges much faster than attempting a direct, brute-force summation.</p></li>
+</ul>
+<p><strong>Disadvantages:</strong></p>
+<ul class="simple">
+<li><p>Significantly more complex to understand and implement than simple cutoffs.</p></li>
+<li><p>The computational cost of traditional Ewald scales roughly as <span class="math notranslate nohighlight">\(O(N^{3/2})\)</span> or <span class="math notranslate nohighlight">\(O(N^2)\)</span> depending on implementation choices (where <span class="math notranslate nohighlight">\(N\)</span> is the number of particles), which can still be a bottleneck for very large systems.</p></li>
+</ul>
+<section id="reciprocal-space-term-in-ewald-summation">
+<h3>Reciprocal Space Term in Ewald Summation<a class="headerlink" href="#reciprocal-space-term-in-ewald-summation" title="Link to this heading">#</a></h3>
+<p>The reciprocal-space term involves a sum over reciprocal lattice vectors <span class="math notranslate nohighlight">\(\mathbf{k}\)</span>. The key component related to damping in k-space (Fourier space) is <span class="math notranslate nohighlight">\(\exp(-k^2 / 4\alpha^2)/k^2\)</span>.</p>
+<ul class="simple">
+<li><p>If <span class="math notranslate nohighlight">\(\alpha\)</span> is <strong>large</strong> (fast real-space decay), then <span class="math notranslate nohighlight">\(1/(4\alpha^2)\)</span> is small. This means <span class="math notranslate nohighlight">\(\exp(-k^2 / 4\alpha^2)\)</span> decays slowly with <span class="math notranslate nohighlight">\(k\)</span>, so more <span class="math notranslate nohighlight">\(\mathbf{k}\)</span>-vectors are needed in the reciprocal sum.</p></li>
+<li><p>If <span class="math notranslate nohighlight">\(\alpha\)</span> is <strong>small</strong> (slow real-space decay), then <span class="math notranslate nohighlight">\(1/(4\alpha^2)\)</span> is large. This means <span class="math notranslate nohighlight">\(\exp(-k^2 / 4\alpha^2)\)</span> decays quickly with <span class="math notranslate nohighlight">\(k\)</span>, so fewer <span class="math notranslate nohighlight">\(\mathbf{k}\)</span>-vectors are needed.</p></li>
+</ul>
+<p>This illustrates the trade-off controlled by <span class="math notranslate nohighlight">\(\alpha\)</span>.</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">scipy.special</span><span class="w"> </span><span class="kn">import</span> <span class="n">erfc</span> <span class="c1"># Complementary error function</span>
+
+<span class="c1"># Define the Ewald real-space damped Coulomb potential part</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">ewald_real_space_term</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">strength</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculates the erfc(alpha*r)/r part of Ewald real-space sum.&quot;&quot;&quot;</span>
+    <span class="n">r_safe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mf">0.0001</span><span class="p">)</span> <span class="c1"># Avoid r=0</span>
+    <span class="k">return</span> <span class="n">strength</span> <span class="o">*</span> <span class="n">erfc</span><span class="p">(</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">r_safe</span><span class="p">)</span> <span class="o">/</span> <span class="n">r_safe</span>
+
+<span class="c1"># Parameters for plotting</span>
+<span class="n">r_ewald</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span> <span class="c1"># Distances</span>
+<span class="n">alpha_small</span> <span class="o">=</span> <span class="mf">0.1</span>  <span class="c1"># Smaller alpha: wider screening Gaussian, slower real-space decay</span>
+<span class="n">alpha_large</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># Larger alpha: narrower screening Gaussian, faster real-space decay</span>
+
+<span class="c1"># Calculate potentials</span>
+<span class="n">potential_coulomb_ref</span> <span class="o">=</span> <span class="n">coulomb_potential</span><span class="p">(</span><span class="n">r_ewald</span><span class="p">)</span> <span class="c1"># Undamped 1/r for reference</span>
+<span class="n">damped_potential_small_alpha</span> <span class="o">=</span> <span class="n">ewald_real_space_term</span><span class="p">(</span><span class="n">r_ewald</span><span class="p">,</span> <span class="n">alpha_small</span><span class="p">)</span>
+<span class="n">damped_potential_large_alpha</span> <span class="o">=</span> <span class="n">ewald_real_space_term</span><span class="p">(</span><span class="n">r_ewald</span><span class="p">,</span> <span class="n">alpha_large</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span><span class="mi">4</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_ewald</span><span class="p">,</span> <span class="n">potential_coulomb_ref</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;Undamped $1/r$&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.5</span><span class="p">)</span> <span class="c1"># Fixed: Added closing $ to the label</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_ewald</span><span class="p">,</span> <span class="n">damped_potential_small_alpha</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;Ewald Real-Space: $\operatorname{{erfc}}(\alpha r)/r$, $\alpha=</span><span class="si">{}</span><span class="s1">$&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">alpha_small</span><span class="p">),</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;darkorange&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r_ewald</span><span class="p">,</span> <span class="n">damped_potential_large_alpha</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">r</span><span class="s1">&#39;Ewald Real-Space: $\operatorname{{erfc}}(\alpha r)/r$, $\alpha=</span><span class="si">{}</span><span class="s1">$&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">alpha_large</span><span class="p">),</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;purple&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s1">&#39;Ewald Real-Space Damped Coulomb Potential&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;Distance ($r$)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s1">&#39;Potential Magnitude&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">potential_coulomb_ref</span><span class="p">[</span><span class="n">r_ewald</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">])</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="c1"># Adjust y-limit based on 1/r values</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">xlim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;grey&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;With larger alpha (</span><span class="si">{</span><span class="n">alpha_large</span><span class="si">}</span><span class="s2">), the real-space potential decays much faster.&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;With smaller alpha (</span><span class="si">{</span><span class="n">alpha_small</span><span class="si">}</span><span class="s2">), the real-space potential decays slower, resembling 1/r more closely at short distances but still eventually decaying faster.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="cell_output docutils container">
+<img alt="../_images/809c1f5f43c0c7a0be317d9fe94a0ceaf9492c726c80500c5cbbd4e234c33188.png" src="../_images/809c1f5f43c0c7a0be317d9fe94a0ceaf9492c726c80500c5cbbd4e234c33188.png" />
+<div class="output stream highlight-myst-ansi notranslate"><div class="highlight"><pre><span></span>With larger alpha (0.5), the real-space potential decays much faster.
+With smaller alpha (0.1), the real-space potential decays slower, resembling 1/r more closely at short distances but still eventually decaying faster.
+</pre></div>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="lesson-3-4-particle-mesh-ewald-pme-method">
+<h2>Lesson 3.4: Particle Mesh Ewald (PME) Method<a class="headerlink" href="#lesson-3-4-particle-mesh-ewald-pme-method" title="Link to this heading">#</a></h2>
+<p>While traditional Ewald summation is accurate, its <span class="math notranslate nohighlight">\(O(N^{3/2})\)</span> to <span class="math notranslate nohighlight">\(O(N^2)\)</span> scaling makes it computationally intensive for systems with many thousands of atoms. The <strong>Particle Mesh Ewald (PME)</strong> method, developed by Darden, York, and Pedersen, and similar Particle-Particle Particle-Mesh (PPPM) methods, offer a more efficient way to calculate the reciprocal-space part of the Ewald sum. PME has become the de facto standard for treating long-range electrostatics in large-scale biomolecular simulations, reducing the scaling to approximately <span class="math notranslate nohighlight">\(O(N \log N)\)</span>.</p>
+<p><strong>The Core Idea of PME: Using FFTs for Reciprocal Sum</strong></p>
+<p>PME retains the real-space sum and self-interaction correction from the standard Ewald method. The innovation lies in how it computes the reciprocal-space sum. Instead of a direct summation over <span class="math notranslate nohighlight">\(\mathbf{k}\)</span>-vectors, PME uses a grid and Fast Fourier Transforms (FFTs):</p>
+<ol class="arabic simple">
+<li><p><strong>Charge Assignment (Gridding):</strong></p>
+<ul class="simple">
+<li><p>A regular 3D grid (mesh) is superimposed on the simulation box.</p></li>
+<li><p>The point charges of the particles are assigned (interpolated) onto the nearby grid points. This is not a simple nearest-grid-point assignment; instead, smooth interpolation functions (e.g., B-splines of various orders) are used to distribute each charge onto a small stencil of surrounding grid points. This process creates a gridded charge density, <span class="math notranslate nohighlight">\(\rho(\mathbf{r}_{grid})\)</span>. The smoothness of the interpolation is crucial for accuracy.</p></li>
+</ul>
+</li>
+<li><p><strong>Reciprocal Sum Calculation (via FFTs):</strong></p>
+<ul class="simple">
+<li><p>The electrostatic potential on the grid, <span class="math notranslate nohighlight">\(\Phi(\mathbf{r}_{grid})\)</span>, due to the gridded charge density <span class="math notranslate nohighlight">\(\rho(\mathbf{r}_{grid})\)</span> is calculated by solving Poisson’s equation in Fourier space. This involves several steps:
+a.  <strong>FFT of Charge Density:</strong> Compute the Fourier transform of the gridded charge density: <span class="math notranslate nohighlight">\(\hat{\rho}(\mathbf{k}) = \text{FFT}(\rho(\mathbf{r}_{grid}))\)</span>.
+b.  <strong>Multiplication by Influence Function:</strong> Multiply <span class="math notranslate nohighlight">\(\hat{\rho}(\mathbf{k})\)</span> by the (discretized) Ewald Green’s function or influence function in Fourier space, <span class="math notranslate nohighlight">\(\hat{G}(\mathbf{k})\)</span>. This <span class="math notranslate nohighlight">\(\hat{G}(\mathbf{k})\)</span> is essentially the <span class="math notranslate nohighlight">\(\exp(-k^2 / 4\alpha^2)/k^2\)</span> term from the Ewald reciprocal sum, adapted for the grid and the interpolation scheme.
+c.  <strong>Inverse FFT for Potential:</strong> Compute the inverse FFT of the product to get the electrostatic potential on the grid: <span class="math notranslate nohighlight">\(\Phi(\mathbf{r}_{grid}) = \text{IFFT}(\hat{G}(\mathbf{k}) \hat{\rho}(\mathbf{k}))\)</span>.</p></li>
+<li><p>The reciprocal space energy can then be calculated from the gridded charge density and potential.</p></li>
+</ul>
+</li>
+<li><p><strong>Force/Potential Interpolation:</strong></p>
+<ul class="simple">
+<li><p>The electrostatic potential (and its derivatives, which give the forces) are interpolated from the grid points <em>back</em> to the actual particle positions. The same (or a related) interpolation scheme used in the charge assignment step is typically employed here to maintain consistency and accuracy (e.g., using the derivatives of the B-spline functions).</p></li>
+</ul>
+</li>
+<li><p><strong>Real-Space and Self-Interaction Terms:</strong></p>
+<ul class="simple">
+<li><p>The direct, short-range part of the Ewald sum (screened Coulomb interactions <span class="math notranslate nohighlight">\(q_i q_j \text{erfc}(\alpha r_{ij})/r_{ij}\)</span>) is calculated exactly as in the standard Ewald method, typically within a cutoff radius <span class="math notranslate nohighlight">\(r_c\)</span>. This corrects for the approximations made by the grid-based calculation at short distances where the grid might be too coarse to represent interactions accurately.</p></li>
+<li><p>The self-interaction correction is also applied as in standard Ewald.</p></li>
+</ul>
+</li>
+</ol>
+<p><strong>Advantages of PME:</strong></p>
+<ul class="simple">
+<li><p><strong>Outstanding Efficiency:</strong> The use of FFTs for the reciprocal sum is the key. FFTs scale as <span class="math notranslate nohighlight">\(O(M \log M)\)</span>, where <span class="math notranslate nohighlight">\(M\)</span> is the number of grid points. If <span class="math notranslate nohighlight">\(M\)</span> is chosen to be proportional to <span class="math notranslate nohighlight">\(N\)</span> (the number of particles), the overall scaling of PME becomes approximately <span class="math notranslate nohighlight">\(O(N \log N)\)</span>. This is a dramatic improvement over <span class="math notranslate nohighlight">\(O(N^{3/2})\)</span> or <span class="math notranslate nohighlight">\(O(N^2)\)</span> and makes simulations of systems with hundreds of thousands or even millions of atoms feasible.</p></li>
+<li><p><strong>High Accuracy:</strong> PME can achieve high accuracy, comparable to standard Ewald, by appropriately choosing the Ewald splitting parameter <span class="math notranslate nohighlight">\(\alpha\)</span>, the real-space cutoff <span class="math notranslate nohighlight">\(r_c\)</span>, the grid spacing (number of FFT grid points), and the order of the interpolation scheme (e.g., cubic or quartic B-splines are common).</p></li>
+</ul>
+<p><strong>Implementation Complexity and Usage:</strong>
+PME is algorithmically sophisticated. Its robust and efficient implementation involves careful handling of FFTs, spline interpolation, differentiation of splines for forces, and managing communication in parallel environments. Fortunately, users of modern MD simulation packages (like GROMACS, AMBER, NAMD, CHARMM, LAMMPS, OpenMM) do not need to implement PME themselves. It is a standard, highly optimized feature. However, users <em>do</em> need to understand the key parameters that control its accuracy and performance to make sensible choices for their simulations:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ewald_rtol</span></code> (or similar): Desired relative accuracy for Ewald, which helps determine <span class="math notranslate nohighlight">\(\alpha\)</span>, <span class="math notranslate nohighlight">\(r_c\)</span>, and <span class="math notranslate nohighlight">\(k_{max}\)</span> (or FFT grid density).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fourierspacing</span></code> (or <code class="docutils literal notranslate"><span class="pre">fft_spacing</span></code>): The approximate spacing between FFT grid points. Finer grids give more accuracy but cost more.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pme_order</span></code> (or <code class="docutils literal notranslate"><span class="pre">interpolation_order</span></code>): The order of the B-spline interpolation (e.g., 4 for cubic, 6 for quintic). Higher orders are more accurate but computationally more intensive.</p></li>
+</ul>
+<p><strong>In essence, PME revolutionized the simulation of large biomolecular systems by providing an accurate and computationally tractable method for handling the all-important long-range electrostatic interactions.</strong></p>
+</section>
+<section id="lesson-3-5-summary-key-takeaways-for-module-3">
+<h2>Lesson 3.5: Summary &amp; Key Takeaways for Module 3<a class="headerlink" href="#lesson-3-5-summary-key-takeaways-for-module-3" title="Link to this heading">#</a></h2>
+<p>This module has explored the critical aspects of handling non-bonded interactions in molecular dynamics simulations.</p>
+<ol class="arabic simple">
+<li><p><strong>Lennard-Jones (LJ) Potential:</strong> Models van der Waals forces (short-range repulsion, longer-range attraction). Its relatively fast <span class="math notranslate nohighlight">\(r^{-6}\)</span> attractive decay allows for the use of a <strong>cutoff radius (<span class="math notranslate nohighlight">\(r_c\)</span>)</strong> to improve computational efficiency. Simple truncation can cause energy discontinuities; <strong>shifted potentials</strong> (or more advanced switching functions) are preferred to ensure <span class="math notranslate nohighlight">\(V(r_c)=0\)</span>.</p></li>
+<li><p><strong>Coulomb Potential:</strong> Describes electrostatic interactions between charged particles. Its very slow <span class="math notranslate nohighlight">\(1/r\)</span> decay makes <strong>simple truncation schemes fundamentally unsuitable</strong> for periodic systems. Doing so leads to significant inaccuracies, artificial structuring, and poor energy conservation, rendering simulation results unreliable for most systems where electrostatics are important.</p></li>
+<li><p><strong>Ewald Summation:</strong> A rigorous mathematical technique to accurately calculate electrostatic interactions in periodic systems. It cleverly splits the slowly converging <span class="math notranslate nohighlight">\(1/r\)</span> sum into a <strong>short-range real-space sum</strong> (using a damped Coulomb interaction, <span class="math notranslate nohighlight">\(\text{erfc}(\alpha r)/r\)</span>) and a <strong>rapidly converging reciprocal-space (Fourier) sum</strong>. An Ewald splitting parameter, <span class="math notranslate nohighlight">\(\alpha\)</span>, balances the computational load between these two sums. While accurate, traditional Ewald typically scales as <span class="math notranslate nohighlight">\(O(N^{3/2})\)</span> to <span class="math notranslate nohighlight">\(O(N^2)\)</span>.</p></li>
+<li><p><strong>Particle Mesh Ewald (PME):</strong> An highly efficient algorithm for computing the Ewald sum, particularly its reciprocal-space component. PME uses a <strong>grid (mesh)</strong> to assign charges, then employs <strong>Fast Fourier Transforms (FFTs)</strong> to solve for the electrostatic potential on the grid. Forces are then interpolated back to the particles. This reduces the computational scaling for long-range electrostatics to approximately <span class="math notranslate nohighlight">\(O(N \log N)\)</span>, making it the method of choice for large-scale simulations.</p></li>
+</ol>
+<p><strong>Overall Importance:</strong>
+Understanding how non-bonded interactions are defined and calculated is crucial for any MD practitioner. The choice of how to treat long-range forces, in particular, can dramatically impact the accuracy and validity of simulation results. While LJ cutoffs are standard, the necessity of methods like PME for electrostatics cannot be overstated for realistic simulations of biomolecules, ionic solutions, or any system where charges play a significant role.</p>
+<section id="conceptual-exercises-further-thought">
+<h3>Conceptual Exercises &amp; Further Thought<a class="headerlink" href="#conceptual-exercises-further-thought" title="Link to this heading">#</a></h3>
+<ol class="arabic simple">
+<li><p><strong>LJ Cutoff Artifacts:</strong> In the plot showing “Truncated vs. Shifted” LJ potentials, imagine calculating the force (<span class="math notranslate nohighlight">\(F = -dV/dr\)</span>) at the cutoff <span class="math notranslate nohighlight">\(r_c\)</span>. Describe qualitatively what the force would look like for the truncated potential versus the shifted potential right at <span class="math notranslate nohighlight">\(r_c\)</span>. Why is a discontinuity in force problematic for MD simulations?</p></li>
+<li><p><strong>Ewald Parameter <span class="math notranslate nohighlight">\(\alpha\)</span>:</strong> If you were forced to use a very small real-space cutoff <span class="math notranslate nohighlight">\(r_c\)</span> for the Ewald sum (due to memory constraints, for example), would you prefer a larger or smaller value of <span class="math notranslate nohighlight">\(\alpha\)</span>? Explain your reasoning in terms of the convergence of the real and reciprocal sums.</p></li>
+<li><p><strong>PME Grid Spacing:</strong> What do you think are the consequences of choosing a very coarse FFT grid (large <code class="docutils literal notranslate"><span class="pre">fourierspacing</span></code>) in a PME calculation? Conversely, what about a very fine grid (small <code class="docutils literal notranslate"><span class="pre">fourierspacing</span></code>)?</p></li>
+<li><p><strong>Why not Ewald for LJ?</strong> The attractive part of the LJ potential is <span class="math notranslate nohighlight">\(-(1/r)^6\)</span>. Could one, in principle, develop an Ewald-like summation method for this <span class="math notranslate nohighlight">\(r^{-6}\)</span> term if it were the dominant long-range interaction and simple cutoffs were insufficient (e.g., for extremely high accuracy studies)? What might be some practical reasons why this is generally not done for standard LJ interactions?</p></li>
+<li><p><strong>Real-world Impact:</strong> Consider a simulation of DNA (highly charged) in a water solution with salt ions. Why would using a simple 1 nm cutoff for <em>all</em> non-bonded interactions (both LJ and Coulomb) likely lead to completely incorrect simulation results regarding DNA structure or ion binding?</p></li>
+</ol>
+</section>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "YOUR_USERNAME/YOUR_REPO",
+            ref: "main",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./notebooks"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="2_physics_of_MD.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Module 2: The Physics Behind MD</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="4_1D_simulations.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Module 4: Simulating Simple 1D Systems</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#introduction">Introduction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-1-lennard-jones-lj-potential-and-cutoffs">Lesson 3.1: Lennard-Jones (LJ) Potential and Cutoffs</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-need-for-cutoffs-in-lj-interactions">The Need for Cutoffs in LJ Interactions</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-2-coulomb-interactions-and-the-challenge-of-long-range-forces">Lesson 3.2: Coulomb Interactions and the Challenge of Long-Range Forces</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#why-simple-cutoffs-fail-miserably-for-coulomb-interactions">Why Simple Cutoffs Fail Miserably for Coulomb Interactions</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-3-the-ewald-summation-method">Lesson 3.3: The Ewald Summation Method</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#reciprocal-space-term-in-ewald-summation">Reciprocal Space Term in Ewald Summation</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-4-particle-mesh-ewald-pme-method">Lesson 3.4: Particle Mesh Ewald (PME) Method</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-3-5-summary-key-takeaways-for-module-3">Lesson 3.5: Summary &amp; Key Takeaways for Module 3</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#conceptual-exercises-further-thought">Conceptual Exercises &amp; Further Thought</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Your Name
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2023.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

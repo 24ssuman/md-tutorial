@@ -1,0 +1,14 @@
+name: md_tutorial_binder
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy
+  - scipy
+  - matplotlib
+  - ase
+  - ipywidgets
+  - jupyterlab
+  - notebook
+  - nbconvert
+  - pip

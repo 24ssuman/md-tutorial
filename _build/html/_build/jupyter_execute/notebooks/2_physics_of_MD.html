@@ -1,0 +1,760 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Module 2: The Physics Behind MD &#8212; Molecular Dynamics Tutorial for Beginners</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/togglebutton.css?v=9c3e77be" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.8ecb98da25f57f5357bf6f572d296f466b2cfe2517ffebfabe82451661e28f02.css?v=6644e6bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-thebe.css?v=4fa983c6" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../_static/documentation_options.js?v=9eb32ce0"></script>
+    <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script>let toggleHintShow = 'Click to show';</script>
+    <script>let toggleHintHide = 'Click to hide';</script>
+    <script>let toggleOpenOnPrint = 'true';</script>
+    <script src="../../../_static/togglebutton.js?v=1ae7504c"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script async="async" src="../../../_static/sphinx-thebe.js?v=c100c467"></script>
+    <script>var togglebuttonSelector = '.toggle, .admonition.dropdown';</script>
+    <script>const THEBE_JS_URL = "https://unpkg.com/thebe@0.8.2/lib/index.js"; const thebe_selector = ".thebe,.cell"; const thebe_selector_input = "pre"; const thebe_selector_output = ".output, .cell_output"</script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_build/jupyter_execute/notebooks/2_physics_of_MD';</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search this book..."
+         aria-label="Search this book..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../intro.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Molecular Dynamics Tutorial for Beginners</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../intro.html">
+                    Molecular Dynamics Tutorial for Beginners
+                </a>
+            </li>
+        </ul>
+        <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/1_intro_to_MD.html">Module 1: Introduction to Molecular Simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/2_physics_of_MD.html">Module 2: The Physics Behind MD</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/3_non_bonded_interactions.html">Module 3: Non-Bonded Interactions and Long-Range Electrostatics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/4_1D_simulations.html">Module 4: Simulating Simple 1D Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/5_sampling_challenge.html">Module 5: The Challenge of Sampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/5.5_chossing_CVs.html">Lesson 5.2a: Choosing Good Collective Variables for Multi-Dimensional Systems</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/6_umbrella_sampling.html">Module 6: Enhanced Sampling I - Umbrella Sampling (US) &amp; PMF Reconstruction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/6.1_WHAM_detailed.html">WHAM, step by step (with plots)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/7_meta_dynamics.html">Module 7: Enhanced Sampling II - Metadynamics (MetaD)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/8_ase_LJ_fluid_simulation.html">Module 8: Multi-Particle Simulations: Lennard-Jones Fluid with ASE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebooks/9_ase_waterbox_simulation_not_working.html">Module 9: Simulating Molecular Systems: Water Box with ASE</a></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-launch-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Launch interactive content">
+    <i class="fas fa-rocket"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://mybinder.org/v2/gh/YOUR_USERNAME/YOUR_REPO/main?urlpath=lab/tree/./_build/jupyter_execute/notebooks/2_physics_of_MD.ipynb" target="_blank"
+   class="btn btn-sm dropdown-item"
+   title="Launch on Binder"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  
+    <img alt="Binder logo" src="../../../_static/images/logo_binder.svg">
+  </span>
+<span class="btn__text-container">Binder</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="initThebeSBT()"
+  class="btn btn-sm btn-launch-thebe dropdown-item"
+  title="Launch Thebe"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-play"></i>
+  </span>
+<span class="btn__text-container">Live Code</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/YOUR_USERNAME/YOUR_REPO/issues/new?title=Issue%20on%20page%20%2F_build/jupyter_execute/notebooks/2_physics_of_MD.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../../_sources/_build/jupyter_execute/notebooks/2_physics_of_MD.ipynb" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.ipynb</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>Module 2: The Physics Behind MD</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Module 2: The Physics Behind MD</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-1-classical-mechanics-newton-s-equations">Lesson 2.1: Classical Mechanics &amp; Newton’s Equations</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-2-potential-energy-surfaces-force-fields">Lesson 2.2: Potential Energy Surfaces &amp; Force Fields</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-3-integrating-the-equations-of-motion">Lesson 2.3: Integrating the Equations of Motion</a></li>
+</ul>
+</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#velocity-verlet-algorithm">Velocity Verlet Algorithm</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-4-statistical-mechanics-snippets">Lesson 2.4: Statistical Mechanics Snippets</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-5-boundary-conditions">Lesson 2.5: Boundary Conditions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-5-1-minimum-image-convention-mic-pbc-visualization">Lesson 2.5.1: Minimum Image Convention (MIC) &amp; PBC Visualization</a></li>
+</ul>
+</li>
+</ul>
+
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="module-2-the-physics-behind-md">
+<h1>Module 2: The Physics Behind MD<a class="headerlink" href="#module-2-the-physics-behind-md" title="Link to this heading">#</a></h1>
+<p>Welcome to Module 2! Here, we lay the theoretical groundwork for Molecular Dynamics simulations. We’ll explore the fundamental physics principles, how we model interactions, handle long-range forces, integrate motion, and apply boundary conditions.</p>
+<section id="lesson-2-1-classical-mechanics-newton-s-equations">
+<h2>Lesson 2.1: Classical Mechanics &amp; Newton’s Equations<a class="headerlink" href="#lesson-2-1-classical-mechanics-newton-s-equations" title="Link to this heading">#</a></h2>
+<p>At the core of MD simulations lies <strong>Classical Mechanics</strong>, specifically <strong>Newton’s Second Law of Motion</strong>. For each atom <span class="math notranslate nohighlight">\(i\)</span> in our system with mass <span class="math notranslate nohighlight">\(m_i\)</span> and position vector <span class="math notranslate nohighlight">\(\mathbf{r}_i\)</span>, the law states:</p>
+<div class="math notranslate nohighlight">
+\[ \mathbf{F}_i = m_i \mathbf{a}_i \]</div>
+<p>where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(\mathbf{F}_i\)</span> is the total force acting on atom <span class="math notranslate nohighlight">\(i\)</span> due to all other atoms in the system.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\mathbf{a}_i\)</span> is the acceleration of atom <span class="math notranslate nohighlight">\(i\)</span>.</p></li>
+</ul>
+<p>Recall that acceleration is the second derivative of position with respect to time, <span class="math notranslate nohighlight">\(\mathbf{a}_i = \frac{d^2 \mathbf{r}_i}{dt^2}\)</span>, and the first derivative of velocity, <span class="math notranslate nohighlight">\(\mathbf{a}_i = \frac{d\mathbf{v}_i}{dt}\)</span>. So, we can rewrite Newton’s second law as a second-order ordinary differential equation:</p>
+<div class="math notranslate nohighlight">
+\[ \frac{d^2 \mathbf{r}_i}{dt^2} = \frac{\mathbf{F}_i(\mathbf{r}_1, \mathbf{r}_2, ..., \mathbf{r}_N)}{m_i} \]</div>
+<p>The force <span class="math notranslate nohighlight">\(\mathbf{F}_i\)</span> depends on the positions of <em>all</em> atoms in the system (<span class="math notranslate nohighlight">\(\mathbf{r}_1, \mathbf{r}_2, ..., \mathbf{r}_N\)</span>).</p>
+<p><strong>The Goal of MD:</strong> If we know the positions and velocities of all atoms at a certain time <span class="math notranslate nohighlight">\(t\)</span>, and we have a way to calculate the force <span class="math notranslate nohighlight">\(\mathbf{F}_i\)</span> on each atom, we can use Newton’s equations to predict the positions and velocities at a slightly later time <span class="math notranslate nohighlight">\(t + \Delta t\)</span>. By repeating this process over many small time steps <span class="math notranslate nohighlight">\(\Delta t\)</span>, we simulate the trajectory of the system over time.</p>
+<p>This process of predicting the future state based on the current state is called <strong>numerical integration</strong>. We’ll explore specific algorithms for this in Lesson 2.3.</p>
+</section>
+<section id="lesson-2-2-potential-energy-surfaces-force-fields">
+<h2>Lesson 2.2: Potential Energy Surfaces &amp; Force Fields<a class="headerlink" href="#lesson-2-2-potential-energy-surfaces-force-fields" title="Link to this heading">#</a></h2>
+<p>Where do the forces (<span class="math notranslate nohighlight">\(\mathbf{F}_i\)</span>) come from? In classical mechanics, forces often arise from a <strong>potential energy function</strong>, <span class="math notranslate nohighlight">\(V(\mathbf{r}_1, \mathbf{r}_2, ..., \mathbf{r}_N)\)</span>, which depends on the positions of all particles in the system. This function defines the <strong>Potential Energy Surface (PES)</strong>.</p>
+<p>The force on atom <span class="math notranslate nohighlight">\(i\)</span> is the negative gradient of the potential energy with respect to the coordinates of atom <span class="math notranslate nohighlight">\(i\)</span>:</p>
+<div class="math notranslate nohighlight">
+\[ \mathbf{F}_i = -\nabla_{\mathbf{r}_i} V = -\left( \frac{\partial V}{\partial x_i}, \frac{\partial V}{\partial y_i}, \frac{\partial V}{\partial z_i} \right) \]</div>
+<p>This means if we can define the potential energy <span class="math notranslate nohighlight">\(V\)</span>, we can calculate the forces needed for Newton’s equations.</p>
+<p><strong>Force Fields:</strong> In molecular simulations, the potential energy function <span class="math notranslate nohighlight">\(V\)</span> is called a <strong>Force Field (FF)</strong>. It’s an empirical model, meaning it’s based on fitting mathematical functions to experimental data and/or quantum mechanical calculations. Force fields approximate the true quantum mechanical interactions with simpler classical functions, making calculations feasible for large systems.</p>
+<p>A typical force field decomposes the total potential energy into several terms:</p>
+<div class="math notranslate nohighlight">
+\[ V_{{total}} = V_{{bonded}} + V_{{non-bonded}} \]</div>
+<ol class="arabic simple">
+<li><p><strong>Bonded Terms:</strong> Describe interactions between atoms connected by covalent bonds (Bond Stretching, Angle Bending, Dihedral Torsion). These are typically short-ranged.</p></li>
+<li><p><strong>Non-Bonded Terms:</strong> Describe interactions between atoms that are not directly bonded (or are separated by several bonds). These typically include:</p>
+<ul class="simple">
+<li><p><strong>van der Waals Interactions:</strong> Often modeled by the <strong>Lennard-Jones (LJ) potential</strong>:
+$<span class="math notranslate nohighlight">\( V_{{LJ}}(r_{ij}) = 4\epsilon_{ij} \left[ \left(\frac{\sigma_{ij}}{r_{ij}}\right)^{12} - \left(\frac{\sigma_{ij}}{r_{ij}}\right)^{6} \right] \)</span><span class="math notranslate nohighlight">\(
+  This potential decays relatively quickly (\)</span>r^{-6}$).</p></li>
+<li><p><strong>Electrostatic Interactions:</strong> Modeled by <strong>Coulomb’s Law</strong>:
+$<span class="math notranslate nohighlight">\( V_{{Coulomb}}(r_{ij}) = \frac{1}{4\pi\epsilon_0} \frac{q_i q_j}{r_{ij}} \)</span><span class="math notranslate nohighlight">\(
+  This potential decays very slowly (\)</span>r^{-1}$).</p></li>
+</ul>
+</li>
+</ol>
+<p><strong>Parameterization:</strong> The constants in these equations are the <strong>force field parameters</strong>, derived to reproduce experimental or QM data.</p>
+</section>
+<section id="lesson-2-3-integrating-the-equations-of-motion">
+<h2>Lesson 2.3: Integrating the Equations of Motion<a class="headerlink" href="#lesson-2-3-integrating-the-equations-of-motion" title="Link to this heading">#</a></h2>
+<p>Now that we know how to get forces from a potential (<span class="math notranslate nohighlight">\(F = -
+abla V\)</span>), how do we use them to update positions and velocities over time? We need a <strong>numerical integration algorithm</strong> to solve Newton’s equations (<span class="math notranslate nohighlight">\(m \ddot{\mathbf{r}} = \mathbf{F}\)</span>).</p>
+<p>A very simple approach is the <strong>Euler method</strong>, but it’s generally not accurate or stable enough for MD. A much more popular and suitable algorithm is the <strong>Velocity Verlet algorithm</strong>.</p>
+</section>
+</section>
+<section class="tex2jax_ignore mathjax_ignore" id="velocity-verlet-algorithm">
+<h1>Velocity Verlet Algorithm<a class="headerlink" href="#velocity-verlet-algorithm" title="Link to this heading">#</a></h1>
+<p>Given positions <strong>r</strong>, velocities <strong>v</strong>, accelerations <strong>a</strong>, mass <em>m</em>, and time step Δt:</p>
+<ol class="arabic simple">
+<li><p><strong>Half-step velocity update:</strong><br />
+$$
+\mathbf{v}\Bigl(t + \tfrac{\Delta t}{2}\Bigr)
+= \mathbf{v}(t)</p>
+<ul class="simple">
+<li><p>\tfrac{1}{2},\mathbf{a}(t),\Delta t
+$$</p></li>
+</ul>
+</li>
+<li><p><strong>Position update:</strong><br />
+$$
+\mathbf{r}(t + \Delta t)
+= \mathbf{r}(t)</p>
+<ul class="simple">
+<li><p>\mathbf{v}\Bigl(t + \tfrac{\Delta t}{2}\Bigr),\Delta t
+$$</p></li>
+</ul>
+</li>
+<li><p><strong>Compute forces &amp; new acceleration:</strong><br />
+$<span class="math notranslate nohighlight">\(
+  \mathbf{a}(t + \Delta t)
+  = \frac{\mathbf{F}\bigl(\mathbf{r}(t + \Delta t)\bigr)}{m}
+\)</span>$</p></li>
+<li><p><strong>Half-step velocity completion:</strong><br />
+$$
+\mathbf{v}(t + \Delta t)
+= \mathbf{v}\Bigl(t + \tfrac{\Delta t}{2}\Bigr)</p>
+<ul class="simple">
+<li><p>\tfrac{1}{2},\mathbf{a}(t + \Delta t),\Delta t
+$$</p></li>
+</ul>
+</li>
+</ol>
+<hr class="docutils" />
+<p><strong>Notes:</strong></p>
+<ul class="simple">
+<li><p>This scheme is <strong>time-reversible</strong> and conserves energy well for small Δt (typically 1–2 fs in MD).</p></li>
+<li><p>Choose Δt to resolve the fastest motions (e.g., bond vibrations).</p></li>
+</ul>
+<p><strong>Advantages:</strong> Good energy conservation, time reversibility, numerical stability.</p>
+<p><strong>Time Step (<span class="math notranslate nohighlight">\(\Delta t\)</span>):</strong> Must be small enough to capture the fastest motions (e.g., bond vibrations, ~1-2 fs).</p>
+<div class="cell docutils container">
+<div class="cell_input docutils container">
+<div class="highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">velocity_verlet_step</span><span class="p">(</span><span class="n">r_old</span><span class="p">,</span> <span class="n">v_old</span><span class="p">,</span> <span class="n">mass</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">calculate_forces</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Performs one Velocity Verlet step with half-step velocity updates.&quot;&quot;&quot;</span>
+    <span class="c1"># 0. Compute force &amp; acceleration at current position</span>
+    <span class="n">force_old</span> <span class="o">=</span> <span class="n">calculate_forces</span><span class="p">(</span><span class="n">r_old</span><span class="p">)</span>
+    <span class="n">a_old</span> <span class="o">=</span> <span class="n">force_old</span> <span class="o">/</span> <span class="n">mass</span>
+
+    <span class="c1"># 1. Half-step velocity update</span>
+    <span class="n">v_half</span> <span class="o">=</span> <span class="n">v_old</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">a_old</span> <span class="o">*</span> <span class="n">dt</span>
+
+    <span class="c1"># 2. Full position update using half-step velocity</span>
+    <span class="n">r_new</span> <span class="o">=</span> <span class="n">r_old</span> <span class="o">+</span> <span class="n">v_half</span> <span class="o">*</span> <span class="n">dt</span>
+
+    <span class="c1"># 3. Compute force &amp; acceleration at new position</span>
+    <span class="n">force_new</span> <span class="o">=</span> <span class="n">calculate_forces</span><span class="p">(</span><span class="n">r_new</span><span class="p">)</span>
+    <span class="n">a_new</span> <span class="o">=</span> <span class="n">force_new</span> <span class="o">/</span> <span class="n">mass</span>
+
+    <span class="c1"># 4. Complete velocity update with new acceleration</span>
+    <span class="n">v_new</span> <span class="o">=</span> <span class="n">v_half</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">a_new</span> <span class="o">*</span> <span class="n">dt</span>
+
+    <span class="k">return</span> <span class="n">r_new</span><span class="p">,</span> <span class="n">v_new</span>
+</pre></div>
+</div>
+</div>
+</div>
+<section id="lesson-2-4-statistical-mechanics-snippets">
+<h2>Lesson 2.4: Statistical Mechanics Snippets<a class="headerlink" href="#lesson-2-4-statistical-mechanics-snippets" title="Link to this heading">#</a></h2>
+<p>MD simulations generate microscopic information (positions, velocities). <strong>Statistical Mechanics</strong> connects this to macroscopic thermodynamic properties.</p>
+<p><strong>Thermodynamic Ensembles:</strong> Collections of microscopic states under macroscopic constraints.</p>
+<ul class="simple">
+<li><p><strong>Microcanonical (NVE):</strong> Constant Number (N), Volume (V), Energy (E). Natural for basic Verlet.</p></li>
+<li><p><strong>Canonical (NVT):</strong> Constant N, V, Temperature (T). Requires a <strong>thermostat</strong>.</p></li>
+<li><p><strong>Isothermal-Isobaric (NPT):</strong> Constant N, Pressure (P), T. Requires a <strong>thermostat</strong> and <strong>barostat</strong>.</p></li>
+</ul>
+<p><strong>Temperature:</strong> Calculated from the total kinetic energy (<span class="math notranslate nohighlight">\(E_K\)</span>):
+$<span class="math notranslate nohighlight">\( E_K(t) = \sum_{i=1}^N \frac{1}{2} m_i |\mathbf{v}_i(t)|^2 \)</span><span class="math notranslate nohighlight">\(
+\)</span><span class="math notranslate nohighlight">\( T = \frac{2 E_K}{N_{df} k_B} \)</span><span class="math notranslate nohighlight">\(
+Where \)</span>N_{df}<span class="math notranslate nohighlight">\( is the number of degrees of freedom (e.g., \)</span>3N<span class="math notranslate nohighlight">\( for \)</span>N<span class="math notranslate nohighlight">\( particles in 3D with no constraints) and \)</span>k_B$ is the Boltzmann constant.</p>
+</section>
+<section id="lesson-2-5-boundary-conditions">
+<h2>Lesson 2.5: Boundary Conditions<a class="headerlink" href="#lesson-2-5-boundary-conditions" title="Link to this heading">#</a></h2>
+<p>Simulating finite systems introduces unrealistic <strong>surface effects</strong>. To simulate bulk materials, we use <strong>Periodic Boundary Conditions (PBC)</strong>.</p>
+<p>Imagine the simulation box is replicated infinitely in all directions.</p>
+<ul class="simple">
+<li><p>Forces include interactions with particles in neighboring image boxes.</p></li>
+<li><p>When a particle exits one face, it re-enters the opposite face.</p></li>
+</ul>
+<p><strong>(Visual Aid Idea: Include a diagram showing a central box and its periodic images in 2D)</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>      <span class="o">+-------+-------+-------+</span>
+      <span class="o">|</span>       <span class="o">|</span>       <span class="o">|</span>       <span class="o">|</span>
+      <span class="o">|</span> <span class="n">Box</span><span class="o">-</span><span class="mi">1</span> <span class="o">|</span> <span class="n">Box</span><span class="o">-</span><span class="mi">0</span> <span class="o">|</span> <span class="n">Box</span><span class="o">+</span><span class="mi">1</span> <span class="o">|</span>
+      <span class="o">|</span> <span class="n">Image</span> <span class="o">|</span> <span class="n">Real</span>  <span class="o">|</span> <span class="n">Image</span> <span class="o">|</span>
+      <span class="o">+-------+-------+-------+</span>
+      <span class="o">|</span>       <span class="o">|</span>       <span class="o">|</span>       <span class="o">|</span>
+      <span class="o">|</span> <span class="n">Box</span><span class="o">-</span><span class="mi">1</span> <span class="o">|</span> <span class="n">Box</span><span class="o">-</span><span class="mi">0</span> <span class="o">|</span> <span class="n">Box</span><span class="o">+</span><span class="mi">1</span> <span class="o">|</span>
+      <span class="o">|</span> <span class="n">Image</span> <span class="o">|</span> <span class="n">Real</span>  <span class="o">|</span> <span class="n">Image</span> <span class="o">|</span>
+      <span class="o">+-------+-------+-------+</span>
+</pre></div>
+</div>
+</section>
+<section id="lesson-2-5-1-minimum-image-convention-mic-pbc-visualization">
+<h2>Lesson 2.5.1: Minimum Image Convention (MIC) &amp; PBC Visualization<a class="headerlink" href="#lesson-2-5-1-minimum-image-convention-mic-pbc-visualization" title="Link to this heading">#</a></h2>
+<p><strong>Minimum Image Convention (MIC):</strong>
+When calculating the interaction between two particles <span class="math notranslate nohighlight">\(i\)</span> and <span class="math notranslate nohighlight">\(j\)</span> under PBC, we must consider the interaction between particle <span class="math notranslate nohighlight">\(i\)</span> and the <em>closest</em> periodic image of particle <span class="math notranslate nohighlight">\(j\)</span>.</p>
+<ul class="simple">
+<li><p>Assume a box of lengths <span class="math notranslate nohighlight">\(L_x, L_y, L_z\)</span>.</p></li>
+<li><p>Calculate the raw separation vector <span class="math notranslate nohighlight">\(\Delta \mathbf{r} = \mathbf{r}_j - \mathbf{r}_i = (\Delta x, \Delta y, \Delta z)\)</span>.</p></li>
+<li><p>Adjust each component using the nearest image distance:</p>
+<ul>
+<li><p><span class="math notranslate nohighlight">\(\Delta x' = \Delta x - L_x\times{round}(\Delta x / L_x)\)</span></p></li>
+<li><p>(Similarly for <span class="math notranslate nohighlight">\(y\)</span> and <span class="math notranslate nohighlight">\(z\)</span>. The <code class="docutils literal notranslate"><span class="pre">round()</span></code> function finds the nearest integer.)</p></li>
+</ul>
+</li>
+<li><p>The distance used for force/potential calculation is <span class="math notranslate nohighlight">\(r_{ij} = |\Delta \mathbf{r}'|\)</span>.</p></li>
+<li><p>This ensures we don’t interact with a distant image when a closer one is available and avoids double-counting interactions (especially important with cutoffs).</p></li>
+</ul>
+<p><strong>Visualizing PBC:</strong>
+It’s helpful to visualize how a particle “wraps around” the box. Imagine a 2D box:</p>
+<ul class="simple">
+<li><p>If a particle’s <span class="math notranslate nohighlight">\(x\)</span> coordinate becomes greater than <span class="math notranslate nohighlight">\(L_x\)</span>, its new position might be <span class="math notranslate nohighlight">\(x' = x - L_x\)</span>.</p></li>
+<li><p>If <span class="math notranslate nohighlight">\(x\)</span> becomes less than <span class="math notranslate nohighlight">\(0\)</span>, its new position might be <span class="math notranslate nohighlight">\(x' = x + L_x\)</span>.
+(Modulo arithmetic <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">%</span> <span class="pre">L</span></code> can also be used carefully).</p></li>
+</ul>
+<p>We will implement functions for MIC and coordinate wrapping in Module 3.</p>
+<hr class="docutils" />
+<p>End of Module 2. We have covered the core physics: Newton’s laws, potential energy functions (force fields), the issues of cutoffs and long-range forces (introducing PME), the Verlet algorithm for integration, the connection to thermodynamics (ensembles, temperature), and the concepts of Periodic Boundary Conditions (PBC) and the Minimum Image Convention (MIC).</p>
+</section>
+</section>
+
+    <script type="text/x-thebe-config">
+    {
+        requestKernel: true,
+        binderOptions: {
+            repo: "YOUR_USERNAME/YOUR_REPO",
+            ref: "main",
+        },
+        codeMirrorConfig: {
+            theme: "abcdef",
+            mode: "python"
+        },
+        kernelOptions: {
+            name: "python3",
+            path: "./_build/jupyter_execute/notebooks"
+        },
+        predefinedOutput: true
+    }
+    </script>
+    <script>kernelName = 'python3'</script>
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">Module 2: The Physics Behind MD</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-1-classical-mechanics-newton-s-equations">Lesson 2.1: Classical Mechanics &amp; Newton’s Equations</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-2-potential-energy-surfaces-force-fields">Lesson 2.2: Potential Energy Surfaces &amp; Force Fields</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-3-integrating-the-equations-of-motion">Lesson 2.3: Integrating the Equations of Motion</a></li>
+</ul>
+</li>
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#velocity-verlet-algorithm">Velocity Verlet Algorithm</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-4-statistical-mechanics-snippets">Lesson 2.4: Statistical Mechanics Snippets</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-5-boundary-conditions">Lesson 2.5: Boundary Conditions</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lesson-2-5-1-minimum-image-convention-mic-pbc-visualization">Lesson 2.5.1: Minimum Image Convention (MIC) &amp; PBC Visualization</a></li>
+</ul>
+</li>
+</ul>
+
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By Your Name
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2023.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>
