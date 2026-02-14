@@ -27,6 +27,6 @@ Use the launch buttons at the top of each page to run notebooks on Binder.
 - 8. ASE LJ fluid simulation
 
 ## Attribution
-This tutorial is done by **Suman** (with the help of **GPT-5.3-codex**).
+This tutorial is done by **Suman Saha** (with the help of **GPT-5.3-codex**).
 
 If you find any bug or in-correction, please report it to **24.sumansaha@gmail.com**.
