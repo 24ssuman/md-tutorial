@@ -36,5 +36,6 @@ sphinx:
   config:
     exclude_patterns:
       - README.md
+      - CONTEXT.md
       - _build
       - _build/**

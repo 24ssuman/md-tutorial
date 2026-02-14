@@ -13,4 +13,3 @@ Use the launch buttons at the top of each page to run notebooks on Binder.
 - 6. Umbrella sampling and WHAM
 - 7. Metadynamics
 - 8. ASE LJ fluid simulation
-- 9. ASE water box simulation

@@ -11,4 +11,3 @@ chapters:
   - file: notebooks/6.1_WHAM_detailed.ipynb
   - file: notebooks/7_meta_dynamics.ipynb
   - file: notebooks/8_ase_LJ_fluid_simulation.ipynb
-  - file: notebooks/9_ase_waterbox_simulation_not_working.ipynb
