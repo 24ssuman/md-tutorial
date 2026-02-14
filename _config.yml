@@ -1,6 +1,7 @@
 # Book settings
 title: Molecular Dynamics Tutorial for Beginners
-author: Your Name
+author: Suman Saha
+copyright: "2026"
 logo: ""
 
 # Force re-execution disabled for faster builds
@@ -29,6 +30,7 @@ html:
   use_repository_button: true
   use_issues_button: true
   home_page_in_navbar: true
+  extra_footer: "If you find any bug or in-correction, please report it to 24.sumansaha@gmail.com."
 
 sphinx:
   config:
