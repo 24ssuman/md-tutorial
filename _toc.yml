@@ -6,7 +6,7 @@ chapters:
   - file: notebooks/3_non_bonded_interactions.ipynb
   - file: notebooks/4_1D_simulations.ipynb
   - file: notebooks/5_sampling_challenge.ipynb
-  - file: notebooks/5.5_chossing_CVs.ipynb
+  - file: notebooks/5.5_choosing_CVs.ipynb
   - file: notebooks/6_umbrella_sampling.ipynb
   - file: notebooks/6.1_WHAM_detailed.ipynb
   - file: notebooks/7_meta_dynamics.ipynb
