@@ -1,24 +1,6 @@
-# MD Tutorial Interactive Website (Jupyter Book)
+https://24ssuman.github.io/md-tutorial/intro.html
 
-This directory is a standalone scaffold to publish your notebooks as an interactive GitHub Pages site using:
-- Jupyter Book (static site)
-- Binder + Thebe (interactive execution)
+## Attribution
+This tutorial is done by Suman Saha (with the help of GPT-5.3-codex).
 
-## Intro Page
-- https://24ssuman.github.io/md-tutorial/intro.html
-
-## What to edit before publishing
-- `_config.yml`:
-  - `repository.url`
-  - `repository.branch`
-- `.github/workflows/deploy.yml`:
-  - keep as-is unless your default branch is not `main`
-
-## Local build (test env)
-```bash
-conda run -n test pip install -r requirements-book.txt
-conda run -n test jupyter-book build .
-```
-
-## Publish
-Push this directory as a GitHub repo (or as repo root), then enable GitHub Pages via Actions.
+If you find any bug or in-correction, please report it to [24.sumansaha@gmail.com](mailto:24.sumansaha@gmail.com).
