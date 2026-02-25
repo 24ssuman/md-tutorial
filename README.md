@@ -4,6 +4,9 @@ This directory is a standalone scaffold to publish your notebooks as an interact
 - Jupyter Book (static site)
 - Binder + Thebe (interactive execution)
 
+## Intro Page
+- https://24ssuman.github.io/md-tutorial/intro.html
+
 ## What to edit before publishing
 - `_config.yml`:
   - `repository.url`
