@@ -7,3 +7,6 @@ __pycache__/
 CONTEXT.md
 *.egg-info/
 plan.md
+notebooks/*.traj
+notebooks/*.log
+notebooks/*.xyz
