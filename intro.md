@@ -9,6 +9,14 @@ Welcome! This is a beginner-friendly course that teaches Molecular Dynamics (MD)
 - **Tooling:** Python, NumPy, Matplotlib, SciPy, and ASE-based demonstrations.
 - **Goal:** build intuition first, then introduce practical simulation and enhanced-sampling workflows.
 
+## Recommended Reference
+
+For a deeper theoretical understanding, a highly recommended companion text is:
+
+> **Tuckerman, M. E.** — *Statistical Mechanics: Theory and Molecular Simulation*. Oxford University Press, 2010.
+
+This book covers the statistical mechanics foundations underlying virtually every topic in this tutorial, from Newtonian dynamics to free-energy methods.
+
 ## Before You Start
 
 You need Python installed on your computer. If you do not have Python, download it from [python.org](https://www.python.org/downloads/).
@@ -51,14 +59,25 @@ Each notebook contains text cells (explanations) and code cells (Python). Click 
 
 ## Course Modules
 
-1. Introduction to MD
-2. Physics of MD
-3. Non-bonded interactions
-4. 1D simulations
-5. Sampling challenge and CVs
-6. Umbrella sampling and WHAM
-7. Metadynamics
-8. ASE LJ fluid simulation
+### Core Track
+
+| Module | Title | What You Learn |
+|--------|-------|---------------|
+| 1 | Introduction to Molecular Dynamics | What MD is, why we simulate, essential concepts |
+| 2 | Physics of Molecular Dynamics | Newton's laws, force fields, Velocity Verlet, PBC |
+| 3 | Non-Bonded Interactions and Electrostatics | Lennard-Jones, Coulomb forces, Ewald summation, PME |
+| 4 | Simulating One-Dimensional Systems | Harmonic oscillator, Langevin thermostat, double-well |
+| 5 | The Sampling Challenge | Rare events, collective variables, free energy, PMF |
+| 6 | Umbrella Sampling and PMF Reconstruction | Harmonic bias, multi-window sampling, WHAM |
+| 7 | Metadynamics | Gaussian hill deposition, bias potential, free-energy reconstruction |
+| 8 | Multi-Particle LJ Simulation with ASE | ASE library, NVT simulation, radial distribution function |
+
+### Supplements
+
+| File | Title | Purpose |
+|------|-------|---------|
+| `5.5_choosing_CVs` | Choosing Good Collective Variables | How to pick CVs that resolve barriers in multi-dimensional systems |
+| `6.1_WHAM_detailed` | WHAM Walkthrough | Step-by-step derivation and interactive exploration of WHAM |
 
 ## Notes
 

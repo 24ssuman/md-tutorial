@@ -1,13 +1,27 @@
 format: jb-book
 root: intro
-chapters:
-  - file: notebooks/1_intro_to_MD.ipynb
-  - file: notebooks/2_physics_of_MD.ipynb
-  - file: notebooks/3_non_bonded_interactions.ipynb
-  - file: notebooks/4_1D_simulations.ipynb
-  - file: notebooks/5_sampling_challenge.ipynb
-  - file: notebooks/5.5_choosing_CVs.ipynb
-  - file: notebooks/6_umbrella_sampling.ipynb
-  - file: notebooks/6.1_WHAM_detailed.ipynb
-  - file: notebooks/7_meta_dynamics.ipynb
-  - file: notebooks/8_ase_LJ_fluid_simulation.ipynb
+parts:
+  - caption: Core Modules
+    chapters:
+      - file: notebooks/1_intro_to_MD.ipynb
+        title: "Module 1 — Introduction to Molecular Dynamics"
+      - file: notebooks/2_physics_of_MD.ipynb
+        title: "Module 2 — Physics of Molecular Dynamics"
+      - file: notebooks/3_non_bonded_interactions.ipynb
+        title: "Module 3 — Non-Bonded Interactions and Electrostatics"
+      - file: notebooks/4_1D_simulations.ipynb
+        title: "Module 4 — Simulating One-Dimensional Systems"
+      - file: notebooks/5_sampling_challenge.ipynb
+        title: "Module 5 — The Sampling Challenge"
+      - file: notebooks/6_umbrella_sampling.ipynb
+        title: "Module 6 — Umbrella Sampling and PMF Reconstruction"
+      - file: notebooks/7_meta_dynamics.ipynb
+        title: "Module 7 — Metadynamics"
+      - file: notebooks/8_ase_LJ_fluid_simulation.ipynb
+        title: "Module 8 — Multi-Particle LJ Simulation with ASE"
+  - caption: Supplements
+    chapters:
+      - file: notebooks/5.5_choosing_CVs.ipynb
+        title: "Supplement — Choosing Good Collective Variables"
+      - file: notebooks/6.1_WHAM_detailed.ipynb
+        title: "Supplement — WHAM Walkthrough"
