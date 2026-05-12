@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=64"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "md-tutorial"
@@ -16,3 +16,6 @@ dependencies = [
 
 [project.optional-dependencies]
 full = ["ase"]
+
+[tool.setuptools]
+packages = ["md_tutorial"]
