@@ -14,13 +14,7 @@ parse:
     - amsmath
     - dollarmath
 
-# Launch buttons for interactivity
-launch_buttons:
-  binderhub_url: "https://mybinder.org"
-  notebook_interface: "jupyterlab"
-  thebe: true
-
-# Repository metadata (edit these before publishing)
+# Repository metadata
 repository:
   url: https://github.com/24ssuman/md-tutorial
   path_to_book: .
@@ -39,6 +33,9 @@ sphinx:
       - custom.css
     exclude_patterns:
       - README.md
+      - plan.md
+      - requirements.txt
+      - pyproject.toml
       - CONTEXT.md
       - _build
       - _build/**

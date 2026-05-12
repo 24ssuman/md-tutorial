@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "md-tutorial"
+version = "1.0.0"
+description = "Beginner-friendly Molecular Dynamics tutorial with Jupyter notebooks"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "scipy",
+    "ipywidgets",
+]
+
+[project.optional-dependencies]
+full = ["ase"]
