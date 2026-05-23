@@ -1,42 +1,29 @@
-# Book settings
-title: Molecular Dynamics Tutorial for Beginners
-author: ""
-copyright: ""
-logo: ""
+title: Molecular Dynamics Tutorial
+author: Suman Saha
+description: A beginner-friendly, interactive, concept-first introduction to Molecular Dynamics and enhanced sampling.
 
-# Force re-execution disabled for faster builds
 execute:
   execute_notebooks: "off"
 
-# Parse and render settings
-parse:
-  myst_enable_extensions:
-    - amsmath
-    - dollarmath
-
-# Repository metadata
 repository:
   url: https://github.com/24ssuman/md-tutorial
-  path_to_book: .
   branch: main
 
 html:
-  use_repository_button: true
   use_issues_button: true
-  home_page_in_navbar: true
-  google_analytics_id: G-LQHSPSJ5WX
+  use_repository_button: true
 
 sphinx:
-  config:
-    html_static_path:
-      - _static
-    html_css_files:
-      - custom.css
-    exclude_patterns:
-      - README.md
-      - plan.md
-      - requirements.txt
-      - pyproject.toml
-      - CONTEXT.md
-      - _build
-      - _build/**
+  extra_extensions:
+    - sphinx.ext.mathjax
+
+exclude_patterns:
+  - plan.md
+  - README.md
+  - requirements.txt
+  - requirements-book.txt
+  - pyproject.toml
+  - LICENSE
+  - .antigravitycli
+  - .github
+  - md_tutorial.egg-info

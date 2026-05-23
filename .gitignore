@@ -10,3 +10,5 @@ plan.md
 notebooks/*.traj
 notebooks/*.log
 notebooks/*.xyz
+.antigravitycli/
+
