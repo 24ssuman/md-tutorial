@@ -41,7 +41,7 @@ source venv/bin/activate      # macOS / Linux
 ### Step 3 – Install the required packages
 
 ```bash
-pip install -e .
+pip install -e ".[full]"
 pip install jupyterlab
 ```
 
@@ -96,6 +96,6 @@ Each notebook contains text cells (explanations) and code cells (Python). Click 
 
 ## Attribution
 
-This tutorial was created by **Suman Saha** (with the help of **GPT-5.3-codex**).
+This tutorial was created by **Suman Saha**.
 
 If you find a bug or error, please report it to [24.sumansaha@gmail.com](mailto:24.sumansaha@gmail.com).

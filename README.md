@@ -39,9 +39,9 @@ source venv/bin/activate      # On macOS/Linux
 ```
 
 ### Step 3: Install the required packages
-Install the helper package in editable mode along with JupyterLab:
+Install the helper package in editable mode with all dependencies (including ASE) along with JupyterLab:
 ```bash
-pip install -e .
+pip install -e ".[full]"
 pip install jupyterlab
 ```
 

@@ -16,6 +16,9 @@ html:
 sphinx:
   extra_extensions:
     - sphinx.ext.mathjax
+  config:
+    html_css_files:
+      - custom.css
 
 exclude_patterns:
   - plan.md
