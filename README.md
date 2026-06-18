@@ -83,8 +83,10 @@ For a deeper theoretical and statistical mechanics foundation underlying virtual
 
 ---
 
-## 🤝 Attribution & Contact
+## 🤝 Attribution, License & Contact
 
 This tutorial was created by **Suman Saha**.
+
+This project is licensed under the [MIT License](LICENSE).
 
 If you find a bug, error, or have suggestions for improvements, please report it to [24.sumansaha@gmail.com](mailto:24.sumansaha@gmail.com).

@@ -94,8 +94,10 @@ Each notebook contains text cells (explanations) and code cells (Python). Click 
 | Notebooks are slow | Some modules run longer simulations; this is normal for MD. Reduce `n_steps` if needed. |
 | Wrong working directory | Start JupyterLab from the repository root (`md-tutorial/`), not from inside `notebooks/`. |
 
-## Attribution
+## Attribution & License
 
 This tutorial was created by **Suman Saha**.
+
+This project is licensed under the [MIT License](https://github.com/24ssuman/md-tutorial/blob/main/LICENSE).
 
 If you find a bug or error, please report it to [24.sumansaha@gmail.com](mailto:24.sumansaha@gmail.com).
