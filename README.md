@@ -15,15 +15,9 @@ A beginner-friendly, concept-first course that teaches the fundamentals of **Mol
 
 ---
 
-## 🚀 Viewing the Course
+## 📖 Course Website
 
-The whole course lives in [`interactive/`](interactive/) as static web pages. Serve the folder with any static web server and open the printed address:
-
-```bash
-python3 -m http.server 8000 --directory interactive
-```
-
-Then visit `http://localhost:8000`. The pages load KaTeX, highlight.js and Plotly from public CDNs, so an internet connection is needed.
+View the interactive course on [GitHub Pages](https://24ssuman.github.io/md-tutorial/intro.html). The pages load KaTeX, highlight.js and Plotly from public CDNs.
 
 ---
 
