@@ -1,14 +1,17 @@
-_build/
-.jupyter_cache/
-.ipynb_checkpoints/
-__pycache__/
-*.pyc
 .DS_Store
-CONTEXT.md
-*.egg-info/
-plan.md
-notebooks/*.traj
-notebooks/*.log
-notebooks/*.xyz
-.antigravitycli/
 
+# Jupyter Book / notebook sources: kept locally, not part of the interactive branch
+notebooks/
+md_tutorial/
+_static/
+.github/
+_build/
+_config.yml
+_toc.yml
+intro.md
+pyproject.toml
+requirements.txt
+requirements-book.txt
+
+# Local planning notes
+PLAN.md
