@@ -1,5 +1,7 @@
 # Molecular Dynamics Tutorial for Beginners
 
+Workspace maintenance notes are recorded in [AGENTS.md](AGENTS.md), [PLAN.md](PLAN.md), and the append-only [LOG.md](LOG.md). Local preview settings are documented in [.claude/README.md](.claude/README.md).
+
 [![Jupyter Notebook](https://img.shields.io/badge/Jupyter-Notebook-orange.svg?style=flat&logo=jupyter)](https://jupyter.org)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg?style=flat&logo=python)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](https://opensource.org/licenses/MIT)
