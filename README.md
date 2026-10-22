@@ -1,6 +1,6 @@
 # Molecular Dynamics Tutorial for Beginners
 
-Workspace maintenance notes are recorded in [AGENTS.md](AGENTS.md) and the append-only [LOG.md](LOG.md). Local preview settings are documented in [.claude/README.md](.claude/README.md).
+Workspace maintenance notes are recorded in [AGENTS.md](AGENTS.md) and the append-only [LOG.md](LOG.md).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](https://opensource.org/licenses/MIT)
 

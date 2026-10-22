@@ -15,3 +15,6 @@ requirements-book.txt
 
 # Local planning notes
 PLAN.md
+
+# Local Claude configuration
+.claude/
