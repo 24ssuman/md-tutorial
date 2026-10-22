@@ -1,5 +1,5 @@
 /* ==========================================================================
-   MD Tutorial — interactive edition: page shell, content widgets, plots, labs.
+   MD Tutorial: page shell, content widgets, plots, labs.
    Every module page loads this after physics.js. It exposes window.MD.
    ========================================================================== */
 (function () {
@@ -114,7 +114,7 @@
     const top = h("header", { class: "topbar" });
     top.innerHTML = `
       <button class="icon-btn" id="menu-btn" aria-label="Open navigation">${ICONS.menu}</button>
-      <a class="brand" href="index.html">MD Tutorial <span>· interactive edition</span></a>
+      <a class="brand" href="index.html">MD Tutorial</a>
       <div class="spacer"></div>
       ${mod ? `<button class="icon-btn" id="present-btn" aria-pressed="false" title="Presentation mode (P)">${ICONS.present}<span class="lbl">Present</span></button>` : ""}
       <button class="icon-btn" id="theme-btn" aria-label="Toggle dark mode"></button>
