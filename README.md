@@ -17,7 +17,7 @@ A beginner-friendly, concept-first course that teaches the fundamentals of **Mol
 
 ## 📖 Course Website
 
-View the interactive course on [GitHub Pages](https://24ssuman.github.io/md-tutorial/intro.html). The pages load KaTeX, highlight.js and Plotly from public CDNs.
+View the interactive course on [GitHub Pages](https://24ssuman.github.io/md-tutorial/interactive/01-intro.html). The pages load KaTeX, highlight.js and Plotly from public CDNs.
 
 ---
 
