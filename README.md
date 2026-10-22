@@ -1,7 +1,5 @@
 # Molecular Dynamics Tutorial for Beginners
 
-Workspace maintenance notes are recorded in [AGENTS.md](AGENTS.md) and the append-only [LOG.md](LOG.md).
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](https://opensource.org/licenses/MIT)
 
 A beginner-friendly, concept-first course that teaches the fundamentals of **Molecular Dynamics (MD)** and enhanced sampling from first principles. Everything runs live in your browser — read, drag the sliders, and play along. Nothing to install.
