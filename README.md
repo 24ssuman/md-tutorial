@@ -19,6 +19,20 @@ Welcome! This is a beginner-friendly, concept-first course that teaches the fund
 
 ---
 
+## 🖱️ Interactive Edition (no installation)
+
+The [`interactive/`](interactive/) folder contains a browser version of the whole course: every notebook's text, equations and Python code, with each figure rebuilt as a live, slider-driven simulation (a JavaScript port of the `md_tutorial` helpers). Nothing needs to be installed or executed — just read and play along. Press <kbd>P</kbd> on any module page for presentation mode.
+
+To view it locally, serve the folder with any static web server and open the printed address:
+
+```bash
+python -m http.server 8000 --directory interactive
+```
+
+Then visit `http://localhost:8000`. The pages load KaTeX, highlight.js and Plotly from public CDNs, so an internet connection is needed.
+
+---
+
 ## 🚀 Quickstart: Run the Notebooks Locally
 
 These tutorials are designed to be **downloaded and run on your own computer** to give you hands-on experience running and modifying simulations.

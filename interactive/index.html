@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MD Tutorial — Interactive Edition</title>
+<meta name="description" content="A beginner-friendly, concept-first introduction to Molecular Dynamics and enhanced sampling — read and play along in your browser, no installation required.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+</head>
+<body class="landing">
+<main id="main">
+<article class="content">
+
+<header class="hero">
+  <div class="eyebrow">Interactive edition</div>
+  <h1>Molecular Dynamics Tutorial for Beginners</h1>
+  <p class="lede">A beginner-friendly, concept-first course that teaches the fundamentals of Molecular Dynamics (MD) and enhanced sampling from first principles. Every simulation runs live in your browser — read, drag the sliders, and play along. Nothing to install.</p>
+  <div class="meta-row">
+    <a class="btn" href="01-intro.html" style="text-decoration:none">Start Module 1 →</a>
+    <span class="chip" id="progress-chip"><b>0 / 10</b> modules completed</span>
+  </div>
+</header>
+
+<div id="lab-hero"></div>
+
+<h2 id="about">About this course</h2>
+<ul>
+  <li><strong>Audience:</strong> beginners starting in molecular simulation with no prior experience.</li>
+  <li><strong>Style:</strong> concept-first mathematical and physical explanations followed immediately by clean, runnable Python/NumPy implementations.</li>
+  <li><strong>Tooling:</strong> pure Python, NumPy, Matplotlib, SciPy, and the Atomic Simulation Environment (ASE) for the 3D fluid capstone.</li>
+  <li><strong>Goal:</strong> build a solid mathematical and physical intuition first, then introduce practical simulation workflows and modern enhanced-sampling methods.</li>
+</ul>
+
+<div class="callout tip">
+  <div class="callout-title">How this edition works</div>
+  <p>Each module pairs concept-first explanations and equations with the Python code behind every step (in expandable <strong>Python code</strong> cells you can copy). Every figure is a live <strong>Interactive</strong> panel powered by a JavaScript port of the course's <code>md_tutorial</code> helpers, so you can change parameters and watch the result instantly. Press <kbd>P</kbd> on any module to switch to presentation mode, one step at a time.</p>
+</div>
+
+<h2 id="modules">Course modules</h2>
+<h3>🛠️ Core track</h3>
+<div class="module-grid" id="core-grid"></div>
+<h3>🔬 Supplements</h3>
+<div class="module-grid" id="supp-grid"></div>
+
+<h2 id="reference">Recommended reference book</h2>
+<p>For a deeper theoretical and statistical mechanics foundation underlying virtually every topic in this tutorial, we highly recommend the companion text:</p>
+<div class="callout key">
+  <p><strong>Tuckerman, M. E.</strong> — <em>Statistical Mechanics: Theory and Molecular Simulation</em>. Oxford University Press, 2010.</p>
+</div>
+<p>This book covers the statistical mechanics foundations underlying virtually every topic in this tutorial, from Newtonian dynamics to free-energy methods.</p>
+
+<h2 id="license">Attribution, license &amp; contact</h2>
+<p>This tutorial was created by <strong>Suman Saha</strong> and is licensed under the <a href="https://github.com/24ssuman/md-tutorial/blob/main/LICENSE">MIT License</a>. If you find a bug, error, or have suggestions for improvements, please report it to <a href="mailto:24.sumansaha@gmail.com">24.sumansaha@gmail.com</a>.</p>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script>
+(function () {
+  const P = MD.phys;
+  const done = MD.store.get("md-done", {});
+  const fill = (id, group) => {
+    document.getElementById(id).innerHTML = MD.MODULES.filter((m) => m.group === group).map((m) => `
+      <a class="module-card" href="${m.file}">
+        <span class="mnum"><span>${m.group === "Supplements" ? "Supplement " + m.num : "Module " + m.num}</span>${done[m.id] ? '<span class="done">✓ done</span>' : ""}</span>
+        <span class="mtitle">${m.title}</span>
+        <span class="mdesc">${m.desc}</span>
+      </a>`).join("");
+  };
+  fill("core-grid", "Core Modules");
+  fill("supp-grid", "Supplements");
+  document.getElementById("progress-chip").innerHTML = `<b>${Object.keys(done).length} / ${MD.MODULES.length}</b> modules completed`;
+
+  // A taste of what's inside: a Langevin particle hopping in a double well.
+  MD.lab("#lab-hero", {
+    title: "A particle hopping between two wells",
+    badge: "Live preview",
+    intro: "<p>Langevin dynamics in the double-well potential $V(x) = a x^4 - b x^2$ (Module 4). Raise the temperature until thermal kicks carry the particle over the barrier — the rare-event problem that Modules 5–7 tackle.</p>",
+    controls: [
+      { type: "range", id: "T", label: "Temperature k<sub>B</sub>T", min: 0.05, max: 1.5, step: 0.05, value: 0.35 },
+      { type: "range", id: "b", label: "Barrier parameter b", min: 1, max: 4, step: 0.1, value: 2, hint: "Barrier height = b²/4a (a = 1)." },
+      { type: "buttons", items: [{ id: "play", label: "Play / pause" }] },
+    ],
+    cols: 2,
+    panels: [{ id: "cv", kind: "canvas", aspect: 1.4 }, { id: "tr", kind: "plot" }],
+    live: true,
+    init(lab) {
+      const rng = P.rng(5);
+      const st = { x: -1, v: 0, xs: [], hops: 0, side: -1 };
+      lab.st = st;
+      lab.anim = lab.loop(() => {
+        const p = lab.p, f = (x) => P.force_dw(x, 1, p.b);
+        for (let i = 0; i < 6; i++) [st.x, st.v] = P.langevinBAOAB(st.x, st.v, 1, 0.02, 1.0, p.T, f, rng);
+        const s = Math.sign(st.x);
+        if (Math.abs(st.x) > Math.sqrt(p.b / 2) * 0.6 && s !== st.side) { st.side = s; st.hops++; }
+        st.xs.push(st.x);
+        if (st.xs.length > 600) st.xs.shift();
+        draw(lab);
+      });
+      lab.anim.start();
+    },
+    run(p, lab) { draw(lab); },
+    onButton(id, p, lab) { if (id === "play") lab.anim.running ? lab.anim.stop() : lab.anim.start(); },
+  });
+  let frame = 0;
+  function draw(lab) {
+    const p = lab.p, st = lab.st;
+    const { ctx, w, h } = lab.canvas("cv");
+    ctx.clearRect(0, 0, w, h);
+    const X = 2.0, Vmin = -p.b * p.b / 4, Vmax = 2.5;
+    const sx = (x) => ((x + X) / (2 * X)) * (w - 24) + 12;
+    const sy = (v) => h - 14 - ((v - Vmin) / (Vmax - Vmin)) * (h - 40);
+    ctx.strokeStyle = MD.css("--ink-2"); ctx.lineWidth = 2; ctx.beginPath();
+    P.linspace(-X, X, 200).forEach((x, i) => { const y = sy(P.potential_dw(x, 1, p.b)); i ? ctx.lineTo(sx(x), y) : ctx.moveTo(sx(x), y); });
+    ctx.stroke();
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = MD.css("--axis");
+    ctx.beginPath(); ctx.moveTo(12, sy(Vmin + p.T)); ctx.lineTo(w - 12, sy(Vmin + p.T)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = MD.css("--ink-3"); ctx.font = "12px system-ui, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText("thermal energy kT above the minimum", w - 14, sy(Vmin + p.T) + 14);
+    ctx.textAlign = "left";
+    ctx.fillStyle = MD.color("s2");
+    ctx.beginPath(); ctx.arc(sx(st.x), sy(P.potential_dw(st.x, 1, p.b)) - 8, 8, 0, 2 * Math.PI); ctx.fill();
+    ctx.fillStyle = MD.css("--ink"); ctx.font = "600 13px system-ui, sans-serif";
+    ctx.fillText(`barrier crossings: ${st.hops}`, 14, 20);
+    if (frame++ % 4 === 0) {
+      lab.plot("tr", [{ x: st.xs.map((_, i) => i), y: st.xs, color: "s1", hoverinfo: "skip" }],
+        { showlegend: false, xaxis: { title: { text: "time →" }, showticklabels: false }, yaxis: { title: { text: "position x" }, range: [-2, 2] }, margin: { t: 12 } },
+        { config: { staticPlot: true } });
+    }
+  }
+})();
+</script>
+</body>
+</html>

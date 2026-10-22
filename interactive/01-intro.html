@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 1 — Introduction to Molecular Dynamics · MD Tutorial</title>
+<meta name="description" content="What molecular dynamics is, why we simulate molecules, ensembles, periodic boundary conditions, and a Python refresher — with interactive demos.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+</head>
+<body data-module="01">
+<main id="main">
+<article class="content">
+
+<!-- ================================================================== -->
+<header class="hero step">
+  <div class="eyebrow">Module 1 · Core track</div>
+  <h1>Introduction to Molecular Dynamics</h1>
+  <p class="lede">A computational microscope for atoms: what molecular dynamics is, why we simulate molecules, and the Python toolkit we'll use for the rest of the course.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Prerequisites</b> None — this is the starting point</span>
+    <span class="chip"><b>What you run</b> Python refresher exercises and short code examples</span>
+    <span class="chip"><b>Expected runtime</b> A few minutes</span>
+  </div>
+
+  <div class="objectives">
+    <h3>What you will learn</h3>
+    <ul>
+      <li>What molecular dynamics is and why we simulate molecules.</li>
+      <li>The types of simulation approaches and their key components.</li>
+      <li>A refresher on the Python, NumPy, and chemistry concepts used throughout this course.</li>
+    </ul>
+  </div>
+  <div class="callout tip">
+    <div class="callout-title">How to use this page</div>
+    <p>The explanations and equations are paired with <strong>Python code</strong> cells you can expand and copy. The <strong>Interactive</strong> panels run live in your browser — drag sliders and watch the physics respond. Press <kbd>P</kbd> (or the <em>Present</em> button) to step through the module slide by slide.</p>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="What is MD?"><span class="lesson-num">Lesson 1</span>What is Molecular Dynamics?</h2>
+
+  <h3>Motivation: why simulate molecules?</h3>
+  <p>At its heart, chemistry seeks to understand how the arrangement and interaction of atoms and molecules dictate the properties of matter we observe macroscopically (like temperature, pressure, phase behavior, reaction rates).</p>
+  <p>Molecular Dynamics (MD) simulation is a powerful computational technique that allows us to bridge this gap. It acts like a <strong>“computational microscope,”</strong> letting us observe the motions of individual atoms and molecules over time based on the forces between them.</p>
+  <p>By simulating these microscopic interactions, we can:</p>
+  <ul>
+    <li>Understand the link between molecular structure and bulk properties.</li>
+    <li>Predict how materials will behave under different conditions.</li>
+    <li>Study processes that are difficult or impossible to observe directly experimentally (e.g., very fast reactions, behavior at extreme conditions).</li>
+    <li>Visualize complex molecular events like protein folding or drug binding.</li>
+  </ul>
+</section>
+
+<section class="step">
+  <h3>Types of molecular simulations</h3>
+  <p>While MD is our focus, it's good to know it's part of a broader family of molecular simulation techniques. Another common one is <strong>Monte Carlo (MC)</strong> simulation.</p>
+  <div class="cards">
+    <div class="card">
+      <h4>Molecular Dynamics (MD)</h4>
+      <p>Calculates the deterministic trajectory of particles over time by solving Newton's equations of motion ($F = ma$). It naturally includes the concept of time and dynamics.</p>
+    </div>
+    <div class="card">
+      <h4>Monte Carlo (MC)</h4>
+      <p>Uses random sampling to explore the possible configurations (arrangements) of particles in a system. It's excellent for calculating equilibrium thermodynamic properties but doesn't directly provide information about <em>how</em> the system evolves over time (dynamics).</p>
+    </div>
+  </div>
+  <p>We will focus exclusively on MD in this course.</p>
+
+  <div id="lab-md-vs-mc"></div>
+</section>
+
+<section class="step">
+  <h3>💡 Deep dive: ensembles in molecular dynamics</h3>
+  <p>When running a molecular simulation, we need to specify which macroscopic state parameters are held constant. These correspond to statistical mechanical <strong>ensembles</strong>:</p>
+  <table>
+    <thead><tr><th>Ensemble</th><th>Constant quantities</th><th>Physical analogy / when to use</th></tr></thead>
+    <tbody>
+      <tr><td><strong>NVE</strong> (Microcanonical)</td><td>Number of particles (N), Volume (V), Energy (E)</td><td>An isolated system (thermos bottle). Great for testing energy conservation and code correctness.</td></tr>
+      <tr><td><strong>NVT</strong> (Canonical)</td><td>Number of particles (N), Volume (V), Temperature (T)</td><td>A system in contact with a heat bath. Used for equilibration and simulating temperature-controlled processes.</td></tr>
+      <tr><td><strong>NPT</strong> (Isothermal-Isobaric)</td><td>Number of particles (N), Pressure (P), Temperature (T)</td><td>An open beaker in a laboratory. Most realistic for comparison with experiments under ambient conditions.</td></tr>
+    </tbody>
+  </table>
+
+  <div id="lab-ensembles"></div>
+
+  <div class="quiz" data-answer="1">
+    <p class="q">You want to check that your new integrator conserves energy. Which ensemble should you run?</p>
+    <ol class="choices">
+      <li>NVE — an isolated system, so total energy should stay constant</li>
+      <li>NVT — the heat bath keeps the energy fixed</li>
+      <li>NPT — it is the most realistic</li>
+    </ol>
+    <div class="explain">In NVE nothing exchanges energy with the outside, so any drift in total energy points at the integrator (or the time step). In NVT and NPT the energy fluctuates by design.</div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>📦 Periodic Boundary Conditions (PBC)</h3>
+  <p>To simulate bulk properties without artificial boundary surfaces (e.g. walls of a container), we wrap our system in a periodic box. When an atom leaves one side of the box, it enters from the opposite side with the exact same velocity.</p>
+  <p>This technique removes artificial boundary surface effects, allowing us to approximate infinite bulk behavior with only a few hundred or thousand particles!</p>
+
+  <div id="lab-pbc"></div>
+</section>
+
+<section class="step">
+  <h3>Essential components of MD</h3>
+  <p>A typical MD simulation involves several core ingredients:</p>
+  <div class="cards">
+    <div class="card"><div class="card-num">1</div><h4>Particles</h4><p>A defined set of atoms or molecules, each with a position, velocity, and mass.</p></div>
+    <div class="card"><div class="card-num">2</div><h4>Force field</h4><p>A mathematical model describing the potential energy of the system as a function of particle positions. The negative gradient of this potential energy gives the forces acting on each particle ($F = -\nabla V$).</p></div>
+    <div class="card"><div class="card-num">3</div><h4>Integrator</h4><p>An algorithm (like the Verlet algorithm we'll learn) to numerically solve Newton's equations of motion, updating particle positions and velocities over small time steps.</p></div>
+    <div class="card"><div class="card-num">4</div><h4>Thermostat / barostat</h4><p><em>Optional but common.</em> Algorithms to control the system's temperature and/or pressure, mimicking experimental conditions (e.g., constant temperature — NVT ensemble).</p></div>
+    <div class="card"><div class="card-num">5</div><h4>Boundary conditions</h4><p>Often Periodic Boundary Conditions (PBC) are used to simulate a small part of a larger, bulk system and avoid edge effects.</p></div>
+  </div>
+
+  <h3>Applications</h3>
+  <p>MD simulations are used across a vast range of scientific disciplines:</p>
+  <div class="cards">
+    <div class="card"><h4>💊 Drug discovery</h4><p>Simulating how potential drug molecules bind to target proteins.</p></div>
+    <div class="card"><h4>🧱 Materials science</h4><p>Understanding properties of polymers, metals, ceramics, and designing new materials.</p></div>
+    <div class="card"><h4>🧬 Biophysics</h4><p>Studying protein folding, enzyme mechanisms, DNA dynamics, lipid membrane behavior.</p></div>
+    <div class="card"><h4>⚗️ Chemistry</h4><p>Investigating reaction mechanisms, solvation processes, phase transitions.</p></div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Prerequisites &amp; Python refresher"><span class="lesson-num">Lesson 2</span>Prerequisites and Python Refresher</h2>
+
+  <h3>Chemistry concepts review</h3>
+  <p>This course assumes familiarity with basic general chemistry concepts, including:</p>
+  <ul>
+    <li><strong>Atoms and molecules:</strong> basic structure, elements, chemical formulas.</li>
+    <li><strong>Chemical bonds:</strong> covalent, ionic bonds.</li>
+    <li><strong>Intermolecular forces (IMFs):</strong> van der Waals forces (London dispersion, dipole-dipole), hydrogen bonding. Understanding that these forces dictate interactions between non-bonded molecules.</li>
+    <li><strong>Energy:</strong> kinetic energy ($KE = \frac{1}{2}mv^2$), potential energy (stored energy due to position or configuration), conservation of energy.</li>
+    <li><strong>Basic thermodynamics:</strong> concepts of temperature, pressure, heat.</li>
+  </ul>
+</section>
+
+<section class="step">
+  <h3>Python and NumPy refresher</h3>
+  <p>We will use Python for our coding exercises, relying heavily on the <code>NumPy</code> library for numerical operations (especially with arrays) and <code>Matplotlib</code> for plotting.</p>
+  <p>If you are new to Python or need a refresher, here are some basic examples. Each block shows the code together with the output it produces.</p>
+
+  <div class="tabset">
+    <div class="tab-panel" data-label="1 · Variables">
+      <p><strong>Basic variables and arithmetic</strong></p>
+<div class="code-static"><pre><code class="language-python"># Assigning variables
+a = 5
+b = 3.14
+message = "Hello, MD!"
+
+# Printing variables
+print(a)
+print(b)
+print(message)
+
+# Basic arithmetic
+sum_val = a + b
+product_val = a * 2
+print("Sum:", sum_val)
+print("Product:", product_val)</code></pre><pre class="output">5
+3.14
+Hello, MD!
+Sum: 8.14
+Product: 10</pre></div>
+    </div>
+
+    <div class="tab-panel" data-label="2 · Lists">
+      <p><strong>Lists</strong> (ordered, mutable sequences)</p>
+<div class="code-static"><pre><code class="language-python">my_list = [1, 2, 3, "apple", 5.0]
+print("Original list:", my_list)
+
+# Accessing elements (index starts at 0)
+print("First element:", my_list[0])
+print("Last element:", my_list[-1])
+
+# Adding elements
+my_list.append("banana")
+print("List after append:", my_list)
+
+# Length of list
+print("Length:", len(my_list))</code></pre><pre class="output">Original list: [1, 2, 3, 'apple', 5.0]
+First element: 1
+Last element: 5.0
+List after append: [1, 2, 3, 'apple', 5.0, 'banana']
+Length: 6</pre></div>
+    </div>
+
+    <div class="tab-panel" data-label="3 · NumPy arrays">
+      <p><strong>NumPy arrays</strong> (essential for numerical calculations). NumPy provides powerful array objects that are much more efficient for mathematical operations than standard Python lists. We'll use them extensively for positions, velocities, forces, etc.</p>
+<div class="code-static"><pre><code class="language-python">import numpy as np # Standard way to import numpy
+
+# Create a NumPy array from a list
+vec1 = np.array([1.0, 2.0, 3.0])
+vec2 = np.array([0.5, 0.5, 0.5])
+print("Vector 1:", vec1)
+print("Vector 2:", vec2)
+
+# Element-wise operations (unlike lists!)
+sum_vec = vec1 + vec2
+prod_vec = vec1 * 2.0
+print("Sum of vectors:", sum_vec)
+print("Vector 1 * 2:", prod_vec)
+
+# Dot product
+dot_prod = np.dot(vec1, vec2)
+print("Dot product:", dot_prod)
+
+# Creating arrays of zeros or ones
+zeros_array = np.zeros(5) # Array of 5 zeros
+ones_array = np.ones((2, 3)) # 2x3 array of ones
+print("Zeros:", zeros_array)
+print("Ones:", ones_array)
+
+# Mathematical functions
+print("Sine of vec1:", np.sin(vec1))</code></pre><pre class="output">Vector 1: [1. 2. 3.]
+Vector 2: [0.5 0.5 0.5]
+Sum of vectors: [1.5 2.5 3.5]
+Vector 1 * 2: [2. 4. 6.]
+Dot product: 3.0
+Zeros: [0. 0. 0. 0. 0.]
+Ones: [[1. 1. 1.]
+ [1. 1. 1.]]
+Sine of vec1: [0.84147098 0.90929743 0.14112001]</pre></div>
+    </div>
+
+    <div class="tab-panel" data-label="4 · Functions">
+      <p><strong>Functions</strong> (reusable blocks of code)</p>
+<div class="code-static"><pre><code class="language-python"># Define a simple function
+def greet(name):
+  """This function greets the person passed in as a parameter."""
+  print(f"Hello, {name}!") # f-strings are useful for formatting
+
+# Call the function
+greet("Student")
+greet("World")
+
+# Function with return value
+def calculate_kinetic_energy(mass, velocity):
+  """Calculates kinetic energy given mass and velocity."""
+  return 0.5 * mass * velocity**2
+
+ke = calculate_kinetic_energy(mass=2.0, velocity=10.0)
+print(f"Kinetic Energy: {ke}")</code></pre><pre class="output">Hello, Student!
+Hello, World!
+Kinetic Energy: 100.0</pre></div>
+    </div>
+
+    <div class="tab-panel" data-label="5 · Plotting">
+      <p><strong>Basic plotting with Matplotlib</strong> (for visualizing results)</p>
+<div class="code-static"><pre><code class="language-python">import matplotlib.pyplot as plt # Standard way to import pyplot
+
+# Sample data
+time = np.array([0, 1, 2, 3, 4, 5])
+position = np.array([0, 2, 4, 6, 8, 10])
+velocity = np.array([2, 2, 2, 2, 2, 2])
+
+# Create a figure and axes for plotting
+fig, ax = plt.subplots()
+
+# Plot position vs time
+ax.plot(time, position, marker='o', linestyle='-', label='Position')
+
+# Add labels and title
+ax.set_xlabel("Time (s)")
+ax.set_ylabel("Position (m)")
+ax.set_title("Simple Motion")
+ax.legend() # Show the legend
+ax.grid(True) # Add a grid
+
+# Display the plot
+plt.show()
+
+# --- Another plot on a separate figure ---
+fig2, ax2 = plt.subplots()
+ax2.plot(time, velocity, marker='s', linestyle='--', color='red', label='Velocity')
+ax2.set_xlabel("Time (s)")
+ax2.set_ylabel("Velocity (m/s)")
+ax2.set_title("Constant Velocity")
+ax2.legend()
+ax2.grid(True)
+plt.ylim(0, 3) # Set y-axis limits
+plt.show()</code></pre></div>
+      <p>The two figures this code produces are drawn live in the panel below — change the velocity and see both plots update.</p>
+    </div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Play along: the refresher, live</h3>
+  <div id="lab-ke"></div>
+  <div id="lab-plotting"></div>
+  <div class="quiz" data-answer="2">
+    <p class="q">With <code>vec1 = np.array([1.0, 2.0, 3.0])</code>, what does <code>vec1 * 2.0</code> give?</p>
+    <ol class="choices">
+      <li><code>[1.0, 2.0, 3.0, 1.0, 2.0, 3.0]</code> — the array is repeated</li>
+      <li><code>[2. 4. 6.]</code> — each element is multiplied</li>
+      <li>An error — you can't multiply an array by a number</li>
+    </ol>
+    <div class="explain">NumPy operations are element-wise. (Multiplying a plain Python <em>list</em> by 2 would repeat it — one reason we use arrays for positions and forces.)</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="step">
+  <hr>
+  <p>End of Module 1. In the next module, we will delve into the physics principles that form the foundation of MD simulations.</p>
+  <div class="takeaways">
+    <h2 data-toc="Key takeaways">📝 Key Takeaways</h2>
+    <ul>
+      <li><strong>Molecular Dynamics (MD)</strong> is a computational microscope that solves Newton's equations of motion to track atomic trajectories.</li>
+      <li>We use <strong>Thermostats</strong> and <strong>Barostats</strong> to simulate specific thermodynamic ensembles (NVE, NVT, NPT) matching realistic conditions.</li>
+      <li><strong>Periodic Boundary Conditions (PBC)</strong> allow us to study bulk properties of a liquid or solid without container edge artifacts by wrapping coordinates.</li>
+      <li>In Python, <strong>NumPy arrays</strong> are essential because they allow fast vector operations on coordinates, velocities, and forces.</li>
+    </ul>
+  </div>
+  <h3>➡️ What's next?</h3>
+  <p>In <a href="02-physics.html">Module 2 — Physics of Molecular Dynamics</a>, we will move from concepts to math and code. You will learn about <strong>force fields</strong>, derive forces from potential energy, and write your first numerical integrator using the <strong>Velocity Verlet</strong> algorithm!</p>
+</section>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script>
+(function () {
+  const P = MD.phys;
+
+  // ---------------------------------------------------------------- MD vs MC
+  // Same 2D anisotropic harmonic well, explored two ways.
+  (function () {
+    const kx = 1.0, ky = 2.3;
+    const V = (x, y) => 0.5 * (kx * x * x + ky * y * y);
+    let md, mc, rng;
+    function reset(p) {
+      rng = P.rng(7);
+      md = { x: 1.6, y: 0.2, vx: 0, vy: 1.1, path: [] };
+      mc = { x: 1.6, y: 0.2, path: [], acc: 0, tries: 0 };
+    }
+    MD.lab("#lab-md-vs-mc", {
+      title: "One landscape, two ways to explore it",
+      intro: "<p>Both panels explore the same 2D energy well (contours). <strong>MD</strong> integrates $F = ma$, so successive points form a continuous trajectory in time. <strong>MC</strong> proposes random moves and accepts them with the Metropolis rule — it visits the same region, but the order of visits carries no physical time.</p>",
+      controls: [
+        { type: "range", id: "T", label: "MC temperature k<sub>B</sub>T", min: 0.1, max: 2, step: 0.05, value: 0.8 },
+        { type: "range", id: "speed", label: "Steps per frame", min: 1, max: 10, step: 1, value: 3 },
+        { type: "buttons", items: [{ id: "play", label: "Play / pause" }, { id: "reset", label: "Reset", secondary: true }] },
+      ],
+      panels: [{ id: "cv", kind: "canvas", aspect: 2.2 }, { id: "ro", kind: "readouts" }],
+      live: false,
+      init(lab) {
+        reset();
+        lab.anim = lab.loop(() => { step(lab); draw(lab); });
+        draw(lab);
+      },
+      run(p, lab) { draw(lab); },
+      onButton(id, p, lab) {
+        if (id === "play") lab.anim.running ? lab.anim.stop() : lab.anim.start();
+        if (id === "reset") { reset(); draw(lab); }
+      },
+    });
+    function step(lab) {
+      const p = lab.p, dt = 0.05;
+      for (let s = 0; s < p.speed; s++) {
+        // MD: velocity Verlet in 2D
+        let ax = -kx * md.x, ay = -ky * md.y;
+        md.vx += 0.5 * ax * dt; md.vy += 0.5 * ay * dt;
+        md.x += md.vx * dt; md.y += md.vy * dt;
+        ax = -kx * md.x; ay = -ky * md.y;
+        md.vx += 0.5 * ax * dt; md.vy += 0.5 * ay * dt;
+        md.path.push([md.x, md.y]); md.n = (md.n || 0) + 1;
+        // MC: Metropolis trial move
+        const nx = mc.x + rng.normal(0, 0.35), ny = mc.y + rng.normal(0, 0.35);
+        const dE = V(nx, ny) - V(mc.x, mc.y);
+        mc.tries++;
+        if (dE <= 0 || rng() < Math.exp(-dE / p.T)) { mc.x = nx; mc.y = ny; mc.acc++; }
+        mc.path.push([mc.x, mc.y]);
+      }
+      if (md.path.length > 400) md.path.splice(0, md.path.length - 400);
+      if (mc.path.length > 400) mc.path.splice(0, mc.path.length - 400);
+    }
+    function draw(lab) {
+      const { ctx, w, h } = lab.canvas("cv");
+      ctx.clearRect(0, 0, w, h);
+      const half = w / 2, R = 2.4, sc = Math.min(half, h) / (2 * R) * 0.92;
+      [["Molecular Dynamics", md, "s1", true], ["Monte Carlo", mc, "s2", false]].forEach(([name, s, col, joined], k) => {
+        const cx = half * k + half / 2, cy = h / 2;
+        ctx.strokeStyle = MD.css("--grid"); ctx.lineWidth = 1;
+        for (let lvl = 0.25; lvl <= 3; lvl += 0.5) {
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, Math.sqrt(2 * lvl / kx) * sc, Math.sqrt(2 * lvl / ky) * sc, 0, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+        const c = MD.color(col);
+        ctx.strokeStyle = c; ctx.fillStyle = c;
+        s.path.forEach((pt, i) => {
+          const a = (i + 1) / s.path.length;
+          const X = cx + pt[0] * sc, Y = cy - pt[1] * sc;
+          if (joined && i > 0) {
+            const q = s.path[i - 1];
+            ctx.globalAlpha = a; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(cx + q[0] * sc, cy - q[1] * sc); ctx.lineTo(X, Y); ctx.stroke();
+          } else if (!joined) {
+            ctx.globalAlpha = a * 0.8; ctx.beginPath(); ctx.arc(X, Y, 2.2, 0, 2 * Math.PI); ctx.fill();
+          }
+        });
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(cx + s.x * sc, cy - s.y * sc, 6, 0, 2 * Math.PI); ctx.fill();
+        ctx.fillStyle = MD.css("--ink"); ctx.font = "600 13px system-ui, sans-serif";
+        ctx.fillText(name, half * k + 12, 20);
+        ctx.fillStyle = MD.css("--ink-3"); ctx.font = "12px system-ui, sans-serif";
+        ctx.fillText(joined ? "continuous trajectory in time" : "random accepted moves", half * k + 12, 36);
+      });
+      ctx.strokeStyle = MD.css("--border-strong"); ctx.beginPath(); ctx.moveTo(half, 10); ctx.lineTo(half, h - 10); ctx.stroke();
+      const E = 0.5 * (md.vx ** 2 + md.vy ** 2) + V(md.x, md.y);
+      lab.readouts("ro", [
+        { k: "MD total energy", v: E.toFixed(4) },
+        { k: "MD steps", v: String(md.n || 0) },
+        { k: "MC acceptance", v: mc.tries ? (100 * mc.acc / mc.tries).toFixed(0) + "%" : "—" },
+      ]);
+    }
+  })();
+
+  // ---------------------------------------------------------------- Ensembles
+  (function () {
+    const N = 40, H = 1.0;
+    let st, rng, hist;
+    function reset(p) {
+      rng = P.rng(3);
+      st = { L: 1.4, vp: 0, parts: [] };
+      for (let i = 0; i < N; i++) {
+        const sp = Math.sqrt(2 * 1.0), a = rng() * 2 * Math.PI; // T=1 initially
+        st.parts.push({ x: rng() * st.L, y: rng() * H, vx: rng.normal(0, 1), vy: rng.normal(0, 1) });
+      }
+      hist = { E: [], T: [], V: [] };
+    }
+    MD.lab("#lab-ensembles", {
+      title: "Ensemble explorer",
+      intro: "<p>A small 2D ideal gas in a box (temperature is the average kinetic energy per particle, so for this gas $T \\propto E$). Pick an ensemble and watch which quantities stay fixed and which fluctuate. In <strong>NVT</strong> a heat bath randomly re-draws particle velocities at the target temperature (an Andersen-style thermostat); in <strong>NPT</strong> the right wall is a movable piston pushed by a constant external pressure.</p>",
+      controls: [
+        { type: "select", id: "ens", label: "Ensemble", value: "NVE", options: [{ value: "NVE", label: "NVE — isolated (thermos)" }, { value: "NVT", label: "NVT — heat bath" }, { value: "NPT", label: "NPT — open beaker" }] },
+        { type: "range", id: "T", label: "Bath temperature T", min: 0.3, max: 3, step: 0.1, value: 1, hint: "Used by NVT and NPT." },
+        { type: "range", id: "Pext", label: "External pressure P", min: 5, max: 60, step: 1, value: 25, hint: "Used by NPT." },
+        { type: "buttons", items: [{ id: "play", label: "Play / pause" }, { id: "reset", label: "Reset", secondary: true }] },
+      ],
+      cols: 2,
+      panels: [{ id: "cv", kind: "canvas", aspect: 1.5 }, { id: "plot", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+      live: false,
+      init(lab) {
+        reset();
+        let frame = 0;
+        lab.anim = lab.loop(() => {
+          for (let k = 0; k < 4; k++) step(lab.p);
+          if (++frame % 3 === 0) record(lab);
+          draw(lab);
+        });
+        record(lab); draw(lab);
+      },
+      run(p, lab) { draw(lab); },
+      onButton(id, p, lab) {
+        if (id === "play") lab.anim.running ? lab.anim.stop() : lab.anim.start();
+        if (id === "reset") { reset(); record(lab); draw(lab); }
+      },
+    });
+    const ke = () => st.parts.reduce((s, q) => s + 0.5 * (q.vx * q.vx + q.vy * q.vy), 0);
+    function step(p) {
+      const dt = 0.004, M = 20;
+      let impulse = 0;
+      if (p.ens === "NPT") { st.vp += (-p.Pext * H / M) * dt; st.L += st.vp * dt; if (st.L < 0.4) { st.L = 0.4; st.vp = Math.abs(st.vp); } }
+      for (const q of st.parts) {
+        q.x += q.vx * dt; q.y += q.vy * dt;
+        if (q.x < 0) { q.x = -q.x; q.vx = -q.vx; }
+        if (q.y < 0) { q.y = -q.y; q.vy = -q.vy; }
+        if (q.y > H) { q.y = 2 * H - q.y; q.vy = -q.vy; }
+        if (q.x > st.L) {
+          if (p.ens === "NPT") {
+            if (q.vx > st.vp) { // elastic collision with the piston (mass M), particle mass 1
+              const u1 = q.vx, u2 = st.vp;
+              q.vx = ((1 - M) * u1 + 2 * M * u2) / (1 + M);
+              st.vp = ((M - 1) * u2 + 2 * u1) / (1 + M);
+            }
+            q.x = Math.min(q.x, st.L);
+          } else { q.x = 2 * st.L - q.x; q.vx = -q.vx; impulse += 2 * Math.abs(q.vx); }
+        }
+      }
+      if (p.ens !== "NVE") {
+        const s = Math.sqrt(p.T);
+        for (const q of st.parts) if (rng() < 0.01) { q.vx = rng.normal(0, s); q.vy = rng.normal(0, s); }
+      }
+    }
+    function record(lab) {
+      const K = ke();
+      hist.E.push(K); hist.T.push(K / N); hist.V.push(st.L * H);
+      for (const k in hist) if (hist[k].length > 300) hist[k].shift();
+      const p = lab.p;
+      const t = hist.E.map((_, i) => i);
+      lab.plot("plot", [
+        { x: t, y: hist.E.map((e) => e / hist.E[0]), name: "Energy E / E₀", color: "s1" },
+        { x: t, y: hist.V.map((v) => v / hist.V[0]), name: "Volume V / V₀", color: "s3" },
+      ], { xaxis: { title: { text: "time →" }, showticklabels: false }, yaxis: { title: { text: "relative to start" }, rangemode: "tozero" }, margin: { t: 40 } }, { config: { staticPlot: true } });
+      const Tavg = P.mean(hist.T.slice(-120));
+      const fixed = { NVE: ["N", "V", "E"], NVT: ["N", "V", "T"], NPT: ["N", "P", "T"] }[p.ens];
+      const tag = (q) => (fixed.includes(q) ? " · held constant" : " · fluctuates");
+      lab.readouts("ro", [
+        { k: "N" + tag("N"), v: String(N), cls: "good" },
+        { k: "V" + tag("V"), v: (st.L * H).toFixed(3), cls: fixed.includes("V") ? "good" : "" },
+        { k: "E" + tag("E"), v: K.toFixed(2), cls: fixed.includes("E") ? "good" : "" },
+        { k: "⟨T⟩ recent average" + tag("T"), v: Tavg.toFixed(2), cls: fixed.includes("T") ? "good" : "" },
+      ]);
+    }
+    function draw(lab) {
+      const { ctx, w, h } = lab.canvas("cv");
+      ctx.clearRect(0, 0, w, h);
+      const Lmax = 2.6, sc = Math.min((w - 20) / Lmax, (h - 20) / H);
+      const ox = 10, oy = (h - H * sc) / 2;
+      const p = lab.p;
+      // heat bath halo
+      if (p.ens !== "NVE") { ctx.fillStyle = MD.alpha("s2", 0.12); ctx.fillRect(ox - 6, oy - 6, st.L * sc + 12, H * sc + 12); }
+      ctx.strokeStyle = MD.css("--ink-2"); ctx.lineWidth = 2;
+      ctx.strokeRect(ox, oy, st.L * sc, H * sc);
+      if (p.ens === "NPT") { ctx.fillStyle = MD.css("--ink-2"); ctx.fillRect(ox + st.L * sc - 2, oy - 4, 6, H * sc + 8); ctx.fillText("→ P", ox + st.L * sc + 10, oy + H * sc / 2); }
+      ctx.fillStyle = MD.color("s1");
+      for (const q of st.parts) { ctx.beginPath(); ctx.arc(ox + q.x * sc, oy + (H - q.y) * sc, 4, 0, 2 * Math.PI); ctx.fill(); }
+      ctx.fillStyle = MD.css("--ink-3"); ctx.font = "12px system-ui, sans-serif";
+      ctx.fillText(p.ens === "NVE" ? "insulated walls — no energy in or out" : p.ens === "NVT" ? "heat bath exchanges energy" : "heat bath + movable piston", ox, oy - 12 > 12 ? oy - 12 : 14);
+    }
+  })();
+
+  // ---------------------------------------------------------------- PBC
+  (function () {
+    const N = 14;
+    let parts, rng, crossings;
+    function reset() {
+      rng = P.rng(11); crossings = 0;
+      parts = Array.from({ length: N }, () => ({ x: rng(), y: rng(), vx: rng.normal(0, 0.25), vy: rng.normal(0, 0.25) }));
+    }
+    MD.lab("#lab-pbc", {
+      title: "Periodic boundaries in action",
+      intro: "<p>The bold square is the simulation box; the faded tiles are its periodic images. Follow the highlighted atom: when it leaves through one face it re-enters through the opposite face with the same velocity, and its images move in lock-step.</p>",
+      controls: [
+        { type: "check", id: "images", label: "Show periodic images", value: true },
+        { type: "check", id: "wrap", label: "Wrap coordinates into the box", value: true },
+        { type: "range", id: "speed", label: "Speed", min: 0.2, max: 3, step: 0.1, value: 1 },
+        { type: "buttons", items: [{ id: "play", label: "Play / pause" }, { id: "reset", label: "Reset", secondary: true }] },
+      ],
+      panels: [{ id: "cv", kind: "canvas", aspect: 1.25 }, { id: "ro", kind: "readouts" }],
+      live: true,
+      init(lab) {
+        reset();
+        lab.anim = lab.loop(() => { step(lab.p); draw(lab); });
+        lab.anim.start();
+      },
+      run(p, lab) { draw(lab); },
+      onButton(id, p, lab) {
+        if (id === "play") lab.anim.running ? lab.anim.stop() : lab.anim.start();
+        if (id === "reset") { reset(); draw(lab); }
+      },
+    });
+    function step(p) {
+      const dt = 0.016 * p.speed;
+      parts.forEach((q, i) => {
+        q.x += q.vx * dt; q.y += q.vy * dt;
+        if (p.wrap) {
+          const ox = q.x, oy = q.y;
+          q.x -= Math.floor(q.x); q.y -= Math.floor(q.y);
+          if (i === 0 && (ox !== q.x || oy !== q.y)) crossings++;
+        }
+      });
+    }
+    function draw(lab) {
+      const { ctx, w, h } = lab.canvas("cv");
+      ctx.clearRect(0, 0, w, h);
+      const p = lab.p;
+      const box = Math.min(w, h) / 3.2, cx = w / 2 - box / 2, cy = h / 2 - box / 2;
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const center = i === 0 && j === 0;
+        if (!center && !p.images) continue;
+        const bx = cx + i * box, by = cy + j * box;
+        ctx.strokeStyle = center ? MD.css("--ink") : MD.css("--axis");
+        ctx.lineWidth = center ? 2 : 1;
+        ctx.setLineDash(center ? [] : [4, 4]);
+        ctx.strokeRect(bx, by, box, box);
+        ctx.setLineDash([]);
+        ctx.save();
+        if (!center) ctx.globalAlpha = 0.3;
+        parts.forEach((q, k) => {
+          ctx.fillStyle = k === 0 ? MD.color("s2") : MD.color("s1");
+          ctx.beginPath(); ctx.arc(bx + q.x * box, by + (1 - q.y) * box, k === 0 ? 6 : 4.5, 0, 2 * Math.PI); ctx.fill();
+        });
+        ctx.restore();
+      }
+      const q = parts[0];
+      const inBox = q.x >= 0 && q.x < 1 && q.y >= 0 && q.y < 1;
+      lab.readouts("ro", [
+        { k: "Highlighted atom x, y", v: `${q.x.toFixed(2)}, ${q.y.toFixed(2)}` },
+        { k: "Boundary crossings", v: String(crossings) },
+        { k: "Inside the central box?", v: inBox ? "yes" : "no — unwrapped", cls: inBox ? "good" : "bad" },
+      ]);
+    }
+  })();
+
+  // ---------------------------------------------------------------- KE function
+  MD.lab("#lab-ke", {
+    title: "calculate_kinetic_energy(mass, velocity)",
+    badge: "Try it",
+    intro: "<p>The function from tab 4, wired to sliders. The default inputs (<code>mass=2.0</code>, <code>velocity=10.0</code>) give the printed result <code>Kinetic Energy: 100.0</code>. Notice the curve: doubling the velocity quadruples $KE = \\frac{1}{2}mv^2$.</p>",
+    controls: [
+      { type: "range", id: "m", label: "mass", min: 0.5, max: 10, step: 0.5, value: 2 },
+      { type: "range", id: "v", label: "velocity", min: -20, max: 20, step: 0.5, value: 10 },
+    ],
+    panels: [{ id: "ro", kind: "readouts" }, { id: "plot", kind: "plot", cls: "short" }],
+    run(p, lab) {
+      const ke = 0.5 * p.m * p.v * p.v;
+      lab.readouts("ro", [{ k: "print(f\"Kinetic Energy: {ke}\")", v: `Kinetic Energy: ${Number.isInteger(ke) ? ke.toFixed(1) : ke}` }]);
+      const vs = P.linspace(-20, 20, 161);
+      lab.plot("plot", [
+        { x: vs, y: vs.map((v) => 0.5 * p.m * v * v), name: "KE(v)", color: "s1", hovertemplate: "v = %{x:.1f}<br>KE = %{y:.1f}<extra></extra>" },
+        { x: [p.v], y: [ke], mode: "markers", name: "current input", color: "s2", marker: { size: 11 }, hovertemplate: "KE = %{y:.2f}<extra></extra>" },
+      ], { showlegend: false, xaxis: { title: { text: "velocity" } }, yaxis: { title: { text: "kinetic energy" }, rangemode: "tozero" }, margin: { t: 16 } });
+    },
+  });
+
+  // ---------------------------------------------------------------- plotting cell
+  MD.lab("#lab-plotting", {
+    title: "Simple Motion & Constant Velocity",
+    badge: "Try it",
+    intro: "<p>The two Matplotlib figures from tab 5, redrawn interactively (hover for values, drag to zoom). The original data is <code>time = [0…5]</code> with a constant <code>velocity = 2</code>, so <code>position = velocity × time</code>.</p>",
+    controls: [
+      { type: "range", id: "v", label: "velocity (m/s)", min: 0, max: 3, step: 0.1, value: 2, hint: "The original y-limit of the velocity plot is 0–3." },
+      { type: "range", id: "x0", label: "starting position (m)", min: -5, max: 5, step: 0.5, value: 0 },
+    ],
+    cols: 2,
+    panels: [{ id: "pos", kind: "plot" }, { id: "vel", kind: "plot" }, { id: "arr", kind: "html", span: true }],
+    run(p, lab) {
+      const t = [0, 1, 2, 3, 4, 5];
+      const x = t.map((s) => p.x0 + p.v * s);
+      lab.plot("pos", [{ x: t, y: x, mode: "lines+markers", name: "Position", color: "s1", marker: { size: 8 } }],
+        { title: { text: "Simple Motion" }, showlegend: true, legend: { x: 0.02, y: 0.98, yanchor: "top", orientation: "v" }, xaxis: { title: { text: "Time (s)" } }, yaxis: { title: { text: "Position (m)" } } });
+      lab.plot("vel", [{ x: t, y: t.map(() => p.v), mode: "lines+markers", name: "Velocity", color: "s8", line: { dash: "dash" }, marker: { size: 8, symbol: "square" } }],
+        { title: { text: "Constant Velocity" }, showlegend: true, legend: { x: 0.02, y: 0.98, yanchor: "top", orientation: "v" }, xaxis: { title: { text: "Time (s)" } }, yaxis: { title: { text: "Velocity (m/s)" }, range: [0, 3] } });
+      lab.panel("arr").innerHTML = `<div class="code-static" style="margin:0"><pre class="output">position = np.array([${x.map((v) => +v.toFixed(2)).join(", ")}])
+velocity = np.array([${t.map(() => +p.v.toFixed(2)).join(", ")}])</pre></div>`;
+    },
+  });
+})();
+</script>
+</body>
+</html>

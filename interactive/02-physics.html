@@ -1,0 +1,1104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 2 — Physics of Molecular Dynamics · MD Tutorial</title>
+<meta name="description" content="Newton's laws, potential energy surfaces and force fields, Euler vs. Velocity Verlet, time-step stability, temperature from kinetic energy, periodic boundaries and the minimum image convention — with interactive demos.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+</head>
+<body data-module="02">
+<main id="main">
+<article class="content">
+
+<!-- ================================================================== -->
+<header class="hero step">
+  <div class="eyebrow">Module 2 · Core track</div>
+  <h1>Physics of Molecular Dynamics</h1>
+  <p class="lede">Welcome to Module 2! Here, we lay the theoretical groundwork for Molecular Dynamics simulations. We'll explore the fundamental physics principles, how we model interactions, handle long-range forces, integrate motion, and apply boundary conditions.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Prerequisites</b> Module 1 (Introduction to MD)</span>
+    <span class="chip"><b>What you run</b> Code that demonstrates Velocity Verlet, force calculations, and boundary conditions</span>
+    <span class="chip"><b>Expected runtime</b> A few minutes</span>
+  </div>
+
+  <div class="objectives">
+    <h3>What you will learn</h3>
+    <ul>
+      <li>The classical mechanics foundations of MD (Newton's equations).</li>
+      <li>Potential energy surfaces and force fields.</li>
+      <li>Numerical integration methods, especially Velocity Verlet.</li>
+      <li>Periodic boundary conditions and the minimum image convention.</li>
+    </ul>
+  </div>
+  <div class="callout tip">
+    <div class="callout-title">How to use this page</div>
+    <p>The explanations and equations are paired with <strong>Python code</strong> cells you can expand and copy. The <strong>Interactive</strong> panels re-implement the physics in JavaScript (a port of the course's <code>md_tutorial</code> potentials and integrators) and run live in your browser — drag sliders and watch the numbers respond. Press <kbd>P</kbd> (or the <em>Present</em> button) to step through the module slide by slide.</p>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Newton's laws"><span class="lesson-num">Lesson 1</span>Classical Mechanics and Newton's Laws</h2>
+  <p>At the core of MD simulations lies <strong>Classical Mechanics</strong>, specifically <strong>Newton's Second Law of Motion</strong>. For each atom $i$ in our system with mass $m_i$ and position vector $\mathbf{r}_i$, the law states:</p>
+  <div class="eq-card">$$ \mathbf{F}_i = m_i \mathbf{a}_i $$</div>
+  <p>where:</p>
+  <ul>
+    <li>$\mathbf{F}_i$ is the total force acting on atom $i$ due to all other atoms in the system.</li>
+    <li>$\mathbf{a}_i$ is the acceleration of atom $i$.</li>
+  </ul>
+  <p>Recall that acceleration is the second derivative of position with respect to time, $\mathbf{a}_i = \frac{d^2 \mathbf{r}_i}{dt^2}$, and the first derivative of velocity, $\mathbf{a}_i = \frac{d\mathbf{v}_i}{dt}$. So, we can rewrite Newton's second law as a second-order ordinary differential equation:</p>
+  <div class="eq-card">$$ \frac{d^2 \mathbf{r}_i}{dt^2} = \frac{\mathbf{F}_i(\mathbf{r}_1, \mathbf{r}_2, \ldots, \mathbf{r}_N)}{m_i} $$</div>
+  <p>The force $\mathbf{F}_i$ depends on the positions of <em>all</em> atoms in the system ($\mathbf{r}_1, \mathbf{r}_2, \ldots, \mathbf{r}_N$).</p>
+</section>
+
+<section class="step">
+  <div class="callout key">
+    <div class="callout-title">The goal of MD</div>
+    <p>If we know the positions and velocities of all atoms at a certain time $t$, and we have a way to calculate the force $\mathbf{F}_i$ on each atom, we can use Newton's equations to predict the positions and velocities at a slightly later time $t + \Delta t$. By repeating this process over many small time steps $\Delta t$, we simulate the trajectory of the system over time.</p>
+  </div>
+  <p>This process of predicting the future state based on the current state is called <strong>numerical integration</strong>. We'll explore specific algorithms for this in Lesson 3.</p>
+
+  <div id="lab-newton"></div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Potential energy &amp; force fields"><span class="lesson-num">Lesson 2</span>Potential Energy and Force Fields</h2>
+  <p>Where do the forces ($\mathbf{F}_i$) come from? In classical mechanics, forces often arise from a <strong>potential energy function</strong>, $V(\mathbf{r}_1, \mathbf{r}_2, \ldots, \mathbf{r}_N)$, which depends on the positions of all particles in the system. This function defines the <strong>Potential Energy Surface (PES)</strong>.</p>
+  <p>The force on atom $i$ is the negative gradient of the potential energy with respect to the coordinates of atom $i$:</p>
+  <div class="eq-card">$$ \mathbf{F}_i = -\nabla_{\mathbf{r}_i} V = -\left( \frac{\partial V}{\partial x_i}, \frac{\partial V}{\partial y_i}, \frac{\partial V}{\partial z_i} \right) $$</div>
+  <p>This means if we can define the potential energy $V$, we can calculate the forces needed for Newton's equations.</p>
+
+  <div id="lab-force"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">At the particle's current position the slope of the potential is $dV/dx = +3$. What is the force on the particle?</p>
+    <ol class="choices">
+      <li>$F = +3$ — it is pushed toward $+x$, up the slope</li>
+      <li>$F = -3$ — it is pushed toward $-x$, downhill</li>
+      <li>$F = 0$ — forces only appear at the minima</li>
+    </ol>
+    <div class="explain">$F = -dV/dx$, so a positive slope gives a negative force: the particle is always pushed downhill. The force is zero only where the slope is zero (minima, maxima such as the top of the double-well barrier).</div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Force fields</h3>
+  <p>In molecular simulations, the potential energy function $V$ is called a <strong>Force Field (FF)</strong>. It's an empirical model, meaning it's based on fitting mathematical functions to experimental data and/or quantum mechanical calculations. Force fields approximate the true quantum mechanical interactions with simpler classical functions, making calculations feasible for large systems.</p>
+  <p>A typical force field decomposes the total potential energy into several terms:</p>
+  <div class="eq-card">$$ V_{\text{total}} = V_{\text{bonded}} + V_{\text{non-bonded}} $$</div>
+  <div class="cards">
+    <div class="card"><div class="card-num">1</div><h4>Bonded terms</h4><p>Describe interactions between atoms connected by covalent bonds (bond stretching, angle bending, dihedral torsion). These are typically short-ranged.</p></div>
+    <div class="card"><div class="card-num">2</div><h4>Non-bonded terms</h4><p>Describe interactions between atoms that are not directly bonded (or are separated by several bonds).</p></div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h4>van der Waals interactions (Lennard-Jones potential)</h4>
+      <p>$$ V_{LJ}(r_{ij}) = 4\epsilon_{ij} \left[ \left(\frac{\sigma_{ij}}{r_{ij}}\right)^{12} - \left(\frac{\sigma_{ij}}{r_{ij}}\right)^{6} \right] $$</p>
+      <p>This term decays relatively quickly (approximately as $r^{-6}$ in the attractive tail).</p>
+    </div>
+    <div class="card">
+      <h4>Electrostatic interactions (Coulomb potential)</h4>
+      <p>$$ V_{\text{Coulomb}}(r_{ij}) = \frac{1}{4\pi\epsilon_0} \frac{q_i q_j}{r_{ij}} $$</p>
+      <p>This term decays more slowly (as $r^{-1}$).</p>
+    </div>
+  </div>
+  <p><strong>Parameterization:</strong> The constants in these equations are the <strong>force field parameters</strong>, derived to reproduce experimental or QM data.</p>
+</section>
+
+<section class="step">
+  <h3>Play along: short-range vs. long-range</h3>
+  <div id="lab-nonbonded"></div>
+
+  <details class="exercise">
+    <summary>Exercise — the double-well force by hand</summary>
+    <p>For the double-well potential $V(x) = a x^4 - b x^2$ used in the force explorer above:</p>
+    <ol>
+      <li>Derive the force $F(x) = -dV/dx$.</li>
+      <li>Find every position where the force vanishes. Which are minima and which is a maximum?</li>
+      <li>Check your answer by setting $a$ and $b$ in the explorer and dragging the particle onto those points.</li>
+    </ol>
+    <details class="reveal">
+      <summary>Show solution</summary>
+      <p>$F(x) = -4a x^3 + 2b x = 2x\,(b - 2a x^2)$. It vanishes at $x = 0$ (the top of the barrier, a maximum) and at $x = \pm\sqrt{b/2a}$ (the two minima). The barrier height is $V(0) - V(\pm\sqrt{b/2a}) = b^2/4a$; with $a = 1$, $b = 2$ the minima sit at $x = \pm 1$ and the barrier is $1$.</p>
+    </details>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Integrating the equations of motion"><span class="lesson-num">Lesson 3</span>Integrating the Equations of Motion</h2>
+  <p>Now that we know how to get forces from a potential ($F = -\nabla V$), how do we use them to update positions and velocities over time? We need a <strong>numerical integration algorithm</strong> to solve Newton's equations ($m\ddot{\mathbf{r}} = \mathbf{F}$).</p>
+  <p>A very simple approach is the <strong>Euler method</strong>, but it is generally not accurate or stable enough for MD. A much more popular and suitable algorithm is the <strong>Velocity Verlet algorithm</strong>.</p>
+
+  <h3>Velocity Verlet algorithm</h3>
+  <p>Given positions $\mathbf{r}$, velocities $\mathbf{v}$, accelerations $\mathbf{a}$, mass $m$, and time step $\Delta t$:</p>
+  <div class="cards">
+    <div class="card"><div class="card-num">1</div><h4>Half-step velocity update</h4><p>$$ \mathbf{v}\left(t + \tfrac{\Delta t}{2}\right) = \mathbf{v}(t) + \tfrac{1}{2}\,\mathbf{a}(t)\,\Delta t $$</p></div>
+    <div class="card"><div class="card-num">2</div><h4>Position update</h4><p>$$ \mathbf{r}(t + \Delta t) = \mathbf{r}(t) + \mathbf{v}\left(t + \tfrac{\Delta t}{2}\right)\Delta t $$</p></div>
+    <div class="card"><div class="card-num">3</div><h4>Compute forces and new acceleration</h4><p>$$ \mathbf{a}(t + \Delta t) = \frac{\mathbf{F}(\mathbf{r}(t + \Delta t))}{m} $$</p></div>
+    <div class="card"><div class="card-num">4</div><h4>Half-step velocity completion</h4><p>$$ \mathbf{v}(t + \Delta t) = \mathbf{v}\left(t + \tfrac{\Delta t}{2}\right) + \tfrac{1}{2}\,\mathbf{a}(t + \Delta t)\,\Delta t $$</p></div>
+  </div>
+  <div class="callout note">
+    <div class="callout-title">Notes</div>
+    <ul>
+      <li>This scheme is time-reversible and conserves energy well for small $\Delta t$.</li>
+      <li>Choose $\Delta t$ to resolve the fastest motions (typically around 1–2 fs in atomistic MD).</li>
+    </ul>
+  </div>
+</section>
+
+<section class="step">
+  <h3>The algorithm in code</h3>
+  <p>Here is one Velocity Verlet step written as a Python function. The force routine is passed in as an argument, so the same integrator works for any potential.</p>
+<div class="code-static"><pre><code class="language-python">def velocity_verlet_step(r_old, v_old, mass, dt, calculate_forces):
+    """Performs one Velocity Verlet step with half-step velocity updates."""
+    # 0. Compute force &amp; acceleration at current position
+    force_old = calculate_forces(r_old)
+    a_old = force_old / mass
+
+    # 1. Half-step velocity update
+    v_half = v_old + 0.5 * a_old * dt
+
+    # 2. Full position update using half-step velocity
+    r_new = r_old + v_half * dt
+
+    # 3. Compute force &amp; acceleration at new position
+    force_new = calculate_forces(r_new)
+    a_new = force_new / mass
+
+    # 4. Complete velocity update with new acceleration
+    v_new = v_half + 0.5 * a_new * dt
+
+    return r_new, v_new</code></pre></div>
+
+  <div id="lab-vv-steps"></div>
+</section>
+
+<section class="step">
+  <h3>⚖️ Comparison of integrators</h3>
+  <table>
+    <thead><tr><th>Property</th><th>Euler integrator</th><th>Velocity Verlet integrator</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Accuracy order</strong></td><td>1st order in $dt$</td><td>2nd order in $dt$</td></tr>
+      <tr><td><strong>Symplectic?</strong></td><td>No</td><td>Yes (preserves phase space volume)</td></tr>
+      <tr><td><strong>Energy conservation</strong></td><td>Poor (drifts or blows up rapidly)</td><td>Excellent (no long-term drift, stable oscillations)</td></tr>
+      <tr><td><strong>Computational cost</strong></td><td>Very low (1 force calculation/step)</td><td>Low (1 force calculation/step, very efficient)</td></tr>
+      <tr><td><strong>Verdict</strong></td><td>Do not use for physical dynamics</td><td>Standard workhorse of molecular simulations</td></tr>
+    </tbody>
+  </table>
+  <p>Every row of this table can be checked with the lab below: the trajectory and phase-space panels show symplectic vs. non-symplectic behaviour, the energy panel shows conservation vs. drift, and the last panel measures the accuracy order directly. (Velocity Verlet costs one <em>new</em> force evaluation per step: the force at $\mathbf{r}(t+\Delta t)$ is reused as the “old” force of the next step.)</p>
+
+  <div id="lab-euler-vv"></div>
+
+  <div class="quiz" data-answer="3">
+    <p class="q">Halving the time step $\Delta t$ reduces the error of a fixed-length simulation by roughly what factor for Velocity Verlet?</p>
+    <ol class="choices">
+      <li>No change — the error only depends on the total simulated time</li>
+      <li>A factor of 2 — like Euler</li>
+      <li>A factor of 4 — it is second order in $\Delta t$</li>
+    </ol>
+    <div class="explain">Velocity Verlet's global error scales as $\Delta t^2$, so halving $\Delta t$ cuts it by about $2^2 = 4$. Euler is first order: halving $\Delta t$ only halves its error. You can read both slopes off the log–log “accuracy order” panel.</div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>⚠️ What goes wrong? Stability &amp; time step selection</h3>
+  <p>A critical parameter in any MD simulation is the time step ($dt$). If $dt$ is chosen too small, the simulation takes too long to cover physical time. If $dt$ is chosen too large, the integrator fails to resolve high-frequency atomic motions (like bond vibrations).</p>
+  <p>Let's run a demonstration showing what happens when $dt$ is set too large. We will see the total energy blow up exponentially, causing the system to explode!</p>
+
+  <details class="code-cell">
+    <summary>Harmonic oscillator with a dangerously large time step</summary>
+<pre><code class="language-python"># Let's simulate the harmonic oscillator with a dangerously large time step
+dt_unstable = 0.8  # Dangerously large for k=1, mass=1 (normal period is ~6.28)
+n_steps_unstable = 50
+
+x_unst = np.zeros(n_steps_unstable)
+v_unst = np.zeros(n_steps_unstable)
+E_unst = np.zeros(n_steps_unstable)
+
+# Initial state
+x_unst[0] = 1.0
+v_unst[0] = 0.0
+
+mass = 1.0
+k = 1.0
+
+def force_h(x):
+    return -k * x
+
+x_curr, v_curr = x_unst[0], v_unst[0]
+for i in range(1, n_steps_unstable):
+    # Velocity Verlet step
+    f_curr = force_h(x_curr)
+    a_curr = f_curr / mass
+    v_half = v_curr + 0.5 * a_curr * dt_unstable
+    x_curr = x_curr + v_half * dt_unstable
+    f_next = force_h(x_curr)
+    a_next = f_next / mass
+    v_curr = v_half + 0.5 * a_next * dt_unstable
+
+    x_unst[i] = x_curr
+    v_unst[i] = v_curr
+    E_unst[i] = 0.5 * mass * v_curr**2 + 0.5 * k * x_curr**2
+
+import matplotlib.pyplot as plt
+plt.figure(figsize=(10, 4))
+plt.plot(E_unst, 'r-o', label='Total Energy (Unstable dt)')
+plt.xlabel('Step')
+plt.ylabel('Energy')
+plt.title('Energy Blow-up (Exploding Simulation) with dt = 0.8')
+plt.yscale('log')  # Energy blows up exponentially!
+plt.grid(True)
+plt.legend()
+plt.show()</code></pre>
+    <p>The figure this code produces is drawn live in the lab below, with the same defaults (<code>dt = 0.8</code>, 50 steps, <code>k = 1</code>, <code>mass = 1</code>, log-scale energy axis).</p>
+  </details>
+
+  <div id="lab-blowup"></div>
+
+  <div class="callout warn">
+    <div class="callout-title">Look closely at the default run</div>
+    <p>With Velocity Verlet and $dt = 0.8$ the energy of this oscillator <em>fluctuates</em> strongly (between about 0.42 and 0.50) but does <strong>not</strong> grow: for a harmonic oscillator, Velocity Verlet is stable as long as $\omega\,\Delta t &lt; 2$, i.e. $\Delta t &lt; 2/\omega = 2$ here. $dt = 0.8$ is still far too large for <em>accuracy</em> (only about 8 steps per period, against the rule of thumb of ≥ 10), but the true exponential blow-up appears once you push $dt$ past 2 — or immediately, at any $dt$, if you switch the lab to Euler, whose energy grows by a factor $1 + \omega^2\Delta t^2$ every step. (In the Python code above, <code>E_unst[0]</code> is never assigned and stays 0, which the log-scale plot silently drops; the lab plots the correct initial energy $E_0 = \tfrac12 k x_0^2 = 0.5$.)</p>
+  </div>
+
+  <details class="exercise">
+    <summary>Exercise — find the stability limit</summary>
+    <p>Set $k = 4$ (with $m = 1$) in the stability lab. Predict the largest stable Velocity Verlet time step, then confirm it with the slider. What time step would the “1/10 of the fastest period” rule of thumb recommend?</p>
+    <details class="reveal">
+      <summary>Show solution</summary>
+      <p>$\omega = \sqrt{k/m} = 2$, so Velocity Verlet is stable for $\Delta t &lt; 2/\omega = 1$. The period is $2\pi/\omega = \pi \approx 3.14$, so the rule of thumb suggests $\Delta t \approx 0.31$ — about three times smaller than the stability limit. Stable is not the same as accurate.</p>
+    </details>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Statistical mechanics in MD"><span class="lesson-num">Lesson 4</span>Statistical Mechanics in MD</h2>
+  <p>MD simulations generate microscopic information (positions, velocities). <strong>Statistical Mechanics</strong> connects this to macroscopic thermodynamic properties.</p>
+  <p><strong>Thermodynamic ensembles:</strong> collections of microscopic states under macroscopic constraints.</p>
+  <div class="cards">
+    <div class="card"><h4>Microcanonical (NVE)</h4><p>Constant Number (N), Volume (V), Energy (E). Natural for basic Verlet.</p></div>
+    <div class="card"><h4>Canonical (NVT)</h4><p>Constant N, V, Temperature (T). Requires a <strong>thermostat</strong>.</p></div>
+    <div class="card"><h4>Isothermal-Isobaric (NPT)</h4><p>Constant N, Pressure (P), T. Requires a <strong>thermostat</strong> and <strong>barostat</strong>.</p></div>
+  </div>
+
+  <h3>Temperature from kinetic energy</h3>
+  <p>Total kinetic energy:</p>
+  <div class="eq-card">$$ E_K(t) = \sum_{i=1}^{N} \frac{1}{2} m_i \lvert\mathbf{v}_i(t)\rvert^2 $$</div>
+  <p>Temperature estimate:</p>
+  <div class="eq-card">$$ T = \frac{2E_K}{N_{\mathrm{df}} k_B} $$</div>
+  <p>Here, $N_{\mathrm{df}}$ is the number of degrees of freedom (for example, $3N$ for $N$ unconstrained particles in 3D), and $k_B$ is the Boltzmann constant.</p>
+</section>
+
+<section class="step">
+  <h3>Play along: measuring temperature</h3>
+  <div id="lab-temperature"></div>
+
+  <div class="quiz" data-answer="1">
+    <p class="q">A 3D simulation of $N = 100$ unconstrained atoms has a total kinetic energy $E_K = 150$ (reduced units, $k_B = 1$). What temperature does it report?</p>
+    <ol class="choices">
+      <li>$T = 1.0$, since $N_{\mathrm{df}} = 300$</li>
+      <li>$T = 3.0$, since $N_{\mathrm{df}} = 100$</li>
+      <li>$T = 1.5$, since $T = E_K / N$</li>
+    </ol>
+    <div class="explain">Each atom has 3 velocity components, so $N_{\mathrm{df}} = 3N = 300$ and $T = 2 \times 150 / 300 = 1.0$.</div>
+  </div>
+
+  <details class="exercise">
+    <summary>Exercise — degrees of freedom</summary>
+    <p>A 3D box holds $N = 64$ atoms with $E_K = 96$ (reduced units, $k_B = 1$). (a) What is the temperature if all atoms are unconstrained? (b) Many MD codes remove the centre-of-mass momentum, which removes 3 degrees of freedom. What temperature would they report for the same $E_K$?</p>
+    <details class="reveal">
+      <summary>Show solution</summary>
+      <p>(a) $N_{\mathrm{df}} = 3 \times 64 = 192$, so $T = 2 \times 96 / 192 = 1.00$. (b) $N_{\mathrm{df}} = 189$, so $T = 192/189 \approx 1.016$. The difference matters only for small systems — try the “remove centre-of-mass momentum” box in the lab with small and large $N$.</p>
+    </details>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Periodic boundary conditions"><span class="lesson-num">Lesson 5</span>Periodic Boundary Conditions</h2>
+  <p>Simulating finite systems introduces unrealistic <strong>surface effects</strong>. To simulate bulk materials, we use <strong>Periodic Boundary Conditions (PBC)</strong>.</p>
+  <p>Imagine the simulation box is replicated infinitely in all directions.</p>
+  <ul>
+    <li>Forces include interactions with particles in neighboring image boxes.</li>
+    <li>When a particle exits one face, it re-enters the opposite face.</li>
+  </ul>
+  <p>For an animation of particles crossing the box faces, see the <a href="01-intro.html#periodic-boundary-conditions-pbc">PBC demo in Module 1</a>. Below we look at the two practical questions PBC raises: <em>which image</em> of a neighbour to interact with, and <em>how</em> to wrap coordinates back into the box.</p>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Minimum image convention"><span class="lesson-num">Lesson 6</span>Minimum Image Convention and PBC in Practice</h2>
+  <p><strong>Minimum Image Convention (MIC):</strong> When calculating the interaction between two particles $i$ and $j$ under PBC, we must consider the interaction between particle $i$ and the <em>closest</em> periodic image of particle $j$.</p>
+  <ul>
+    <li>Assume a box of lengths $L_x, L_y, L_z$.</li>
+    <li>Calculate the raw separation vector $\Delta \mathbf{r} = \mathbf{r}_j - \mathbf{r}_i = (\Delta x, \Delta y, \Delta z)$.</li>
+    <li>Adjust each component using the nearest image distance:
+      <div class="eq-card">$$ \Delta x' = \Delta x - L_x \times \operatorname{round}(\Delta x / L_x) $$</div>
+      (Similarly for $y$ and $z$. The <code>round()</code> function finds the nearest integer.)</li>
+    <li>The distance used for force/potential calculation is $r_{ij} = |\Delta \mathbf{r}'|$.</li>
+    <li>This ensures we don't interact with a distant image when a closer one is available and avoids double-counting interactions (especially important with cutoffs).</li>
+  </ul>
+
+  <div id="lab-mic"></div>
+</section>
+
+<section class="step">
+  <div class="quiz" data-answer="3">
+    <p class="q">In a box with $L_x = 10$, two particles have a raw separation $\Delta x = 7$. What separation does the minimum image convention use?</p>
+    <ol class="choices">
+      <li>$\Delta x' = 7$ — it is already inside the box</li>
+      <li>$\Delta x' = 3$</li>
+      <li>$\Delta x' = -3$</li>
+    </ol>
+    <div class="explain">$\operatorname{round}(7/10) = 1$, so $\Delta x' = 7 - 10 = -3$: the nearest image of $j$ sits 3 units to the <em>left</em> of $i$, through the periodic boundary. The sign matters for the direction of the force.</div>
+  </div>
+
+  <details class="exercise">
+    <summary>Exercise — minimum image by hand</summary>
+    <p>Box length $L = 10$. Particle $i$ is at $x_i = 1$ and particle $j$ at $x_j = 9$. Compute the raw separation, the minimum-image separation and the distance $r_{ij}$. Then reproduce it in the explorer by dragging the particles.</p>
+    <details class="reveal">
+      <summary>Show solution</summary>
+      <p>$\Delta x = 9 - 1 = 8$; $\operatorname{round}(0.8) = 1$; $\Delta x' = 8 - 10 = -2$; $r_{ij} = 2$. The image of $j$ at $x = -1$ is only 2 units from $i$, much closer than the copy inside the box.</p>
+    </details>
+  </details>
+
+  <h3>Visualizing PBC</h3>
+  <p>It's helpful to visualize how a particle “wraps around” the box. Imagine a 2D box:</p>
+  <ul>
+    <li>If a particle's $x$ coordinate becomes greater than $L_x$, its new position might be $x' = x - L_x$.</li>
+    <li>If $x$ becomes less than $0$, its new position might be $x' = x + L_x$.</li>
+  </ul>
+  <p>(Modulo arithmetic <code>x % L</code> can also be used carefully.)</p>
+  <div id="lab-wrap"></div>
+  <p>We will implement functions for MIC and coordinate wrapping in Module 3.</p>
+</section>
+
+<!-- ================================================================== -->
+<section class="step">
+  <hr>
+  <p>End of Module 2. We have covered the core physics: Newton's laws, potential energy functions (force fields), the issues of cutoffs and long-range forces (introducing PME), the Verlet algorithm for integration, the connection to thermodynamics (ensembles, temperature), and the concepts of Periodic Boundary Conditions (PBC) and the Minimum Image Convention (MIC). (Cutoffs, Ewald summation and PME are developed in full in Module 3.)</p>
+  <div class="takeaways">
+    <h2 data-toc="Key takeaways">📝 Key Takeaways</h2>
+    <ul>
+      <li><strong>Forces are derived</strong> as the negative gradient of the potential energy function ($F = -\nabla V(x)$).</li>
+      <li><strong>Velocity Verlet</strong> is a second-order, symplectic integrator that achieves excellent long-term energy conservation (unlike the simple Euler method).</li>
+      <li><strong>Time step stability</strong> requires that $dt$ be smaller than approximately 1/10 of the fastest vibrational period in the system ($dt \approx 1$–$2$ femtoseconds in real atomic systems containing hydrogen).</li>
+      <li>Setting the time step too large leads to <strong>exponential energy blow-up</strong> and simulation instability.</li>
+    </ul>
+  </div>
+  <h3>➡️ What's next?</h3>
+  <p>In <a href="03-nonbonded.html">Module 3 — Non-Bonded Interactions and Electrostatics</a>, we will study the forces that govern realistic atomic interactions: the short-range repulsive and attractive <strong>Lennard-Jones</strong> potential, and the challenging long-range <strong>Coulombic</strong> electrostatic interactions!</p>
+</section>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script>
+(function () {
+  const P = MD.phys;
+  const TAU = 2 * Math.PI;
+  const f4 = (v) => (v === null || v === undefined || !isFinite(v) ? "—" : MD.fmt(v, 4));
+  const mod = (a, b) => ((a % b) + b) % b;
+
+  /** Draw an arrow on a 2D canvas context. */
+  function arrow(ctx, x0, y0, x1, y1, color, width) {
+    const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy);
+    if (len < 2) return;
+    const ux = dx / len, uy = dy / len, hd = Math.min(10, len * 0.45);
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width || 2;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1 - ux * hd * 0.8, y1 - uy * hd * 0.8); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - ux * hd - uy * hd * 0.5, y1 - uy * hd + ux * hd * 0.5);
+    ctx.lineTo(x1 - ux * hd + uy * hd * 0.5, y1 - uy * hd - ux * hd * 0.5);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // ---------------------------------------------------------------- Lesson 1: stepping forward in time
+  (function () {
+    const k = 1, m = 1, x0 = 1, vy0 = 0.6;
+    const E0 = 0.5 * m * vy0 * vy0 + 0.5 * k * x0 * x0, WIN = 40; // energy plot shows the last WIN time units
+    let s;
+    const energy = (q) => 0.5 * m * (q.vx ** 2 + q.vy ** 2) + 0.5 * k * (q.x ** 2 + q.y ** 2);
+    function reset() { s = { x: x0, y: 0, vx: 0, vy: vy0, t: 0, n: 0, trail: [[x0, 0]], ht: [0], hE: [E0] }; }
+    function vvStep(q, dt) {
+      let ax = -k * q.x / m, ay = -k * q.y / m;
+      const vx = q.vx + 0.5 * ax * dt, vy = q.vy + 0.5 * ay * dt;
+      const x = q.x + vx * dt, y = q.y + vy * dt;
+      ax = -k * x / m; ay = -k * y / m;
+      return { x, y, vx: vx + 0.5 * ax * dt, vy: vy + 0.5 * ay * dt };
+    }
+    function step(dt) {
+      const nx = vvStep(s, dt);
+      Object.assign(s, nx);
+      s.t += dt; s.n++;
+      s.trail.push([s.x, s.y]);
+      if (s.trail.length > 300) s.trail.shift();
+      s.ht.push(s.t); s.hE.push(energy(s));
+      while (s.ht.length > 2 && s.ht[0] < s.t - WIN) { s.ht.shift(); s.hE.shift(); }
+    }
+    MD.lab("#lab-newton", {
+      title: "Predicting t + Δt from what we know at t",
+      intro: "<p>An atom on a 2D spring, $\\mathbf{F} = -k\\mathbf{r}$ (with $k = m = 1$). At every step we only know the current position, velocity (blue arrow) and force (orange arrow); from them we predict the state one time step $\\Delta t$ later (the hollow circle) and repeat. Each dot is one step. The dashed ellipse is the exact path. The plot below records the total energy at every step while the atom moves (exactly it would stay at 0.68).</p>",
+      controls: [
+        { type: "range", id: "dt", label: "Time step Δt", min: 0.05, max: 1.2, step: 0.05, value: 0.3 },
+        { type: "check", id: "exact", label: "Show exact path", value: true },
+        { type: "buttons", items: [{ id: "step", label: "Take one step" }, { id: "play", label: "Play / pause", secondary: true }, { id: "reset", label: "Reset", secondary: true }] },
+      ],
+      panels: [{ id: "cv", kind: "canvas", aspect: 1.9 }, { id: "E", kind: "plot", cls: "short" }, { id: "ro", kind: "readouts" }],
+      init(lab) {
+        reset();
+        let frame = 0;
+        lab.anim = lab.loop(() => { if (++frame % 6 === 0) { step(lab.p.dt); draw(lab); } });
+      },
+      run(p, lab) { draw(lab); },
+      onButton(id, p, lab) {
+        if (id === "step") { step(p.dt); draw(lab); }
+        if (id === "play") lab.anim.running ? lab.anim.stop() : lab.anim.start();
+        if (id === "reset") { reset(); draw(lab); }
+      },
+      foot: "<p><strong>What to try:</strong> step through a full orbit with a small $\\Delta t$, then reset and repeat with $\\Delta t = 1.0$ — the dots are much farther apart and the path visibly departs from the exact ellipse. Notice that the force arrow always points back to the centre ($\\mathbf{F} = -k\\mathbf{r}$), and watch the live energy plot: the total energy stays close to its starting value of 0.68 only when $\\Delta t$ is small compared with the period $2\\pi \\approx 6.28$ (press Play at $\\Delta t = 0.1$, then at $\\Delta t = 1.0$).</p>",
+    });
+    function draw(lab) {
+      const { ctx, w, h } = lab.canvas("cv");
+      ctx.clearRect(0, 0, w, h);
+      const sc = Math.min(w / 3.6, h / 2.1), cx = w / 2, cy = h / 2;
+      const X = (x) => cx + x * sc, Y = (y) => cy - y * sc;
+      if (lab.p.exact) {
+        ctx.strokeStyle = MD.css("--axis"); ctx.lineWidth = 1.2; ctx.setLineDash([5, 5]);
+        ctx.beginPath(); ctx.ellipse(cx, cy, x0 * sc, vy0 * sc, 0, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+      }
+      // anchor and spring
+      ctx.strokeStyle = MD.css("--ink-3"); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx - 6, cy); ctx.lineTo(cx + 6, cy); ctx.moveTo(cx, cy - 6); ctx.lineTo(cx, cy + 6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(X(s.x), Y(s.y)); ctx.stroke();
+      // trail
+      const c1 = MD.color("s1");
+      s.trail.forEach((pt, i) => {
+        const a = 0.25 + 0.75 * (i + 1) / s.trail.length;
+        ctx.globalAlpha = a; ctx.fillStyle = c1; ctx.strokeStyle = c1; ctx.lineWidth = 1.5;
+        if (i > 0) { const q = s.trail[i - 1]; ctx.beginPath(); ctx.moveTo(X(q[0]), Y(q[1])); ctx.lineTo(X(pt[0]), Y(pt[1])); ctx.stroke(); }
+        ctx.beginPath(); ctx.arc(X(pt[0]), Y(pt[1]), 3, 0, TAU); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      // predicted next position
+      const nx = vvStep(s, lab.p.dt);
+      ctx.strokeStyle = MD.css("--ink-2"); ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(X(s.x), Y(s.y)); ctx.lineTo(X(nx.x), Y(nx.y)); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(X(nx.x), Y(nx.y), 7, 0, TAU); ctx.stroke();
+      // particle with v and F arrows
+      ctx.fillStyle = MD.css("--ink"); ctx.beginPath(); ctx.arc(X(s.x), Y(s.y), 7, 0, TAU); ctx.fill();
+      arrow(ctx, X(s.x), Y(s.y), X(s.x + 0.8 * s.vx), Y(s.y + 0.8 * s.vy), MD.color("s1"), 2.5);
+      arrow(ctx, X(s.x), Y(s.y), X(s.x - 0.8 * k * s.x), Y(s.y - 0.8 * k * s.y), MD.color("s2"), 2.5);
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.fillStyle = MD.color("s1"); ctx.fillText("→ velocity v", 12, 20);
+      ctx.fillStyle = MD.color("s2"); ctx.fillText("→ force F = −k r", 12, 36);
+      ctx.fillStyle = MD.css("--ink-3"); ctx.fillText("○ predicted position at t + Δt", 12, 52);
+      const E = energy(s);
+      // live energy trace (redrawn with every step, i.e. every 6 animation frames while playing)
+      const t1 = Math.max(WIN, s.t), t0 = t1 - WIN;
+      lab.plot("E", [
+        { x: [t0, t1], y: [E0, E0], name: "exact (0.68)", color: "--ink-3", line: { dash: "dot", width: 1.5 }, hoverinfo: "skip" },
+        { x: s.ht, y: s.hE, mode: "lines+markers", name: "total energy", color: "s1", marker: { size: 4 }, hovertemplate: "t = %{x:.2f}<br>E = %{y:.4f}<extra></extra>" },
+        { x: [s.t], y: [E], mode: "markers", name: "now", color: "s8", marker: { size: 10 }, hoverinfo: "skip" },
+      ], { title: { text: "Total energy vs time" }, margin: { t: 60 }, xaxis: { title: { text: "time t" }, range: [t0, t1] }, yaxis: { title: { text: "E" } } });
+      lab.readouts("ro", [
+        { k: "time t", v: s.t.toFixed(2) },
+        { k: "steps taken", v: String(s.n) },
+        { k: "|r|", v: Math.hypot(s.x, s.y).toFixed(3) },
+        { k: "|v|", v: Math.hypot(s.vx, s.vy).toFixed(3) },
+        { k: "|F| = k|r|", v: (k * Math.hypot(s.x, s.y)).toFixed(3) },
+        { k: "total energy (start 0.68)", v: E.toFixed(4) },
+      ]);
+    }
+  })();
+
+  // ---------------------------------------------------------------- Lesson 2: force from potential
+  MD.lab("#lab-force", {
+    title: "Force = minus the slope of the potential",
+    intro: "<p>Drag the particle along $x$. The dashed line is the tangent to $V(x)$ — its slope is $dV/dx$ — and the red arrow is the force $F = -dV/dx$, which always points <em>downhill</em>. The right panel plots $F(x)$ for every position. Both potentials come from the course's <code>md_tutorial.potentials</code> module: $V = \\tfrac12 k x^2$ and $V = a x^4 - b x^2$.</p>",
+    controls: [
+      { type: "select", id: "pot", label: "Potential V(x)", value: "dw", options: [{ value: "sh", label: "Harmonic: ½ k x²" }, { value: "dw", label: "Double well: a x⁴ − b x²" }] },
+      { type: "range", id: "x", label: "Particle position x", min: -2.2, max: 2.2, step: 0.01, value: 0.4 },
+      { type: "range", id: "k", label: "k (harmonic)", min: 0.2, max: 4, step: 0.1, value: 1 },
+      { type: "range", id: "a", label: "a (double well)", min: 0.1, max: 2, step: 0.05, value: 1 },
+      { type: "range", id: "b", label: "b (double well)", min: 0, max: 4, step: 0.1, value: 2 },
+    ],
+    cols: 2,
+    panels: [{ id: "V", kind: "plot" }, { id: "F", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    run(p, lab) {
+      const sh = p.pot === "sh";
+      const V = sh ? (x) => P.potential_sh(x, p.k) : (x) => P.potential_dw(x, p.a, p.b);
+      const F = sh ? (x) => P.force_sh(x, p.k) : (x) => P.force_dw(x, p.a, p.b);
+      const xs = P.linspace(-2.4, 2.4, 241);
+      const Vs = xs.map(V), Fs = xs.map(F);
+      const x = p.x, Vx = V(x), Fx = F(x);
+      const hh = 1e-4, slope = (V(x + hh) - V(x - hh)) / (2 * hh);
+      const lo = P.min(Vs), hi = P.max(Vs), pad = 0.08 * (hi - lo || 1);
+      const tl = 0.5;
+      const len = Math.max(-0.9, Math.min(0.9, 0.25 * Fx));
+      const ann = Math.abs(len) > 0.02 ? [{ x: x + len, y: Vx, ax: x, ay: Vx, xref: "x", yref: "y", axref: "x", ayref: "y", text: "", showarrow: true, arrowhead: 3, arrowsize: 1.1, arrowwidth: 2.5, arrowcolor: "s8" }] : [];
+      lab.plot("V", [
+        { x: xs, y: Vs, name: "V(x)", color: "s1", hoverinfo: "skip" },
+        { x: [x - tl, x + tl], y: [Vx - slope * tl, Vx + slope * tl], name: "tangent (slope dV/dx)", color: "s3", line: { dash: "dash" }, hoverinfo: "skip" },
+        { x: [x], y: [Vx], mode: "markers", name: "particle", color: "s8", marker: { size: 12 }, hovertemplate: "x = %{x:.2f}<br>V = %{y:.3f}<extra></extra>" },
+      ], { title: { text: "Potential energy V(x)" }, xaxis: { title: { text: "x" }, range: [-2.4, 2.4] }, yaxis: { title: { text: "V(x)" }, range: [lo - pad, hi + pad] }, annotations: ann, margin: { t: 60 } });
+      const flo = P.min(Fs), fhi = P.max(Fs), fpad = 0.08 * (fhi - flo || 1);
+      lab.plot("F", [
+        { x: xs, y: Fs, name: "F(x) = −dV/dx", color: "s2", hoverinfo: "skip" },
+        { x: [x], y: [Fx], mode: "markers", name: "particle", color: "s8", marker: { size: 12 }, hovertemplate: "x = %{x:.2f}<br>F = %{y:.3f}<extra></extra>" },
+      ], {
+        title: { text: "Force F(x)" }, xaxis: { title: { text: "x" }, range: [-2.4, 2.4] }, yaxis: { title: { text: "F(x)" }, range: [flo - fpad, fhi + fpad] }, margin: { t: 60 },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, line: { color: "--axis", width: 1 } }],
+      });
+      const dir = Math.abs(Fx) < 1e-3 ? "≈ 0 (stationary point)" : Fx > 0 ? "→ toward +x" : "← toward −x";
+      const items = [
+        { k: "V(x)", v: Vx.toFixed(3) },
+        { k: "dV/dx (finite difference)", v: slope.toFixed(3) },
+        { k: "F(x) = −dV/dx", v: Fx.toFixed(3) },
+        { k: "force direction", v: dir },
+      ];
+      if (sh) items.push({ k: "minimum", v: "x = 0" });
+      else if (p.b > 0) {
+        items.push({ k: "minima ±√(b/2a)", v: "±" + Math.sqrt(p.b / (2 * p.a)).toFixed(3) });
+        items.push({ k: "barrier b²/4a", v: (p.b * p.b / (4 * p.a)).toFixed(3) });
+      } else items.push({ k: "minimum", v: "x = 0 (no barrier when b = 0)" });
+      lab.readouts("ro", items);
+    },
+    foot: "<p><strong>What to try:</strong> (1) In the double well, place the particle exactly at a minimum ($x = \\pm 1$ for $a = 1$, $b = 2$) and at the barrier top $x = 0$: the tangent is flat and the force vanishes in both cases — but only the minima are stable. (2) Just to the right of $x = 0$ the force points <em>away</em> from the barrier. (3) Switch to the harmonic potential: $F(x) = -kx$ is a straight line whose steepness is set by $k$. (4) Compare the finite-difference slope with the analytic force — they agree to many digits; that is a standard way to test a force routine.</p>",
+  });
+
+  // ---------------------------------------------------------------- Lesson 2: LJ vs Coulomb decay
+  MD.lab("#lab-nonbonded", {
+    title: "Lennard-Jones vs. Coulomb: how fast do they decay?",
+    intro: "<p>The two non-bonded terms of a force field, in reduced units ($\\tfrac{1}{4\\pi\\epsilon_0} = 1$). Left: the potentials themselves. Right: their magnitudes on log–log axes, where a power law $r^{-n}$ is a straight line of slope $-n$. The dashed vertical line is a cutoff distance $r_c$ beyond which a simulation might ignore the interaction.</p>",
+    controls: [
+      { type: "range", id: "eps", label: "LJ well depth ε", min: 0.2, max: 2, step: 0.1, value: 1 },
+      { type: "range", id: "sig", label: "LJ size σ", min: 0.8, max: 1.5, step: 0.05, value: 1 },
+      { type: "range", id: "qq", label: "Charge product q<sub>i</sub>q<sub>j</sub>", min: -2, max: 2, step: 0.25, value: -1, hint: "Negative = opposite charges (attractive)." },
+      { type: "range", id: "rc", label: "Cutoff r<sub>c</sub>", min: 1.5, max: 10, step: 0.5, value: 2.5 },
+    ],
+    cols: 2,
+    panels: [{ id: "V", kind: "plot" }, { id: "decay", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    run(p, lab) {
+      const coul = (r) => p.qq / r;
+      const rs = P.linspace(0.85 * p.sig, 6, 400);
+      const rcLine = (yref) => ({ type: "line", x0: p.rc, x1: p.rc, yref, y0: 0, y1: 1, line: { color: "--ink-3", width: 1.5, dash: "dash" } });
+      lab.plot("V", [
+        { x: rs, y: rs.map((r) => P.lj(r, p.eps, p.sig)), name: "Lennard-Jones", color: "s1", hovertemplate: "r = %{x:.2f}<br>V = %{y:.3f}<extra></extra>" },
+        { x: rs, y: rs.map(coul), name: "Coulomb", color: "s2", hovertemplate: "r = %{x:.2f}<br>V = %{y:.3f}<extra></extra>" },
+      ], {
+        title: { text: "Pair potentials V(r)" }, margin: { t: 60 },
+        xaxis: { title: { text: "distance r" }, range: [0.8 * p.sig, 6] }, yaxis: { title: { text: "V(r)" }, range: [-3, 3] },
+        shapes: [rcLine("paper"), { type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, line: { color: "--axis", width: 1 } }],
+      });
+      const rl = P.linspace(Math.log10(1.15 * p.sig), Math.log10(30), 300).map((e) => 10 ** e);
+      const traces = [{ x: rl, y: rl.map((r) => Math.abs(P.lj(r, p.eps, p.sig))), name: "|V_LJ|  (tail ∝ r⁻⁶)", color: "s1" }];
+      if (p.qq !== 0) traces.push({ x: rl, y: rl.map((r) => Math.abs(coul(r))), name: "|V_Coulomb|  (∝ r⁻¹)", color: "s2" });
+      lab.plot("decay", traces, {
+        title: { text: "Decay on log–log axes" }, margin: { t: 60 },
+        xaxis: { title: { text: "distance r" }, type: "log" }, yaxis: { title: { text: "|V(r)|" }, type: "log", exponentformat: "power" },
+        shapes: [rcLine("paper")],
+      });
+      const vlj = P.lj(p.rc, p.eps, p.sig), vc = coul(p.rc);
+      lab.readouts("ro", [
+        { k: "LJ minimum r = 2^(1/6) σ", v: (2 ** (1 / 6) * p.sig).toFixed(3) },
+        { k: "V_LJ(r_c)", v: f4(vlj) },
+        { k: "|V_LJ(r_c)| / ε", v: (100 * Math.abs(vlj) / p.eps).toFixed(2) + "%", cls: Math.abs(vlj) / p.eps < 0.02 ? "good" : "" },
+        { k: "V_Coulomb(r_c)", v: f4(vc) },
+        { k: "|V_C(r_c)| / |V_C(σ)| = σ/r_c", v: (100 * p.sig / p.rc).toFixed(1) + "%", cls: p.qq !== 0 ? "bad" : "" },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> at the default $r_c = 2.5\\sigma$ the LJ interaction has already fallen to under 2% of its well depth, while the Coulomb term still keeps 40% of its contact value. Slide $r_c$ out to 10: LJ becomes utterly negligible, Coulomb is still at 10%. Worse, in 3D the number of neighbours at distance $r$ grows like $r^2$, so for Coulomb the far-away contributions do not die out at all — this is why simple cutoffs work for LJ but electrostatics needs special methods (Ewald summation, PME), the subject of Module 3.</p>",
+  });
+
+  // ---------------------------------------------------------------- Lesson 3: VV sub-steps
+  (function () {
+    const k = 1, m = 1;
+    const force = (x) => -k * x;
+    const STAGES = [
+      ["0. Compute force &amp; acceleration at current position", "a_old = F(r_old) / m", "a"],
+      ["1. Half-step velocity update", "v_half = v_old + ½·a_old·Δt", "vh"],
+      ["2. Full position update using half-step velocity", "r_new = r_old + v_half·Δt", "rn"],
+      ["3. Compute force &amp; acceleration at new position", "a_new = F(r_new) / m", "an"],
+      ["4. Complete velocity update with new acceleration", "v_new = v_half + ½·a_new·Δt", "vn"],
+    ];
+    let st, pts, dtUsed = null;
+    function reset(dt) {
+      dtUsed = dt;
+      st = { r: 1, v: 0, a: null, vh: null, rn: null, an: null, vn: null, stage: -1, n: 0 };
+      pts = [[1, 0]];
+    }
+    function sub() {
+      const dt = dtUsed;
+      if (st.stage === 4) st = { r: st.rn, v: st.vn, a: null, vh: null, rn: null, an: null, vn: null, stage: -1, n: st.n + 1 };
+      st.stage++;
+      if (st.stage === 0) st.a = force(st.r) / m;
+      else if (st.stage === 1) { st.vh = st.v + 0.5 * st.a * dt; pts.push([st.r, st.vh]); }
+      else if (st.stage === 2) { st.rn = st.r + st.vh * dt; pts.push([st.rn, st.vh]); }
+      else if (st.stage === 3) st.an = force(st.rn) / m;
+      else if (st.stage === 4) {
+        st.vn = st.vh + 0.5 * st.an * dt; pts.push([st.rn, st.vn]);
+        if (pts.length > 1 + 3 * 60) pts.splice(0, 3); // keep the last 60 full steps (index 0 stays a full-step point)
+      }
+    }
+    MD.lab("#lab-vv-steps", {
+      title: "velocity_verlet_step, one line at a time",
+      badge: "Try it",
+      intro: "<p>The function above applied to a harmonic oscillator ($k = m = 1$, start at $r = 1$, $v = 0$). Click <em>Next sub-step</em> to execute one numbered block of the code. In phase space (position horizontally, velocity vertically) the two half-kicks move the state vertically and the drift moves it horizontally — the “kick–drift–kick” pattern of Velocity Verlet. The dashed circle is the exact constant-energy orbit.</p>",
+      controls: [
+        { type: "range", id: "dt", label: "Time step Δt", min: 0.1, max: 1.5, step: 0.05, value: 0.5, hint: "Changing Δt restarts from r = 1, v = 0." },
+        { type: "buttons", items: [{ id: "sub", label: "Next sub-step" }, { id: "full", label: "Full step", secondary: true }, { id: "reset", label: "Reset", secondary: true }] },
+      ],
+      cols: 2,
+      live: "change",
+      panels: [{ id: "phase", kind: "plot", cls: "tall" }, { id: "tbl", kind: "html" }],
+      run(p, lab) {
+        if (dtUsed !== p.dt) reset(p.dt);
+        draw(lab);
+      },
+      onButton(id, p, lab) {
+        if (dtUsed !== p.dt || id === "reset") reset(p.dt);
+        if (id === "sub") sub();
+        if (id === "full") { do { sub(); } while (st.stage !== 4); }
+        draw(lab);
+      },
+      foot: "<p><strong>What to try:</strong> watch the staircase pattern: vertical (kick), horizontal (drift), vertical (kick). After each full step the point lands back near the dashed circle — energy is nearly conserved. Raise $\\Delta t$ to 1.2: the half-step velocity strays far off the circle, yet the full-step points still stay on a closed (slightly squashed) orbit. Note that step 0 of the next call recomputes the force that step 3 just produced; a production code caches it, which is why the table below says Velocity Verlet needs one force evaluation per step.</p>",
+    });
+    function draw(lab) {
+      const th = P.linspace(0, TAU, 200);
+      const done = pts.filter((_, i) => i % 3 === 0);
+      lab.plot("phase", [
+        { x: th.map(Math.cos), y: th.map((t) => -Math.sin(t)), name: "exact orbit", color: "--axis", line: { dash: "dash", width: 1.5 }, hoverinfo: "skip" },
+        { x: pts.map((q) => q[0]), y: pts.map((q) => q[1]), mode: "lines+markers", name: "kick–drift–kick path", color: "s1", marker: { size: 5 }, hovertemplate: "r = %{x:.3f}<br>v = %{y:.3f}<extra></extra>" },
+        { x: done.map((q) => q[0]), y: done.map((q) => q[1]), mode: "markers", name: "full steps", color: "s2", marker: { size: 9 }, hovertemplate: "r = %{x:.3f}<br>v = %{y:.3f}<extra></extra>" },
+        { x: [pts[pts.length - 1][0]], y: [pts[pts.length - 1][1]], mode: "markers", name: "current state", color: "s8", marker: { size: 13, symbol: "circle-open", line: { width: 3 } }, hoverinfo: "skip" },
+      ], {
+        title: { text: "Phase space" }, margin: { t: 60 },
+        xaxis: { title: { text: "position r" }, range: [-1.7, 1.7] },
+        yaxis: { title: { text: "velocity v" }, range: [-1.7, 1.7], scaleanchor: "x" },
+      });
+      const vals = { a: st.a, vh: st.vh, rn: st.rn, an: st.an, vn: st.vn };
+      const rows = [`<tr><td><code>r_old, v_old</code></td><td>input</td><td style="text-align:right"><code>${f4(st.r)}, ${f4(st.v)}</code></td></tr>`]
+        .concat(STAGES.map((sg, i) => {
+          const cur = i === st.stage;
+          const v = vals[sg[2]];
+          return `<tr style="${cur ? "background:var(--accent-wash);font-weight:600" : ""}"><td><code>${sg[1]}</code></td><td style="font-size:13px;color:var(--ink-3)">${sg[0]}</td><td style="text-align:right"><code>${v === null ? "…" : f4(v)}</code></td></tr>`;
+        }));
+      const E = st.stage === 4 ? 0.5 * m * st.vn ** 2 + 0.5 * k * st.rn ** 2 : 0.5 * m * st.v ** 2 + 0.5 * k * st.r ** 2;
+      lab.panel("tbl").innerHTML = `<p style="margin:0 0 6px;font-size:14px;color:var(--ink-2)">Step ${st.n + 1}${st.stage >= 0 ? ", sub-step " + st.stage : " — press <em>Next sub-step</em>"}</p>
+        <div class="table-wrap"><table style="font-size:14px"><tbody>${rows.join("")}</tbody></table></div>
+        <p style="margin:8px 0 0;font-size:14px;color:var(--ink-2)">Energy ${st.stage === 4 ? "after" : "before"} this step: <strong>${E.toFixed(5)}</strong> (exact: 0.50000)</p>`;
+    }
+  })();
+
+  // ---------------------------------------------------------------- Lesson 3: Euler vs Velocity Verlet
+  MD.lab("#lab-euler-vv", {
+    title: "Euler vs. Velocity Verlet on the harmonic oscillator",
+    intro: "<p>Both integrators start from $x = 1$, $v = 0$ with $m = 1$ and use the same force $F = -kx$ and the same $\\Delta t$. The exact solution is $x(t) = \\cos\\omega t$ with $\\omega = \\sqrt{k/m}$. The last panel repeats a one-period run for many time steps and plots the final position error — its slope on log–log axes is the integrator's order.</p>",
+    controls: [
+      { type: "range", id: "dt", label: "Time step Δt", min: 0.01, max: 1, step: 0.01, value: 0.1 },
+      { type: "range", id: "periods", label: "Simulated periods", min: 1, max: 40, step: 1, value: 10 },
+      { type: "range", id: "k", label: "Spring constant k", min: 0.25, max: 4, step: 0.25, value: 1 },
+      { type: "check", id: "logE", label: "Log-scale energy axis", value: false },
+    ],
+    cols: 2,
+    panels: [{ id: "x", kind: "plot", span: true, cls: "short" }, { id: "phase", kind: "plot" }, { id: "E", kind: "plot" }, { id: "order", kind: "plot" }, { id: "ro", kind: "readouts" }],
+    run(p, lab) {
+      const w = Math.sqrt(p.k), T = TAU / w;
+      const steps = Math.max(1, Math.round(p.periods * T / p.dt));
+      const stride = Math.max(1, Math.ceil(steps / 2500));
+      const base = { x0: 1, v0: 0, m: 1, dt: p.dt, steps, stride, force: (x) => P.force_sh(x, p.k), potential: (x) => P.potential_sh(x, p.k) };
+      const vv = P.run1D(Object.assign({ method: "vv" }, base));
+      const eu = P.run1D(Object.assign({ method: "euler" }, base));
+      const E0 = 0.5 * p.k;
+      const tEnd = steps * p.dt, te = P.linspace(0, tEnd, 1500);
+      lab.plot("x", [
+        { x: te, y: te.map((t) => Math.cos(w * t)), name: "exact", color: "--ink-3", line: { dash: "dot", width: 1.5 }, hoverinfo: "skip" },
+        { x: eu.t, y: eu.x, name: "Euler", color: "s2" },
+        { x: vv.t, y: vv.x, name: "Velocity Verlet", color: "s1" },
+      ], { title: { text: "Trajectory x(t)" }, margin: { t: 60 }, xaxis: { title: { text: "time t" } }, yaxis: { title: { text: "x" }, range: [-2.2, 2.2] } });
+      const th = P.linspace(0, TAU, 200), lim = 2.2;
+      lab.plot("phase", [
+        { x: th.map(Math.cos), y: th.map((t) => -w * Math.sin(t)), name: "exact", color: "--ink-3", line: { dash: "dot", width: 1.5 }, hoverinfo: "skip" },
+        { x: eu.x, y: eu.v, name: "Euler", color: "s2" },
+        { x: vv.x, y: vv.v, name: "Velocity Verlet", color: "s1" },
+      ], { title: { text: "Phase space (x, v)" }, margin: { t: 60 }, xaxis: { title: { text: "x" }, range: [-lim, lim] }, yaxis: { title: { text: "v" }, range: [-lim * w, lim * w] } });
+      const rEu = eu.te.map((e) => e / E0), rVv = vv.te.map((e) => e / E0);
+      const yE = p.logE ? { title: { text: "E / E₀" }, type: "log" } : { title: { text: "E / E₀" }, range: [0, Math.min(3, Math.max(1.5, P.max(rEu) * 1.05))] };
+      lab.plot("E", [
+        { x: eu.t, y: rEu, name: "Euler", color: "s2" },
+        { x: vv.t, y: rVv, name: "Velocity Verlet", color: "s1" },
+      ], { title: { text: "Total energy E(t) / E₀" }, margin: { t: 60 }, xaxis: { title: { text: "time t" } }, yaxis: yE });
+      // accuracy order: error after exactly one period
+      const errAfterPeriod = (dt, method) => {
+        const n = Math.max(1, Math.round(T / dt)), h = T / n;
+        let x = 1, v = 0;
+        for (let i = 0; i < n; i++) [x, v] = method === "vv" ? P.velocityVerletStep(x, v, 1, h, base.force) : P.eulerStep(x, v, 1, h, base.force);
+        return Math.abs(x - 1) + 1e-16;
+      };
+      const dts = P.linspace(-2.5, -0.3, 14).map((e) => 10 ** e);
+      const eE = dts.map((d) => errAfterPeriod(d, "euler")), eV = dts.map((d) => errAfterPeriod(d, "vv"));
+      const c1 = eE[3] / dts[3], c2 = eV[3] / dts[3] ** 2;
+      lab.plot("order", [
+        { x: dts, y: dts.map((d) => c1 * d), name: "∝ Δt (1st order)", color: "--ink-3", line: { dash: "dash", width: 1.2 }, hoverinfo: "skip" },
+        { x: dts, y: dts.map((d) => c2 * d * d), name: "∝ Δt² (2nd order)", color: "--ink-3", line: { dash: "dot", width: 1.2 }, hoverinfo: "skip" },
+        { x: dts, y: eE, mode: "lines+markers", name: "Euler", color: "s2", marker: { size: 6 } },
+        { x: dts, y: eV, mode: "lines+markers", name: "Velocity Verlet", color: "s1", marker: { size: 6 } },
+        { x: [p.dt, p.dt], y: [errAfterPeriod(p.dt, "euler"), errAfterPeriod(p.dt, "vv")], mode: "markers", name: "current Δt", color: "s8", marker: { size: 11, symbol: "circle-open", line: { width: 2.5 } } },
+      ], { title: { text: "Accuracy order: error after one period" }, margin: { t: 80 }, xaxis: { title: { text: "Δt" }, type: "log" }, yaxis: { title: { text: "|x(T) − x_exact(T)|" }, type: "log", exponentformat: "power" } });
+      const devVv = P.max(rVv.map((r) => Math.abs(r - 1)));
+      const euEnd = rEu[rEu.length - 1];
+      lab.readouts("ro", [
+        { k: "steps per period T/Δt", v: (T / p.dt).toFixed(1) },
+        { k: "VV: max |E/E₀ − 1|", v: MD.fmt(devVv, 3), cls: devVv < 0.05 ? "good" : "bad" },
+        { k: "Euler: final E/E₀", v: !(Math.abs(eu.x[eu.x.length - 1]) <= 1e8) ? "overflow" : MD.fmt(euEnd, 3), cls: "bad" },
+        { k: "Euler: energy growth per step, 1 + ω²Δt²", v: (1 + p.k * p.dt * p.dt).toFixed(5) },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> (1) At the default $\\Delta t = 0.1$, Euler spirals outward in phase space and its energy climbs exponentially (switch on the log axis to see the straight line), while Velocity Verlet stays on a closed orbit with a tiny bounded energy wiggle — the “symplectic” and “energy conservation” rows of the table. (2) Shrink $\\Delta t$ to 0.01: Euler improves but still drifts; nothing makes it stop. (3) In the accuracy panel, Euler's points follow the slope-1 line and Velocity Verlet's the slope-2 line: halving $\\Delta t$ halves Euler's error but quarters Verlet's. (4) Increase $k$: the faster oscillation needs a smaller $\\Delta t$ for the same accuracy.</p>",
+  });
+
+  // ---------------------------------------------------------------- Lesson 3: stability / blow-up demo
+  MD.lab("#lab-blowup", {
+    title: "Energy blow-up: how large can Δt be?",
+    intro: "<p>The Python code above, re-run in your browser: a harmonic oscillator started at $x = 1$, $v = 0$, integrated for <code>n_steps_unstable</code> steps, with the total energy on a logarithmic axis. Increase $\\Delta t$ until the simulation explodes, or switch to the Euler integrator.</p>",
+    controls: [
+      { type: "range", id: "dt", label: "dt_unstable", min: 0.05, max: 3, step: 0.05, value: 0.8 },
+      { type: "range", id: "n", label: "n_steps_unstable", min: 10, max: 200, step: 5, value: 50 },
+      { type: "range", id: "k", label: "Spring constant k", min: 0.25, max: 4, step: 0.25, value: 1 },
+      { type: "select", id: "method", label: "Integrator", value: "vv", options: [{ value: "vv", label: "Velocity Verlet (as in the code)" }, { value: "euler", label: "Euler" }] },
+    ],
+    cols: 2,
+    panels: [{ id: "E", kind: "plot" }, { id: "x", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    run(p, lab) {
+      const n = p.n, dt = p.dt, k = p.k, mass = 1;
+      const xs = new Array(n).fill(null), vs = new Array(n).fill(null), Es = new Array(n).fill(null);
+      xs[0] = 1; vs[0] = 0; Es[0] = 0.5 * mass * vs[0] ** 2 + 0.5 * k * xs[0] ** 2;
+      const forceH = (x) => -k * x;
+      let xc = 1, vc = 0, last = 0;
+      for (let i = 1; i < n; i++) {
+        if (p.method === "vv") {
+          const aCurr = forceH(xc) / mass;
+          const vHalf = vc + 0.5 * aCurr * dt;
+          xc = xc + vHalf * dt;
+          const aNext = forceH(xc) / mass;
+          vc = vHalf + 0.5 * aNext * dt;
+        } else {
+          const aCurr = forceH(xc) / mass;
+          const xn = xc + vc * dt;
+          vc = vc + aCurr * dt;
+          xc = xn;
+        }
+        const E = 0.5 * mass * vc ** 2 + 0.5 * k * xc ** 2;
+        if (!isFinite(E) || E > 1e300) break;
+        xs[i] = xc; vs[i] = vc; Es[i] = E; last = i;
+      }
+      const steps = Array.from({ length: n }, (_, i) => i);
+      const w = Math.sqrt(k / mass), wdt = w * dt, E0 = Es[0];
+      const maxR = P.max(Es.filter((e) => e !== null)) / E0;
+      const endR = Es[last] / E0;
+      const unstable = p.method === "euler" || wdt > 2 + 1e-9;
+      const marginal = p.method === "vv" && Math.abs(wdt - 2) < 1e-9;
+      lab.plot("E", [
+        { x: steps, y: Es, mode: "lines+markers", name: unstable ? "Total Energy (Unstable dt)" : "Total Energy", color: "s8", marker: { size: 6 } },
+      ], {
+        title: { text: `Total energy with dt = ${dt.toFixed(2)}` }, showlegend: true, legend: { x: 0.02, y: 0.98, yanchor: "top", xanchor: "left", orientation: "v" },
+        xaxis: { title: { text: "Step" } }, yaxis: { title: { text: "Energy" }, type: "log", exponentformat: "power" },
+      });
+      lab.plot("x", [
+        { x: steps, y: xs, mode: "lines+markers", name: "x", color: "s1", marker: { size: 5 } },
+      ], { title: { text: "Position x per step" }, xaxis: { title: { text: "Step" } }, yaxis: { title: { text: "x" }, exponentformat: "power" } });
+      lab.readouts("ro", [
+        { k: "ω Δt (VV stable if < 2)", v: wdt.toFixed(3), cls: wdt < 2 ? "good" : "bad" },
+        { k: "VV limit Δt_max = 2/ω", v: (2 / w).toFixed(3) },
+        { k: "steps per period 2π/(ωΔt)", v: (TAU / wdt).toFixed(1), cls: TAU / wdt >= 10 ? "good" : "" },
+        { k: "max E / E₀", v: MD.fmt(maxR, 3) },
+        { k: last < n - 1 ? `E / E₀ at step ${last} (then overflow)` : "final E / E₀", v: MD.fmt(endR, 3) },
+        { k: "verdict", v: marginal ? "marginal (ωΔt = 2)" : unstable ? "unstable — exponential blow-up" : "stable (bounded)", cls: unstable ? "bad" : marginal ? "" : "good" },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> (1) At the default ($\\Delta t = 0.8$) the energy oscillates within a band but never grows — the run is <em>inaccurate</em> but stable. (2) Slide $\\Delta t$ to 1.9, then 2.05: right past $\\omega\\Delta t = 2$ the energy turns into a straight line on the log axis — exponential growth, the “exploding simulation”. (3) Set $k = 4$: the oscillator is twice as fast, so the stability limit halves to $\\Delta t = 1$. The fastest motion in the system (in real molecules, bonds to hydrogen) sets the limit for everyone. (4) Switch to Euler: the energy grows at <em>every</em> $\\Delta t$, by exactly $1 + \\omega^2\\Delta t^2$ per step.</p>",
+  });
+
+  // ---------------------------------------------------------------- Lesson 4: temperature from kinetic energy
+  (function () {
+    let seed = 1;
+    const NS = 300;
+    MD.lab("#lab-temperature", {
+      title: "Temperature from kinetic energy",
+      intro: "<p>Draw velocities for $N$ particles from the Maxwell–Boltzmann distribution at temperature $T$ (each Cartesian component is Gaussian with variance $k_BT/m$; reduced units, $k_B = m = 1$), then estimate the temperature back with $T = 2E_K / (N_{\\mathrm{df}} k_B)$. The right panel repeats this for 300 independent snapshots: the instantaneous temperature of a finite system fluctuates, with relative width $\\sqrt{2/N_{\\mathrm{df}}}$.</p>",
+      controls: [
+        { type: "range", id: "logN", label: "Number of particles N", min: 0, max: 3, step: 0.05, value: 2, fmt: (v) => String(Math.round(10 ** v)) },
+        { type: "select", id: "d", label: "Dimensions", value: 3, options: [{ value: 1, label: "1D" }, { value: 2, label: "2D" }, { value: 3, label: "3D" }] },
+        { type: "range", id: "T", label: "Target temperature T", min: 0.2, max: 3, step: 0.1, value: 1 },
+        { type: "check", id: "com", label: "Remove centre-of-mass momentum", value: false },
+        { type: "buttons", items: [{ id: "new", label: "New sample" }] },
+      ],
+      cols: 2,
+      panels: [{ id: "vh", kind: "plot" }, { id: "Th", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+      run(p, lab) {
+        const N = Math.round(10 ** p.logN), d = p.d, m = 1, s = Math.sqrt(p.T / m);
+        const rng = P.rng(seed);
+        const com = p.com && N > 1;
+        const Ndf = com ? d * (N - 1) : d * N;
+        const sample = () => {
+          const v = new Float64Array(N * d);
+          for (let i = 0; i < v.length; i++) v[i] = rng.normal(0, s);
+          if (com) for (let c = 0; c < d; c++) {
+            let mu = 0;
+            for (let i = 0; i < N; i++) mu += v[i * d + c];
+            mu /= N;
+            for (let i = 0; i < N; i++) v[i * d + c] -= mu;
+          }
+          let ek = 0;
+          for (let i = 0; i < v.length; i++) ek += 0.5 * m * v[i] * v[i];
+          return { v, ek };
+        };
+        const first = sample();
+        const Test = 2 * first.ek / (Ndf * P.kB);
+        const Ts = [];
+        for (let r = 0; r < NS; r++) Ts.push(2 * sample().ek / (Ndf * P.kB));
+        const vmax = 4 * Math.sqrt(3 / m);
+        const hv = P.histogram(Array.from(first.v), 30, [-vmax, vmax]);
+        const vg = P.linspace(-vmax, vmax, 200);
+        lab.plot("vh", [
+          { type: "bar", x: hv.centers, y: hv.density, name: "sampled components", color: "s1", opacity: 0.75, width: hv.width * 0.95, hovertemplate: "v = %{x:.2f}<br>density %{y:.3f}<extra></extra>" },
+          { x: vg, y: vg.map((v) => Math.exp(-m * v * v / (2 * P.kB * p.T)) / Math.sqrt(TAU * P.kB * p.T / m)), name: "Maxwell–Boltzmann", color: "s2", hoverinfo: "skip" },
+        ], { title: { text: "One snapshot: velocity components" }, margin: { t: 60 }, bargap: 0, xaxis: { title: { text: "velocity component v" } }, yaxis: { title: { text: "probability density" }, rangemode: "tozero" } });
+        const sd = p.T * Math.sqrt(2 / Ndf);
+        const tLo = Math.max(0, p.T - 4.5 * sd), tHi = p.T + 4.5 * sd;
+        const hT = P.histogram(Ts, 30, [tLo, tHi]);
+        lab.plot("Th", [
+          { type: "bar", x: hT.centers, y: hT.counts, name: "T estimates", color: "s3", width: hT.width * 0.95, hovertemplate: "T = %{x:.3f}<br>%{y} snapshots<extra></extra>" },
+        ], {
+          title: { text: `Instantaneous T over ${NS} snapshots` }, bargap: 0,
+          xaxis: { title: { text: "T = 2E_K / (N_df k_B)" } }, yaxis: { title: { text: "count" }, rangemode: "tozero" },
+          shapes: [
+            { type: "rect", yref: "paper", x0: p.T - sd, x1: p.T + sd, y0: 0, y1: 1, fillcolor: "s2", line: { width: 0 } },
+            { type: "line", yref: "paper", x0: p.T, x1: p.T, y0: 0, y1: 1, line: { color: "s2", width: 2 } },
+          ],
+          annotations: [{ x: p.T, y: 1, yref: "paper", yanchor: "bottom", text: "target T ± T√(2/N_df)", showarrow: false, font: { color: "s2", size: 12 } }],
+        });
+        lab.readouts("ro", [
+          { k: "N", v: String(N) },
+          { k: "N_df", v: String(Ndf) + (com ? ` = ${d}(N − 1)` : ` = ${d}N`) },
+          { k: "E_K (this snapshot)", v: first.ek.toFixed(3) },
+          { k: "T estimate", v: Ndf > 0 ? Test.toFixed(3) : "—" },
+          { k: "observed std(T) / T", v: (P.std(Ts) / p.T).toFixed(3) },
+          { k: "predicted √(2/N_df)", v: Math.sqrt(2 / Ndf).toFixed(3) },
+        ]);
+      },
+      onButton(id, p, lab) { if (id === "new") { seed++; lab.rerun(); } },
+      foot: "<p><strong>What to try:</strong> (1) With $N = 100$ in 3D the estimate lands within a few percent of the target; press <em>New sample</em> a few times to see it scatter. (2) Drop $N$ to 1–10: the “temperature” of a handful of atoms jumps around wildly — temperature is a statistical quantity. (3) Raise $N$ to 1000: the histogram narrows as $1/\\sqrt{N_{\\mathrm{df}}}$. (4) Tick “remove centre-of-mass momentum” at small $N$: without reducing $N_{\\mathrm{df}}$ accordingly, the temperature would be systematically underestimated.</p>",
+    });
+  })();
+
+  // ---------------------------------------------------------------- Lesson 6: minimum image convention
+  (function () {
+    const pos = { i: [0.15, 0.45], j: [0.85, 0.62] }; // fractional coordinates
+    let xf = null, drag = null;
+    MD.lab("#lab-mic", {
+      title: "Minimum image convention explorer",
+      intro: "<p>The bold square is the simulation box; the faded tiles are its periodic images. <strong>Drag</strong> particle $i$ (blue) or $j$ (orange) — or any of their images. The dashed grey arrow is the raw separation $\\Delta\\mathbf{r} = \\mathbf{r}_j - \\mathbf{r}_i$; the violet arrow points to the nearest image of $j$, using $\\Delta x' = \\Delta x - L_x\\,\\mathrm{round}(\\Delta x/L_x)$ (and the same for $y$).</p>",
+      controls: [
+        { type: "range", id: "Lx", label: "Box length L<sub>x</sub>", min: 4, max: 16, step: 0.5, value: 10 },
+        { type: "range", id: "Ly", label: "Box length L<sub>y</sub>", min: 4, max: 16, step: 0.5, value: 10 },
+        { type: "check", id: "images", label: "Show periodic images", value: true },
+        { type: "check", id: "raw", label: "Show raw separation Δr", value: true },
+        { type: "check", id: "cut", label: "Show cutoff circle around i", value: false },
+        { type: "range", id: "rc", label: "Cutoff r<sub>c</sub>", min: 1, max: 9, step: 0.25, value: 4, hint: "MIC is only safe if r<sub>c</sub> ≤ L/2: then at most one image of j can lie inside the cutoff." },
+        { type: "buttons", items: [{ id: "reset", label: "Reset positions", secondary: true }] },
+      ],
+      panels: [{ id: "cv", kind: "canvas", aspect: 1.3 }, { id: "ro", kind: "readouts" }],
+      init(lab) {
+        const cv = lab.panel("cv");
+        cv.style.touchAction = "none"; cv.style.cursor = "grab";
+        const toWorld = (e) => { const r = cv.getBoundingClientRect(); return xf.inv(e.clientX - r.left, e.clientY - r.top); };
+        cv.addEventListener("pointerdown", (e) => {
+          if (!xf) return;
+          const [x, y] = toWorld(e), p = lab.p;
+          let best = null, bd = Infinity;
+          for (const key of ["i", "j"]) for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+            const d = Math.hypot((pos[key][0] + a) * p.Lx - x, (pos[key][1] + b) * p.Ly - y);
+            if (d < bd) { bd = d; best = key; }
+          }
+          if (bd * xf.sc < 28) { drag = best; cv.setPointerCapture(e.pointerId); cv.style.cursor = "grabbing"; }
+        });
+        cv.addEventListener("pointermove", (e) => {
+          if (!drag) return;
+          const [x, y] = toWorld(e), p = lab.p;
+          pos[drag] = [mod(x / p.Lx, 1), mod(y / p.Ly, 1)];
+          draw(lab);
+        });
+        const end = () => { drag = null; cv.style.cursor = "grab"; };
+        cv.addEventListener("pointerup", end);
+        cv.addEventListener("pointercancel", end);
+      },
+      run(p, lab) { draw(lab); },
+      onButton(id, p, lab) {
+        if (id === "reset") { pos.i = [0.15, 0.45]; pos.j = [0.85, 0.62]; draw(lab); }
+      },
+      foot: "<p><strong>What to try:</strong> (1) With the default positions the raw separation is about 7 units in $x$, but the nearest image of $j$ is only 3 units away, through the left wall: $\\mathrm{round}(\\Delta x/L_x) = 1$. (2) Drag $j$ across the middle of the box and watch the violet arrow flip to the other side when $|\\Delta x|$ passes $L_x/2$. (3) Drag a particle out of the central box: it re-enters through the opposite face — its coordinates are wrapped. (4) Turn on the cutoff circle and set $r_c$ above $L/2$ (e.g. $L = 6$, $r_c = 4$): more than one image of $j$ can fall inside, and the MIC alone would miss interactions.</p>",
+    });
+    function draw(lab) {
+      const p = lab.p, Lx = p.Lx, Ly = p.Ly;
+      const { ctx, w, h } = lab.canvas("cv");
+      ctx.clearRect(0, 0, w, h);
+      const sc = Math.min((w - 16) / (3 * Lx), (h - 16) / (3 * Ly));
+      const X = (x) => w / 2 + (x - Lx / 2) * sc, Y = (y) => h / 2 - (y - Ly / 2) * sc;
+      xf = { sc, inv: (cx, cy) => [(cx - w / 2) / sc + Lx / 2, Ly / 2 - (cy - h / 2) / sc] };
+      const ri = [pos.i[0] * Lx, pos.i[1] * Ly], rj = [pos.j[0] * Lx, pos.j[1] * Ly];
+      const dx = rj[0] - ri[0], dy = rj[1] - ri[1];
+      const nx = Math.round(dx / Lx), ny = Math.round(dy / Ly);
+      const dxp = dx - Lx * nx, dyp = dy - Ly * ny;
+      const rij = Math.hypot(dxp, dyp);
+      // tiles
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+        const center = a === 0 && b === 0;
+        if (!center && !p.images) continue;
+        ctx.strokeStyle = center ? MD.css("--ink") : MD.css("--axis");
+        ctx.lineWidth = center ? 2 : 1;
+        ctx.setLineDash(center ? [] : [4, 4]);
+        ctx.strokeRect(X(a * Lx), Y((b + 1) * Ly), Lx * sc, Ly * sc);
+        ctx.setLineDash([]);
+      }
+      // cutoff circle
+      let inside = 0;
+      if (p.cut) {
+        ctx.fillStyle = MD.alpha("s3", 0.1); ctx.strokeStyle = MD.color("s3"); ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.arc(X(ri[0]), Y(ri[1]), p.rc * sc, 0, TAU); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+        for (let a = -3; a <= 3; a++) for (let b = -3; b <= 3; b++) if (Math.hypot(rj[0] + a * Lx - ri[0], rj[1] + b * Ly - ri[1]) < p.rc) inside++;
+      }
+      // particles and images
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+        const center = a === 0 && b === 0;
+        if (!center && !p.images) continue;
+        ctx.globalAlpha = center ? 1 : 0.3;
+        [["i", ri, "s1"], ["j", rj, "s2"]].forEach(([, r, col]) => {
+          ctx.fillStyle = MD.color(col);
+          ctx.beginPath(); ctx.arc(X(r[0] + a * Lx), Y(r[1] + b * Ly), 7, 0, TAU); ctx.fill();
+        });
+      }
+      ctx.globalAlpha = 1;
+      // vectors
+      if (p.raw) {
+        ctx.setLineDash([6, 4]);
+        arrow(ctx, X(ri[0]), Y(ri[1]), X(rj[0]), Y(rj[1]), MD.css("--ink-3"), 1.8);
+        ctx.setLineDash([]);
+      }
+      const jim = [ri[0] + dxp, ri[1] + dyp];
+      arrow(ctx, X(ri[0]), Y(ri[1]), X(jim[0]), Y(jim[1]), MD.color("s7"), 3);
+      ctx.strokeStyle = MD.color("s7"); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(X(jim[0]), Y(jim[1]), 11, 0, TAU); ctx.stroke();
+      ctx.font = "600 13px system-ui, sans-serif";
+      ctx.fillStyle = MD.css("--ink");
+      ctx.fillText("i", X(ri[0]) + 9, Y(ri[1]) - 9);
+      ctx.fillText("j", X(rj[0]) + 9, Y(rj[1]) - 9);
+      if (nx !== 0 || ny !== 0) { ctx.fillStyle = MD.color("s7"); ctx.fillText("nearest image of j", X(jim[0]) + 13, Y(jim[1]) + 18); }
+      const items = [
+        { k: "raw Δr = (Δx, Δy)", v: `(${dx.toFixed(2)}, ${dy.toFixed(2)})` },
+        { k: "raw |Δr|", v: Math.hypot(dx, dy).toFixed(3) },
+        { k: "round(Δx/L<sub>x</sub>), round(Δy/L<sub>y</sub>)", v: `${nx}, ${ny}` },
+        { k: "MIC Δr′ = (Δx′, Δy′)", v: `(${dxp.toFixed(2)}, ${dyp.toFixed(2)})` },
+        { k: "r<sub>ij</sub> = |Δr′|", v: rij.toFixed(3), cls: "good" },
+      ];
+      if (p.cut) items.push({ k: "images of j inside r<sub>c</sub>", v: String(inside), cls: inside > 1 ? "bad" : "" });
+      lab.readouts("ro", items);
+    }
+  })();
+
+  // ---------------------------------------------------------------- Lesson 6: wrapping coordinates
+  (function () {
+    const single = (x, L) => (x > L ? x - L : x < 0 ? x + L : x);
+    const floorMod = (x, L) => x - L * Math.floor(x / L);
+    const truncMod = (x, L) => x % L; // like C fmod / numpy.fmod / JavaScript %
+    const gapless = (xs, ys, L) => {
+      const X = [], Y = [];
+      for (let i = 0; i < xs.length; i++) {
+        if (i > 0 && Math.abs(ys[i] - ys[i - 1]) > L / 2) { X.push(null); Y.push(null); }
+        X.push(xs[i]); Y.push(ys[i]);
+      }
+      return [X, Y];
+    };
+    MD.lab("#lab-wrap", {
+      title: "Wrapping a coordinate back into the box",
+      intro: "<p>A particle drifts along $x$ in a periodic box $[0, L)$. Slide its <em>unwrapped</em> position and compare three ways to wrap it: the single-shift rule from the text (“if $x &gt; L$ subtract $L$, if $x &lt; 0$ add $L$”), floor-based modulo $x - L\\lfloor x/L \\rfloor$ (what Python's <code>x % L</code> and <code>np.mod</code> compute), and truncating modulo (C's <code>fmod</code>, <code>np.fmod</code>, and the <code>%</code> operator in JavaScript or C).</p>",
+      controls: [
+        { type: "range", id: "x", label: "Unwrapped position x", min: -25, max: 35, step: 0.1, value: 12.5 },
+        { type: "range", id: "L", label: "Box length L", min: 5, max: 15, step: 0.5, value: 10 },
+      ],
+      panels: [{ id: "cv", kind: "canvas", aspect: 5.5 }, { id: "plot", kind: "plot" }, { id: "ro", kind: "readouts" }],
+      run(p, lab) {
+        const L = p.L, x = p.x;
+        const xs = P.linspace(-25, 35, 1201);
+        const methods = [
+          ["floor modulo (Python x % L)", floorMod, "s1", "solid"],
+          ["single shift (if / else)", single, "s2", "dash"],
+          ["truncating fmod", truncMod, "s3", "dot"],
+        ];
+        const traces = methods.map(([name, f, col, dash]) => {
+          const [X, Y] = gapless(xs, xs.map((v) => f(v, L)), L);
+          return { x: X, y: Y, name, color: col, line: { dash }, hoverinfo: "skip" };
+        });
+        methods.forEach(([name, f, col]) => traces.push({ x: [x], y: [f(x, L)], mode: "markers", name, showlegend: false, color: col, marker: { size: 10 }, hovertemplate: "x′ = %{y:.2f}<extra></extra>" }));
+        lab.plot("plot", traces, {
+          title: { text: "Wrapped x′ vs. unwrapped x" }, margin: { t: 80 },
+          xaxis: { title: { text: "unwrapped x" } }, yaxis: { title: { text: "wrapped x′" } },
+          shapes: [
+            { type: "rect", xref: "paper", x0: 0, x1: 1, y0: 0, y1: L, fillcolor: "s6", line: { width: 0 } },
+            { type: "line", yref: "paper", x0: x, x1: x, y0: 0, y1: 1, line: { color: "--ink-3", width: 1, dash: "dot" } },
+          ],
+        });
+        const ok = (v) => v >= 0 && v < L;
+        lab.readouts("ro", methods.map(([name, f]) => {
+          const v = f(x, L);
+          return { k: name, v: `${v.toFixed(2)} ${ok(v) ? "✓" : "✗ outside box"}`, cls: ok(v) ? "good" : "bad" };
+        }));
+        // number-line strip
+        const { ctx, w, h } = lab.canvas("cv");
+        ctx.clearRect(0, 0, w, h);
+        const lo = -25, hi = 35, X = (v) => 12 + (v - lo) / (hi - lo) * (w - 24), y0 = h * 0.62;
+        ctx.strokeStyle = MD.css("--axis"); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(X(lo), y0); ctx.lineTo(X(hi), y0); ctx.stroke();
+        for (let n = Math.floor(lo / L); n <= Math.ceil(hi / L); n++) {
+          const a = n * L;
+          if (a < lo || a > hi) continue;
+          ctx.beginPath(); ctx.moveTo(X(a), y0 - 8); ctx.lineTo(X(a), y0 + 8); ctx.stroke();
+        }
+        ctx.fillStyle = MD.alpha("s6", 0.18); ctx.fillRect(X(0), y0 - 14, X(L) - X(0), 28);
+        ctx.strokeStyle = MD.css("--ink"); ctx.lineWidth = 2; ctx.strokeRect(X(0), y0 - 14, X(L) - X(0), 28);
+        ctx.font = "12px system-ui, sans-serif"; ctx.fillStyle = MD.css("--ink-3");
+        ctx.fillText("0", X(0) - 3, y0 + 28); ctx.fillText("L", X(L) - 3, y0 + 28);
+        const xw = floorMod(x, L);
+        ctx.strokeStyle = MD.color("s1"); ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(X(x), y0, 7, 0, TAU); ctx.stroke();
+        ctx.fillStyle = MD.color("s1"); ctx.beginPath(); ctx.arc(X(xw), y0, 7, 0, TAU); ctx.fill();
+        if (Math.abs(X(x) - X(xw)) > 16) {
+          ctx.setLineDash([4, 3]);
+          arrow(ctx, X(x), y0 - 18, X(xw), y0 - 18, MD.css("--ink-3"), 1.5);
+          ctx.setLineDash([]);
+        }
+        ctx.fillStyle = MD.css("--ink-2");
+        ctx.fillText("○ unwrapped   ● wrapped (floor modulo)", 12, 16);
+      },
+      foot: "<p><strong>What to try:</strong> (1) Between $x = -L$ and $x = 2L$ all rules that handle the sign correctly agree. (2) Push $x$ past $2L$ (e.g. 25): the single-shift rule subtracts $L$ only once and leaves the particle outside the box — fine for a particle that moved less than one box length in a step, wrong in general. (3) Make $x$ negative: truncating <code>fmod</code> keeps the sign and returns a negative coordinate, which is why “modulo arithmetic can be used <em>carefully</em>”: use the floor-based version (Python's <code>%</code> or <code>np.mod</code>), or apply the formula $x - L\\lfloor x/L\\rfloor$ yourself.</p>",
+    });
+  })();
+})();
+</script>
+</body>
+</html>

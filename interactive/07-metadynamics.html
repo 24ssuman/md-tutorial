@@ -1,0 +1,1359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 7 — Metadynamics · MD Tutorial</title>
+<meta name="description" content="Metadynamics on the double well: Gaussian hill deposition, choosing hill height, width and stride, well-tempered metadynamics, and reconstructing the free energy from the bias — with live simulations.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+</head>
+<body data-module="07">
+<main id="main">
+<article class="content">
+
+<!-- ================================================================== -->
+<header class="hero step">
+  <div class="eyebrow">Module 7 · Core track</div>
+  <h1>Metadynamics</h1>
+  <p class="lede">Pour sand into the free-energy wells until the particle can walk out: a history-dependent bias that explores the landscape on its own — and hands you the free energy at the end.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Prerequisites</b> <a href="06-umbrella.html">Module 6 (Umbrella Sampling)</a></span>
+    <span class="chip"><b>What you run</b> A full metadynamics simulation with hill deposition and PMF reconstruction</span>
+    <span class="chip"><b>Expected runtime</b> A fraction of a second in your browser (2–5 minutes in pure Python)</span>
+  </div>
+
+  <div class="objectives">
+    <h3>What you will learn</h3>
+    <ul>
+      <li>How metadynamics fills free-energy wells with Gaussian hills.</li>
+      <li>How to choose hill height, width, and deposition stride.</li>
+      <li>How to reconstruct the free energy from deposited hills.</li>
+    </ul>
+  </div>
+  <div class="callout tip">
+    <div class="callout-title">How to use this page</div>
+    <p>All of the Python code is here, tucked into <strong>Python code</strong> cells you can expand and copy. The <strong>Interactive</strong> panels re-run the metadynamics simulations live in your browser using a JavaScript port of the same functions (<code>md_tutorial.potentials</code> and the BAOAB Langevin integrator) — drag sliders and watch the wells fill. Press <kbd>P</kbd> (or the <em>Present</em> button) to step through the module slide by slide.</p>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<section class="step">
+  <p>Welcome to Module 7! Following our exploration of Umbrella Sampling in Module 6, we now turn to another powerful enhanced sampling technique: <strong>Metadynamics (MetaD)</strong>.</p>
+  <p>Unlike Umbrella Sampling, which uses static bias potentials in separate windows, Metadynamics employs a <strong>history-dependent bias potential</strong> that adaptively discourages the system from revisiting previously explored regions of the collective variable (CV) space. This allows the system to overcome energy barriers and explore the free energy landscape more efficiently. We will implement Metadynamics for our 1D double-well potential and reconstruct the PMF from the accumulated bias.</p>
+
+  <h2 data-toc="Setup">Setup: Imports and Helper Functions</h2>
+  <p>We reuse the double-well potential $V(x) = a x^4 - b x^2$ from the <code>md_tutorial</code> package with $a = 1$, $b = 4$, so the minima sit at $x = \pm\sqrt{b/2a} = \pm 1.41$ and the barrier is $b^2/4a = 4$ (in $k_B T$-style reduced units with $k_B = 1$).</p>
+  <details class="code-cell"><summary>Imports and plotting defaults</summary><pre><code class="language-python">import numpy as np
+import matplotlib.pyplot as plt
+import warnings
+import time
+
+from md_tutorial.potentials import potential_dw, force_dw
+
+plt.style.use('seaborn-v0_8-darkgrid')
+plt.rcParams['figure.figsize'] = (6, 4)
+plt.rcParams['lines.linewidth'] = 2
+
+k_B = 1.0
+</code></pre></details>
+  <details class="code-cell"><summary>Double-well parameters and barrier height</summary><pre><code class="language-python"># Double-well parameters
+a_dw = 1.0
+b_dw = 4.0
+minima_pos = np.sqrt(b_dw / (2 * a_dw))
+minima_val = potential_dw(minima_pos, a=a_dw, b=b_dw)
+barrier_top_val = potential_dw(0, a=a_dw, b=b_dw)
+barrier_height = barrier_top_val - minima_val
+
+print(f"Double-well barrier height: {barrier_height:.2f}")
+</code></pre><pre class="output">Double-well barrier height: 4.00</pre></details>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Filling the landscape"><span class="lesson-num">Lesson 1</span>Filling the Free Energy Landscape</h2>
+  <p>Metadynamics works by gradually "filling up" the free energy wells along the chosen collective variable(s) $q$ (here, $q=x$). Imagine pouring sand into the potential wells – eventually, the sand fills the wells, making it easier for the particle to escape and explore other regions, including crossing barriers.</p>
+  <p>Computationally, this is achieved by adding small repulsive potentials (typically Gaussian functions, or "hills") centered at the system's current position in the CV space at regular time intervals. As the simulation progresses:</p>
+  <div class="cards">
+    <div class="card"><div class="card-num">1</div><h4>Explore</h4><p>The system explores a region (e.g., a potential well).</p></div>
+    <div class="card"><div class="card-num">2</div><h4>Deposit</h4><p>Gaussian hills are deposited in this region, raising its effective energy.</p></div>
+    <div class="card"><div class="card-num">3</div><h4>Move on</h4><p>The system is discouraged from revisiting this region and is pushed to explore new areas.</p></div>
+    <div class="card"><div class="card-num">4</div><h4>Escape</h4><p>Eventually, enough hills are added to overcome major energy barriers.</p></div>
+  </div>
+  <p>The sum of all deposited Gaussian hills forms the history-dependent bias potential, $V_{bias}(x, t)$.</p>
+
+  <div class="callout deep">
+    <div class="callout-title">🧠 How Metadynamics Fills the Energy Wells</div>
+    <p>Imagine a particle trapped in a deep valley (energy minimum). It bounces around but cannot climb the surrounding mountains. In <strong>Metadynamics</strong>, we dump a small bucket of sand (a Gaussian 'hill' of bias potential) at the particle's current location every few steps.</p>
+    <p>As the particle spends time in the valley, sand accumulates. Eventually, the valley is completely filled with sand. The particle is now free to walk over the flat surface and slide into the next adjacent valley. By tracking the <strong>negative of the accumulated sand</strong>, we reconstruct the exact shape of the valleys (the free energy profile)!</p>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Watch the sand pile up</h3>
+  <p>Here is the whole method in one picture. The walker starts in the left well at $k_BT = 0.4$ — one tenth of the barrier — where an unbiased particle would essentially never cross. Press <em>Play</em> and watch the hills accumulate. The parameters ($W$, $\sigma$, $\tau$) are explained in Lesson 2; the defaults are the values chosen in Lesson 3.</p>
+  <div id="lab-anim"></div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="How the bias works"><span class="lesson-num">Lesson 2</span>How the Metadynamics Bias Works</h2>
+  <p>The bias potential in Metadynamics at time $t$ is the sum of all Gaussian hills deposited up to that time:</p>
+  <div class="eq-card">
+  $$ V_{bias}(x, t) = \sum_{t' \in \{ \tau, 2\tau, 3\tau, ... \},\; t' < t} W \exp\left(-\frac{(x - x(t'))^2}{2\sigma^2}\right) $$
+  </div>
+  <p>where:</p>
+  <ul>
+    <li>$x(t')$ is the position (our CV) of the particle at the time $t'$ when a hill was deposited.</li>
+    <li>$W$ is the <strong>height</strong> of the Gaussian hills (energy units).</li>
+    <li>$\sigma$ (sigma) is the <strong>width</strong> of the Gaussian hills (units of the CV, i.e., length).</li>
+    <li>$\tau$ (tau) is the <strong>deposition stride</strong> – the time interval (or number of simulation steps) between adding new hills.</li>
+  </ul>
+  <p>The corresponding bias force at time $t$ is the negative gradient of the <em>total</em> bias potential:</p>
+  <div class="eq-card">
+  $$ F_{bias}(x, t) = -\frac{\partial V_{bias}(x, t)}{\partial x} = \sum_{t' < t} W \frac{(x - x(t'))}{\sigma^2} \exp\left(-\frac{(x - x(t'))^2}{2\sigma^2}\right) $$
+  </div>
+</section>
+
+<section class="step">
+  <h3>Key parameters</h3>
+  <p>The choice of $W$, $\sigma$, and $\tau$ is crucial for the efficiency and accuracy of Metadynamics:</p>
+  <div class="cards">
+    <div class="card"><h4>Hill height ($W$)</h4><p>Should be small compared to the barrier height and $k_B T$. Too large $W$ leads to jerky motion and poor convergence. Too small $W$ leads to slow exploration.</p></div>
+    <div class="card"><h4>Hill width ($\sigma$)</h4><p>Should be related to the fluctuations or roughness of the underlying free energy landscape along the CV. Often chosen to be a fraction of the width of the features (like wells) you want to resolve. Too large $\sigma$ smooths out details; too small $\sigma$ can create artificial minima.</p></div>
+    <div class="card"><h4>Deposition stride ($\tau$)</h4><p>Determines how frequently hills are added. Should be long enough for the system to diffuse slightly away from the last deposited hill, but short enough for efficient exploration.</p></div>
+  </div>
+  <p>Finding optimal parameters often requires some trial and error.</p>
+  <div id="lab-hills"></div>
+</section>
+
+<section class="step">
+  <div class="quiz" data-answer="3">
+    <p class="q">You run metadynamics with very narrow hills ($\sigma$ much smaller than the natural fluctuations of $x$ in a well). What is the most likely problem?</p>
+    <ol class="choices">
+      <li>The free energy profile is smoothed out and small features are lost</li>
+      <li>The walker can never cross the barrier, however long you run</li>
+      <li>The bias becomes bumpy, creating artificial minima in $V + V_{bias}$, and filling a well takes many more hills</li>
+      <li>Nothing changes — only $W$ affects the result</li>
+    </ol>
+    <div class="explain">Narrow hills pile up as separate spikes with dips between them, so the biased landscape gets spurious little wells, and each hill fills only a tiny volume of the well. Overly <em>wide</em> hills cause the opposite problem: over-smoothing.</div>
+  </div>
+  <div class="quiz" data-answer="2">
+    <p class="q">Which statement about the hill height $W$ is correct?</p>
+    <ol class="choices">
+      <li>$W$ should be comparable to the barrier height so the walker escapes after one hill</li>
+      <li>$W$ should be small compared to the barrier height and $k_BT$; too large gives jerky motion and poor convergence</li>
+      <li>$W$ only sets the overall energy scale and cancels in the reconstructed PMF</li>
+    </ol>
+    <div class="explain">Big hills fill wells quickly but coarsely: the bias overshoots and the reconstructed profile fluctuates by roughly a hill height. Small hills are accurate but slow.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Running metadynamics"><span class="lesson-num">Lesson 3</span>Running Metadynamics</h2>
+  <h3>Bias Function Definitions</h3>
+  <p>We need functions to calculate the total bias potential and force from a list of deposited hills.</p>
+  <details class="code-cell"><summary>Gaussian hill, bias potential and bias force</summary><pre><code class="language-python">def gaussian(x, center, height, sigma):
+  """Calculates the value of a Gaussian function."""
+  return height * np.exp(-(x - center)**2 / (2 * sigma**2))
+
+def gaussian_force(x, center, height, sigma):
+  """Calculates the force (-dV/dx) from a Gaussian potential."""
+  # d/dx [ H * exp(-(x-c)^2 / (2*s^2)) ] = H * exp(...) * [ -(2*(x-c)) / (2*s^2) ]
+  # Force = -d/dx = H * exp(...) * (x-c) / s^2
+  return gaussian(x, center, height, sigma) * (x - center) / sigma**2
+
+def calculate_metad_bias_potential(x, hills):
+  """Calculates the total Metadynamics bias potential at position x from a list of hills."""
+  total_bias = 0.0
+  # hills is expected to be a list of tuples: [(center1, height1, sigma1), (center2, height2, sigma2), ...]
+  for center, height, sigma in hills:
+      total_bias += gaussian(x, center, height, sigma)
+  return total_bias
+
+def calculate_metad_bias_force(x, hills):
+  """Calculates the total Metadynamics bias force at position x from a list of hills."""
+  total_force = 0.0
+  for center, height, sigma in hills:
+      total_force += gaussian_force(x, center, height, sigma)
+  return total_force
+
+print("Metadynamics bias functions defined.")</code></pre><pre class="output">Metadynamics bias functions defined.</pre></details>
+
+  <h3>Integrating with Bias Forces</h3>
+  <p>We adapt the Langevin integrator to accept the <em>current list</em> of deposited hills and use the <code>calculate_metad_bias_force</code> function.</p>
+  <details class="code-cell"><summary>BAOAB Langevin step with the metadynamics bias force</summary><pre><code class="language-python">def langevin_metad_step(x_curr, v_curr, mass, dt, gamma, target_temp,
+                              force_physical_func, current_hills,
+                              physical_args={}):
+    """
+    Performs one step of Langevin dynamics using BAOAB with physical + MetaD bias forces.
+
+    Args:
+        x_curr, v_curr, mass, dt, gamma, target_temp: Standard Langevin parameters.
+        force_physical_func (callable): Function for the physical force (e.g., force_dw).
+        current_hills (list): List of tuples [(center, height, sigma), ...] for deposited hills.
+        physical_args (dict): Keyword arguments for the physical force function.
+
+    Returns:
+        tuple: (x_new, v_new) - Updated position and velocity.
+    """
+
+    # Calculate total force F = F_physical + F_metad_bias
+    f_phys_curr = force_physical_func(x_curr, **physical_args)
+    f_bias_curr = calculate_metad_bias_force(x_curr, current_hills) # History-dependent bias
+    f_total_curr = f_phys_curr + f_bias_curr
+
+    # Update velocity by half step
+    v_half_b = v_curr + (f_total_curr / mass) * (dt / 2.0)
+    # Update position by half step
+    x_half_a = x_curr + v_half_b * (dt / 2.0)
+    # Apply friction and random kick (unchanged)
+    c1 = np.exp(-gamma * dt)
+    c2 = np.sqrt(k_B * max(0, target_temp) * (1.0 - c1**2) / mass)
+    random_kick = np.random.normal(0, 1)
+    v_half_o = c1 * v_half_b + c2 * random_kick
+    # Update position by second half step
+    x_new = x_half_a + v_half_o * (dt / 2.0)
+
+    # Calculate total force at *new* position (using the *same* hill list for this step)
+    f_phys_new = force_physical_func(x_new, **physical_args)
+    f_bias_new = calculate_metad_bias_force(x_new, current_hills) # History-dependent bias
+    f_total_new = f_phys_new + f_bias_new
+
+    # Update velocity by second half step
+    v_new = v_half_o + (f_total_new / mass) * (dt / 2.0)
+
+    return x_new, v_new
+
+print("Langevin integrator adapted for Metadynamics.")</code></pre><pre class="output">Langevin integrator adapted for Metadynamics.</pre></details>
+  <div class="callout">
+    <div class="callout-title">In the browser</div>
+    <p>The labs on this page use the same BAOAB splitting (<code>MD.phys.langevinBAOAB</code>, a port of the integrator above) with the same $m = 1$, $\Delta t = 0.01$ and $\gamma = 1$. One practical difference: instead of looping over every hill at every step, the bias and its force are tabulated on a fine grid ($\Delta x = 0.004$) and updated each time a hill is added — the same trick production codes such as PLUMED use. The random numbers come from a seeded JavaScript generator, so individual trajectories differ from a NumPy run of the Python code, but the statistics are the same.</p>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Setting Parameters</h3>
+  <p>Define the hill height <code>W</code>, width <code>sigma</code>, deposition stride <code>tau</code>, and simulation length.</p>
+  <h3>Estimating Hill Width from Unbiased Sampling</h3>
+  <p>First, run a short unbiased MD (no metadynamics bias) to sample natural fluctuations of the CV. Then compute its standard deviation as the hill width.</p>
+  <details class="code-cell"><summary>Short unbiased run to estimate σ</summary><pre><code class="language-python"># Unbiased MD to estimate sigma
+num_steps_unbiased = 3000
+
+# Simulation parameters
+mass = 1.0
+dt = 0.01
+gamma = 1.0
+target_temp_metad = barrier_height * 0.1 # 10% of the barrier height
+temperature = target_temp_metad # Update global temperature
+
+x = 0.0  # start at center
+v = 0.0
+positions_unbiased = []
+times_unbiased = []  # Store time points for plotting
+
+for step in range(num_steps_unbiased):
+    # Simple Langevin without bias, reuse langevin_metad_step with zero bias
+    x, v = langevin_metad_step(x, v, mass=1.0, dt=dt, gamma=gamma,
+                               target_temp=temperature,
+                               force_physical_func=force_dw, current_hills=[],
+                               physical_args={'a': a_dw, 'b': b_dw})
+    positions_unbiased.append(x)
+    times_unbiased.append(step * dt)  # Record time
+
+# Discard initial 10% for equilibration
+positions_unbiased = np.array(positions_unbiased[int(num_steps_unbiased/10):])
+times_unbiased = np.array(times_unbiased[int(num_steps_unbiased/10):])
+
+# Calculate and print standard deviation (sigma)
+sigma_est = np.std(positions_unbiased)
+print(f"Estimated hill width σ = {sigma_est:.3f}")
+
+# Plot CV over time
+plt.figure(figsize=(6, 4))
+plt.plot(times_unbiased, positions_unbiased)
+plt.xlabel("Time")
+plt.ylabel("Collective Variable (x)")
+plt.title("Unbiased MD: CV over Time")
+plt.grid(True)
+plt.show()</code></pre><pre class="output">Estimated hill width σ = 0.154</pre></details>
+  <div id="lab-unbiased"></div>
+</section>
+
+<section class="step">
+  <details class="code-cell" open><summary>Metadynamics parameters</summary><pre><code class="language-python"># Metadynamics Parameters (using estimated σ and barrier/20)
+# Hill width and height based on prior estimates
+metad_hill_sigma = sigma_est  # from unbiased sampling
+metad_hill_height = barrier_height / 50  # ~1/50 of barrier
+metad_deposition_stride = 50  # tau - steps between depositions
+
+# Simulation parameters
+mass = 1.0
+dt = 0.01
+gamma = 1.0
+target_temp_metad = temperature  # already set
+n_steps_metad = 30000
+record_stride_metad = 50
+
+print("Metadynamics Parameters:")
+print(f"  Hill width (σ): {metad_hill_sigma:.3f}")
+print(f"  Hill height (W): {metad_hill_height:.3f}")
+print(f"  Deposition stride: {metad_deposition_stride}")
+print(f"  Total steps: {n_steps_metad}")
+</code></pre><pre class="output">Metadynamics Parameters:
+  Hill width (σ): 0.154
+  Hill height (W): 0.080
+  Deposition stride: 50
+  Total steps: 30000</pre></details>
+
+  <h3>Choosing Hill Height and Width</h3>
+  <ul>
+    <li><strong>Hill width (σ)</strong> is set to the standard deviation estimated above: <code>σ = sigma_est</code>.</li>
+    <li><strong>Hill height (W)</strong> is set to <code>barrier_height / 50</code>, i.e., 1/50 of the estimated barrier height.</li>
+  </ul>
+  <p>With $W = 0.08$, depositing every 50 steps for 30,000 steps gives 600 hills, i.e. a total "sand volume" of $600 \times W \sqrt{2\pi}\,\sigma \approx 18.5$ energy × length units to spread over the landscape.</p>
+</section>
+
+<section class="step">
+  <h3>Coding Exercise: Run Metadynamics</h3>
+  <details class="exercise">
+    <summary>Exercise — implement the metadynamics loop</summary>
+    <p>Implement the Metadynamics simulation loop:</p>
+    <ol>
+      <li>Initialize position, velocity, and an empty list <code>hills</code> to store Gaussian parameters.</li>
+      <li>Loop for <code>n_steps_metad</code>:
+        <ul>
+          <li>Call the Langevin integrator (<code>langevin_metad_step</code>), passing the <em>current</em> <code>hills</code> list.</li>
+          <li>Every <code>metad_deposition_stride</code> steps: add the parameters (<code>x_curr</code>, <code>metad_hill_height</code>, <code>metad_hill_sigma</code>) of a new Gaussian hill centered at the <em>current</em> position to the <code>hills</code> list.</li>
+          <li>Record position and current time periodically.</li>
+          <li>Optionally, record the height of the bias potential at the current position to monitor filling.</li>
+        </ul>
+      </li>
+    </ol>
+    <details class="reveal">
+      <summary>Show a solution</summary>
+      <p>A full solution is in the Python code below (<em>Run Metadynamics simulation</em>). Note the order inside the loop: a hill is deposited at the <em>current</em> position <em>before</em> the step, the integrator then feels the updated hill list, and the position and $V_{bias}(x(t), t)$ are recorded every <code>record_stride_metad</code> steps.</p>
+    </details>
+  </details>
+  <details class="code-cell"><summary>Run Metadynamics simulation (solution)</summary><pre><code class="language-python"># --- Run Metadynamics Simulation ---
+
+# Data storage
+n_recorded_metad = n_steps_metad // record_stride_metad + 1
+times_metad = np.zeros(n_recorded_metad)
+positions_metad = np.zeros(n_recorded_metad)
+bias_potential_at_x = np.zeros(n_recorded_metad) # Track bias value at particle's position
+hills = [] # List to store deposited hills: [(center, height, sigma), ...]
+num_hills_deposited = [] # Track number of hills over time
+
+# Initial conditions
+x_curr = -minima_pos # Start in the left well
+v_curr = 0.0
+
+# Store initial state
+record_idx = 0
+positions_metad[record_idx] = x_curr
+bias_potential_at_x[record_idx] = 0.0
+times_metad[record_idx] = 0.0
+num_hills_deposited.append(0)
+
+print(f"Starting Metadynamics simulation ({n_steps_metad} steps)...")
+start_time = time.time()
+
+# Main simulation loop
+for i in range(n_steps_metad):
+    # Deposit hill if stride is reached
+    if (i + 1) % metad_deposition_stride == 0:
+        hills.append((x_curr, metad_hill_height, metad_hill_sigma))
+        if (len(hills) % 100 == 0): # Print progress periodically
+             print(f"  Step {i+1}, Deposited {len(hills)} hills...")
+
+    # Perform one integration step using current hills list
+    x_curr, v_curr = langevin_metad_step(
+        x_curr, v_curr, mass, dt, gamma, target_temp_metad,
+        force_dw, hills,
+        physical_args={'a': a_dw, 'b': b_dw}
+    )
+
+    # Record data
+    if (i + 1) % record_stride_metad == 0:
+        record_idx += 1
+        if record_idx &lt; n_recorded_metad:
+            times_metad[record_idx] = (i + 1) * dt
+            positions_metad[record_idx] = x_curr
+            # Calculate current bias potential value at particle position (can be slow if many hills)
+            bias_potential_at_x[record_idx] = calculate_metad_bias_potential(x_curr, hills)
+            num_hills_deposited.append(len(hills))
+
+
+end_time = time.time()
+print(f"Metadynamics simulation finished. Time taken: {end_time - start_time:.2f} seconds.")
+print(f"Total hills deposited: {len(hills)}")
+
+# Trim recorded arrays if simulation ended before last recording step
+times_metad = times_metad[:record_idx+1]
+positions_metad = positions_metad[:record_idx+1]
+bias_potential_at_x = bias_potential_at_x[:record_idx+1]
+# Ensure num_hills_deposited aligns with times_metad
+num_hills_deposited_timed = np.interp(times_metad, np.arange(len(num_hills_deposited)) * metad_deposition_stride * dt, num_hills_deposited).astype(int)</code></pre><pre class="output">Starting Metadynamics simulation (30000 steps)...
+  Step 5000, Deposited 100 hills...
+  Step 10000, Deposited 200 hills...
+  Step 15000, Deposited 300 hills...
+  Step 20000, Deposited 400 hills...
+  Step 25000, Deposited 500 hills...
+  Step 30000, Deposited 600 hills...
+Metadynamics simulation finished. Time taken: 40.13 seconds.
+Total hills deposited: 600</pre></details>
+  <p>In pure Python this loop takes about 40 s, because every step sums over all hills. The lab below runs the same 30,000 steps in your browser; its result feeds every plot in Lesson 4.</p>
+  <div id="lab-run"></div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Reconstructing F(x)"><span class="lesson-num">Lesson 4</span>Reconstructing the Free Energy Surface</h2>
+  <p>In Metadynamics, the simulation explores the landscape by progressively filling the wells with the bias potential $V_{bias}(x, t)$. As the simulation converges (i.e., the particle diffuses back and forth across the landscape relatively freely), the accumulated bias potential becomes an estimate of the negative of the underlying free energy (PMF), up to an irrelevant additive constant:</p>
+  <div class="eq-card">
+  $$ F(x) \approx -V_{bias}(x, t \to \infty) + C $$
+  </div>
+  <p>Therefore, we can reconstruct the PMF simply by calculating the negative of the total bias potential from <em>all</em> the deposited hills at the end of the simulation.</p>
+  <h3>Monitoring convergence</h3>
+  <p>How do we know if the simulation has run long enough ("converged")?</p>
+  <div class="cards">
+    <div class="card"><h4>Trajectory</h4><p>Plot the position $x$ vs. time. Has the particle crossed the main barrier(s) multiple times?</p></div>
+    <div class="card"><h4>Bias potential growth</h4><p>Plot the height of the bias potential evaluated at the particle's current position ($V_{bias}(x(t), t)$) vs. time. It should initially increase as wells are filled, then plateau or fluctuate around a relatively constant value once the main barriers are overcome.</p></div>
+    <div class="card"><h4>Collective variable diffusion</h4><p>The particle should appear to diffuse relatively freely along the CV once the landscape is filled.</p></div>
+    <div class="card"><h4>PMF stability</h4><p>Calculate the PMF estimate ($-V_{bias}$) using hills deposited up to different times (e.g., half the simulation vs. the full simulation). If the PMF shape is stable, it suggests convergence.</p></div>
+  </div>
+  <p>Let's visualize the trajectory and the bias potential growth first.</p>
+</section>
+
+<section class="step">
+  <h3>Trajectory and bias growth</h3>
+  <details class="code-cell"><summary>Plot the trajectory and bias growth</summary><pre><code class="language-python"># --- Visualize Metadynamics Trajectory and Convergence ---
+
+fig, axes = plt.subplots(2, 1, figsize=(6, 8), sharex=True)
+
+# Plot position vs time
+axes[0].plot(times_metad, positions_metad, lw=1, alpha=0.8)
+axes[0].set_ylabel("Position (x)")
+axes[0].set_title("Metadynamics Trajectory")
+axes[0].grid(True)
+axes[0].axhline(-minima_pos, color='r', linestyle=':', linewidth=1, label='Minima')
+axes[0].axhline(minima_pos, color='r', linestyle=':', linewidth=1)
+axes[0].legend(loc='upper right')
+
+
+# Plot bias potential at current position vs time
+axes[1].plot(times_metad, bias_potential_at_x, lw=1.5, label='$V_{bias}(x(t), t)$')
+# Add number of hills on secondary y-axis
+ax1b = axes[1].twinx()
+ax1b.plot(times_metad, num_hills_deposited_timed, 'g--', lw=1, alpha=0.6, label='Num. Hills')
+ax1b.set_ylabel("Number of Hills", color='g')
+ax1b.tick_params(axis='y', labelcolor='g')
+
+axes[1].set_xlabel("Time")
+axes[1].set_ylabel("Bias Potential at x(t) ($k_B T$ units)")
+axes[1].set_title("Metadynamics Bias Growth &amp; Convergence")
+axes[1].grid(True)
+axes[1].legend(loc='upper left')
+ax1b.legend(loc='upper right')
+
+
+plt.tight_layout()
+plt.show()
+
+print("Check if the trajectory explores both wells and crosses the barrier.")
+print("Check if the bias potential growth starts to level off (indicating wells are being filled).")</code></pre><pre class="output">Check if the trajectory explores both wells and crosses the barrier.
+Check if the bias potential growth starts to level off (indicating wells are being filled).</pre></details>
+  <p>The Python code draws the bias at $x(t)$ and the number of hills on twin y-axes of one panel; here they are separate panels. The plots show the run from the Lesson 3 lab — change its sliders and they update.</p>
+  <div id="lab-traj"></div>
+</section>
+
+<section class="step">
+  <h3>Exercise: Compute the PMF</h3>
+  <details class="exercise" open>
+    <summary>Exercise — reconstruct the PMF from the hills</summary>
+    <p>Now, calculate the final total bias potential $V_{bias}(x, t_{final})$ over a grid of $x$ values using all the deposited <code>hills</code>. The reconstructed PMF is then $-V_{bias}(x, t_{final})$. Plot this against the analytical potential.</p>
+  </details>
+  <details class="code-cell"><summary>Reconstructed PMF vs. analytical potential, and the final landscape</summary><pre><code class="language-python">import numpy as np
+import matplotlib.pyplot as plt
+import warnings # To handle potential log(0) issues
+import time # To track simulation time
+
+# --- Calculate and Plot Reconstructed PMF ---
+
+# Define grid for calculating final PMF
+n_bins_pmf = 100
+# Ensure positions_metad is not empty before calculating min/max
+if len(positions_metad) &gt; 0:
+    pmf_grid = np.linspace(min(positions_metad)-0.2, max(positions_metad)+0.2, n_bins_pmf) # Grid based on sampled range
+else:
+    # Provide a default grid if positions_metad is empty
+    pmf_grid = np.linspace(-2, 2, n_bins_pmf)
+    print("Warning: positions_metad is empty. Using default grid for PMF.")
+
+
+# Calculate final bias potential on the grid using *all* deposited hills
+# Ensure hills list is not empty
+if len(hills) &gt; 0:
+    final_bias_potential = np.array([calculate_metad_bias_potential(x, hills) for x in pmf_grid])
+else:
+    final_bias_potential = np.zeros_like(pmf_grid) # Bias is zero if no hills deposited
+    print("Warning: hills list is empty. Final bias potential is zero.")
+
+
+# Reconstructed PMF = - Final Bias Potential
+pmf_metad = -final_bias_potential
+
+# Shift PMF so minimum is zero (only if pmf_metad is not all zeros)
+if np.any(pmf_metad):
+    min_pmf_metad = np.min(pmf_metad)
+    pmf_metad -= min_pmf_metad
+else:
+    min_pmf_metad = 0 # Keep minimum at zero if PMF is flat
+
+# Calculate analytical potential on the same grid for comparison
+analytical_potential_metad = potential_dw(pmf_grid, a=a_dw, b=b_dw)
+analytical_potential_metad -= minima_val # Shift minimum to zero
+
+
+# --- Plot Reconstructed PMF vs Analytical ---
+# plt.figure(figsize=(10, 7))
+
+# Plot analytical potential
+plt.plot(pmf_grid, analytical_potential_metad, 'r--', linewidth=2.5, label="Target PMF (Analytical Potential)")
+
+# Plot Metadynamics PMF
+plt.plot(pmf_grid, pmf_metad, 'g-', linewidth=2, label="PMF from Metadynamics")
+
+plt.xlabel("Position (x)")
+plt.ylabel("Free Energy / Potential (shifted, $k_B T$ units)")
+plt.title("PMF from Metadynamics vs Analytical Potential")
+# Use calculated barrier_height if available, otherwise use a default
+try:
+    plot_ylim_upper = barrier_height * 1.5 if barrier_height &gt; 0 else 5
+except NameError:
+    plot_ylim_upper = max(np.max(analytical_potential_metad) * 1.1, 5) # Default based on analytical potential
+plt.ylim(-1, plot_ylim_upper) # Adjust ylim
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Calculate and print barrier height only if pmf_metad is not flat zero
+if np.any(pmf_metad):
+    print(f"PMF Barrier Height (Metadynamics, approx): {np.max(pmf_metad):.2f}")
+else:
+    print("PMF from Metadynamics is flat (likely no hills deposited or converged bias is zero).")
+print("Compare the green line (PMF from MetaD) to the red dashed line (analytical).")
+print("Accuracy depends on simulation length and MetaD parameters.")
+
+
+# --- Visualize Overall Potential Landscape ---
+# This part uses variables calculated above in this same cell.
+
+# Calculate the overall potential (shifted analytical + final bias)
+overall_potential = analytical_potential_metad + final_bias_potential
+
+# Plot the shifted analytical potential (underlying FE)
+plt.plot(pmf_grid, analytical_potential_metad, 'r--', linewidth=2.5, label="Underlying Potential (Shifted)")
+
+# Plot the final accumulated bias potential
+plt.plot(pmf_grid, final_bias_potential, 'b:', linewidth=2, label="Final Bias Potential ($V_{bias}$)")
+
+# Plot the overall potential felt by the particle at the end
+plt.plot(pmf_grid, overall_potential, 'k-', linewidth=2.5, label="Overall Potential ($V_{analytical} + V_{bias}$)")
+
+
+plt.xlabel("Position (x)")
+plt.ylabel("Energy ($k_B T$ units)")
+plt.title("Potential Landscape After Metadynamics Simulation")
+# Adjust ylim for better visualization, considering the bias potential height
+plot_ylim_lower_overall = min(np.min(analytical_potential_metad), np.min(overall_potential)) - 1
+plot_ylim_upper_overall = max(np.max(final_bias_potential)*1.2, np.max(overall_potential)*1.1, 10)
+plt.ylim(plot_ylim_lower_overall, plot_ylim_upper_overall)
+plt.legend()
+plt.grid(True)
+plt.show()
+
+print("\nThe black line shows the 'flattened' landscape the particle sees at the end.")
+print("The bias potential (blue dotted) effectively cancels the underlying potential wells (red dashed).")
+</code></pre><pre class="output">PMF Barrier Height (Metadynamics, approx): 6.43
+Compare the green line (PMF from MetaD) to the red dashed line (analytical).
+Accuracy depends on simulation length and MetaD parameters.
+
+The black line shows the 'flattened' landscape the particle sees at the end.
+The bias potential (blue dotted) effectively cancels the underlying potential wells (red dashed).</pre></details>
+  <div id="lab-pmf"></div>
+</section>
+
+<section class="step">
+  <details class="exercise">
+    <summary>Question — why does the code print a "barrier height" of about 6.4, not ≈ 4?</summary>
+    <p>Look at the line <code>np.max(pmf_metad)</code> in the cell above, and at the readouts of the lab. What does the maximum of the shifted PMF over the whole grid actually measure?</p>
+    <details class="reveal">
+      <summary>Show the answer</summary>
+      <p>The grid runs from <code>min(positions_metad) − 0.2</code> to <code>max(positions_metad) + 0.2</code>, so its ends lie just outside the region the walker visited, where hardly any sand was deposited. There $-V_{bias} \approx 0$, so after shifting the minimum to zero, <code>np.max(pmf_metad)</code> is essentially the <em>deepest point of the accumulated bias</em> — not the barrier. The barrier height is the difference $F(0) - F(x_{min})$, which the lab reports separately and which comes out close to 4. The edges of $-V_{bias}$ are only meaningful where the walker actually went.</p>
+    </details>
+  </details>
+</section>
+
+<section class="step">
+  <h3>Convergence with Number of Hills</h3>
+  <p>After reconstructing the PMF from all deposited hills, assess convergence by rebuilding the PMF using only the first $m$ hills (for $m = 50, 100, \dots$):</p>
+  <ul>
+    <li>Compute the PMF on the same grid for subsets of hills.</li>
+    <li>Track:
+      <ul>
+        <li>ΔG between the two minima</li>
+        <li>Barrier height between minima</li>
+      </ul>
+    </li>
+  </ul>
+  <p>Plot these as a function of the number of hills to ensure the PMF has stabilized.</p>
+  <details class="code-cell"><summary>PMF convergence vs. number of hills</summary><pre><code class="language-python">import numpy as np
+import matplotlib.pyplot as plt
+
+# --- Reconstruct full PMF from all hills (for reference) ---
+# # Define grid based on sampled CV range
+# n_bins_pmf = 100
+
+# Compute underlying (analytical) potential on that grid
+underlying = potential_dw(pmf_grid, a=a_dw, b=b_dw)
+
+# --- Convergence analysis: PMF vs. Number of Hills in steps of 200 ---
+
+# Known CV positions of the two minima and the barrier
+min1_pos, min2_pos, barrier_pos = -1.41, +1.41, 0.00
+
+# Map those to the closest grid indices
+idx1 = np.argmin(np.abs(pmf_grid - min1_pos))
+idx2 = np.argmin(np.abs(pmf_grid - min2_pos))
+idxb = np.argmin(np.abs(pmf_grid - barrier_pos))
+
+# Prepare hill‐count steps
+nsteps = 200
+total_hills = len(hills)
+steps = np.arange(nsteps, total_hills + 1, nsteps)
+
+# Storage for free‐energy metrics
+dg_minima   = []
+barrier_h1  = []
+barrier_h2  = []
+
+# Loop over subsets of the first m hills
+for m in steps:
+    # Build bias from hills 0 … m-1
+    bias_m = np.array([calculate_metad_bias_potential(x, hills[:m])
+                       for x in pmf_grid])
+    # Reconstruct subset‐PMF and shift min to zero
+    pmf_m = - bias_m
+    pmf_m -= np.min(pmf_m)
+
+    # ΔG between minima
+    dg_minima.append(pmf_m[idx2] - pmf_m[idx1])
+    # Barrier heights measured from each minimum
+    barrier_h1.append(pmf_m[idxb] - pmf_m[idx1])
+    barrier_h2.append(pmf_m[idxb] - pmf_m[idx2])
+
+# Plot the convergence curves
+plt.figure(figsize=(6, 4))
+plt.plot(steps, dg_minima,  marker='o', label='ΔG between minima')
+plt.plot(steps, barrier_h1, marker='s', label='Barrier from Min1')
+plt.plot(steps, barrier_h2, marker='^', label='Barrier from Min2')
+
+# Add lines for actual delta G and barrier height
+plt.axhline(y=0, color='black', linestyle='--', label='Actual ΔG (0)')  # delta G
+plt.axhline(y=4, color='red', linestyle='--', label='Actual Barrier Height (4)')  # barrier height
+
+plt.xlabel('Number of hills included')
+plt.ylabel('Free energy ($k_B T$)')
+plt.title('MetaD PMF Convergence vs. Number of Hills')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+</code></pre></details>
+  <div id="lab-conv"></div>
+  <div class="quiz" data-answer="1">
+    <p class="q">In plain (non-tempered) metadynamics, what does the accumulated bias $V_{bias}(x, t)$ approach at long times?</p>
+    <ol class="choices">
+      <li>The negative of the free energy, $-F(x)$, up to an additive constant</li>
+      <li>The free energy itself, $F(x)$</li>
+      <li>Zero — the hills eventually cancel each other</li>
+      <li>The Boltzmann probability $e^{-F(x)/k_BT}$</li>
+    </ol>
+    <div class="explain">The hills fill the wells until $F(x) + V_{bias}(x)$ is flat, so $V_{bias} \approx -F + C$. In plain MetaD the estimate keeps fluctuating by about a hill height, because hills keep landing at full height.</div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Beyond plain metadynamics: well-tempered MetaD</h3>
+  <p>The key takeaways below mention <strong>Well-Tempered Metadynamics</strong>, which scales down the height of the deposited hills as the simulation progresses. In the standard formulation the height of a new hill depends on how much bias has already accumulated where it lands:</p>
+  <div class="eq-card">
+  $$ W(t) = W \exp\left(-\frac{V_{bias}(x(t), t)}{k_B \Delta T}\right), \qquad F(x) \approx -\frac{T + \Delta T}{\Delta T}\, V_{bias}(x, t \to \infty) + C $$
+  </div>
+  <p>$\Delta T$ is a tuning temperature; the <em>bias factor</em> $\gamma = (T + \Delta T)/T$ says how strongly the CV is "heated". As the wells fill, new hills shrink, so the bias converges smoothly instead of fluctuating forever, and you avoid over-biasing (pushing the system into irrelevant high-energy regions). $\Delta T \to \infty$ recovers plain metadynamics; $\Delta T \to 0$ is unbiased MD. Try the <em>Well-tempered</em> switch in the Lesson 1 animation, or compare both side by side here:</p>
+  <div id="lab-wt"></div>
+  <div class="quiz" data-answer="2">
+    <p class="q">In well-tempered metadynamics with $k_BT = 0.4$ and $k_B\Delta T = 2.0$, the bias at convergence is $V_{bias} \approx -c\,F + C$. What is $c$?</p>
+    <ol class="choices">
+      <li>$c = 1$, exactly as in plain metadynamics</li>
+      <li>$c = \Delta T / (T + \Delta T) = 2.0/2.4 \approx 0.83$</li>
+      <li>$c = (T + \Delta T)/T = 6$, the bias factor</li>
+    </ol>
+    <div class="explain">Only a fraction $\Delta T/(T+\Delta T) = 1 - 1/\gamma$ of the free energy is compensated, which is why the estimate is rescaled by $(T+\Delta T)/\Delta T$. The residual landscape $F/\gamma$ is a smoothed copy the walker can still cross easily.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Umbrella vs MetaD"><span class="lesson-num">Lesson 5</span>Umbrella Sampling vs Metadynamics</h2>
+  <div class="cards">
+    <div class="card">
+      <h4>Umbrella Sampling (US)</h4>
+      <ul>
+        <li>Windows can be run <strong>in parallel</strong>—each umbrella simulation is independent.</li>
+        <li>Fast &amp; robust convergence for 1D collective variables.</li>
+        <li>For multiple CVs, the grid grows exponentially (e.g., 10×10 = 100 windows for 2D), which becomes computationally expensive.</li>
+        <li>Requires <strong>prior knowledge</strong> of which regions to sample to place umbrellas effectively.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Metadynamics (MetaD)</h4>
+      <ul>
+        <li>Runs <strong>a single long</strong> simulation, adaptively filling unknown regions of the free-energy landscape.</li>
+        <li>No need to predefine all minima/barriers—exploration is driven by the history-dependent bias.</li>
+        <li>Scales better to 2D+ CV spaces—avoids the combinatorial explosion of umbrellas.</li>
+        <li>May require longer wall-clock time to accumulate sufficient bias for convergence.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="quiz" data-answer="3">
+    <p class="q">You know nothing about where the minima and barriers lie along a new 2D collective-variable space. Which method is the more natural first choice, and why?</p>
+    <ol class="choices">
+      <li>Umbrella sampling, because its windows run in parallel</li>
+      <li>Umbrella sampling, because WHAM needs no overlap between windows</li>
+      <li>Metadynamics, because the history-dependent bias finds the wells on its own and avoids the exponential growth of a 2D window grid</li>
+    </ol>
+    <div class="explain">Umbrella windows must be placed using prior knowledge, and a 2D grid of windows grows as (windows per CV)². Metadynamics discovers the landscape in one adaptive run — at the cost of a longer single simulation.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="step">
+  <hr>
+  <p>End of Module 7. We have explored and implemented Metadynamics:</p>
+  <ul>
+    <li><strong>Metadynamics Concept:</strong> Understood how adding history-dependent Gaussian hills fills free energy wells and facilitates barrier crossing.</li>
+    <li><strong>Implementation:</strong> Modified the Langevin integrator and simulation loop to incorporate the time-dependent MetaD bias.</li>
+    <li><strong>PMF Reconstruction:</strong> Learned that the converged MetaD bias potential provides an estimate of the negative free energy ($F(x) \approx -V_{bias}$).</li>
+    <li><strong>Visualization &amp; Comparison:</strong> Ran a MetaD simulation, monitored its progress, reconstructed the PMF, and compared it to the analytical potential and discussed its pros/cons relative to Umbrella Sampling.</li>
+  </ul>
+  <div class="takeaways">
+    <h2 data-toc="Key takeaways">📝 Key Takeaways</h2>
+    <ul>
+      <li><strong>Metadynamics</strong> is an adaptive, history-dependent biasing technique that adds Gaussian hills along a CV to discourage the system from revisiting sampled states.</li>
+      <li>In the long-time limit, the accumulated bias potential converges to the negative of the free energy surface: $V_{\text{bias}}(s, t \to \infty) \approx -F(s)$.</li>
+      <li><strong>Well-Tempered Metadynamics</strong> scales down the height of the deposited hills as the simulation progresses, avoiding over-biasing and ensuring smooth convergence.</li>
+      <li>Unlike Umbrella Sampling, Metadynamics does not require pre-determining static window locations, making it highly versatile for discovering unexpected transition pathways.</li>
+    </ul>
+  </div>
+  <h3>➡️ What's next?</h3>
+  <p>In <a href="08-lj-fluid.html">Module 8 — Multi-Particle LJ Fluid Simulation with ASE</a>, we will finish our 1D studies and transition to a realistic 3D simulation of a Lennard-Jones fluid using a professional Python library, ASE!</p>
+</section>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script>
+(function () {
+  const P = MD.phys;
+
+  // ------------------------------------------------------------------ model
+  // Double well from the setup code: V = a x⁴ − b x², a = 1, b = 4 → minima ±√2, barrier 4.
+  const A = 1.0, B = 4.0;
+  const XMIN = Math.sqrt(B / (2 * A));
+  const VMIN = P.potential_dw(XMIN, A, B);
+  const BARRIER = P.potential_dw(0, A, B) - VMIN;
+  const Vs = (x) => P.potential_dw(x, A, B) - VMIN; // shifted so the minima are 0
+  const MASS = 1.0, DT = 0.01, GAMMA = 1.0;
+  const NB = { W: 0.08, sigma: 0.154, stride: 50, kT: 0.4, steps: 30000, record: 50 }; // default parameters (Lesson 3)
+
+  /**
+   * Sum of Gaussian hills, tabulated on a fine grid (value and force) so that a
+   * step costs O(1) instead of O(number of hills). `hills` keeps [center, height, sigma]
+   * exactly like the Python list, for the subset analyses.
+   */
+  function Bias(lo = -3.5, hi = 3.5, dx = 0.004) {
+    const n = Math.round((hi - lo) / dx) + 1;
+    const V = new Float64Array(n), F = new Float64Array(n);
+    const hills = [];
+    const interp = (arr, x) => {
+      const u = (x - lo) / dx;
+      if (u <= 0 || u >= n - 1) return 0;
+      const i = Math.floor(u), f = u - i;
+      return arr[i] * (1 - f) + arr[i + 1] * f;
+    };
+    return {
+      hills,
+      add(c, w, s) {
+        hills.push([c, w, s]);
+        const i0 = Math.max(0, Math.floor((c - 5 * s - lo) / dx)), i1 = Math.min(n - 1, Math.ceil((c + 5 * s - lo) / dx));
+        const inv = 1 / (2 * s * s), is2 = 1 / (s * s);
+        for (let i = i0; i <= i1; i++) {
+          const d = lo + i * dx - c, g = w * Math.exp(-d * d * inv);
+          V[i] += g; F[i] += g * d * is2; // gaussian_force = gaussian * (x − c)/σ²
+        }
+      },
+      at: (x) => interp(V, x),
+      force: (x) => interp(F, x),
+    };
+  }
+
+  /** calculate_metad_bias_potential(x, hills[:m]) — exact sum over the first m hills. */
+  function biasExact(x, hills, m) {
+    let s = 0;
+    const n = m === undefined ? hills.length : Math.min(m, hills.length);
+    for (let k = 0; k < n; k++) {
+      const c = hills[k][0], w = hills[k][1], sg = hills[k][2], d = x - c;
+      s += w * Math.exp(-(d * d) / (2 * sg * sg));
+    }
+    return s;
+  }
+
+  /**
+   * A metadynamics walker following the Python loop: at step i, if (i+1) % stride == 0
+   * a hill is dropped at the current x, then one BAOAB step is taken with F_dw + F_bias.
+   * p = { W, sigma, stride, kT, wt, dT } is read at every step, so sliders act live.
+   */
+  function Walker(x0, seed) {
+    const rng = P.rng(seed), bias = Bias();
+    const force = (x) => P.force_dw(x, A, B) + bias.force(x);
+    const w = { x: x0, v: 0, i: 0, nHills: 0, bias, heights: [], hillT: [], side: Math.sign(x0) || -1, crossings: 0 };
+    w.step = (p) => {
+      if ((w.i + 1) % p.stride === 0) {
+        const h = p.wt ? p.W * Math.exp(-bias.at(w.x) / p.dT) : p.W;
+        bias.add(w.x, h, p.sigma);
+        w.heights.push(h); w.hillT.push(w.i * DT); w.nHills++;
+      }
+      const r = P.langevinBAOAB(w.x, w.v, MASS, DT, GAMMA, p.kT, force, rng);
+      w.x = r[0]; w.v = r[1]; w.i++;
+      if (w.side < 0 && w.x > 0.7) { w.side = 1; w.crossings++; } else if (w.side > 0 && w.x < -0.7) { w.side = -1; w.crossings++; }
+    };
+    return w;
+  }
+
+  /** F estimate from the bias: −V_bias (plain) or −(T+ΔT)/ΔT · V_bias (well-tempered). */
+  const fesFactor = (p) => (p.wt ? (p.kT + p.dT) / p.dT : 1);
+
+  // Error of a reconstruction against the true profile on |x| ≤ 2 (best constant shift).
+  const REGION = P.linspace(-2, 2, 401), VREG = REGION.map(Vs);
+  function rmse(fest) {
+    const d = REGION.map((x, i) => fest(x) - VREG[i]);
+    const m = P.mean(d);
+    return Math.sqrt(P.mean(d.map((v) => (v - m) ** 2)));
+  }
+  const nearest = (grid, x0) => P.argmin(grid.map((x) => Math.abs(x - x0)));
+
+  /** Full batch run (the Python simulation loop). Records every `record` steps. */
+  function runMetaD(p) {
+    const t0 = performance.now();
+    const w = Walker(-XMIN, p.seed);
+    const q = Object.assign({ wt: false, dT: 1 }, p);
+    const rec = q.record || 50;
+    const t = [0], x = [w.x], vb = [0], nh = [0];
+    for (let i = 0; i < q.steps; i++) {
+      w.step(q);
+      if ((i + 1) % rec === 0) { t.push((i + 1) * DT); x.push(w.x); vb.push(w.bias.at(w.x)); nh.push(w.bias.hills.length); }
+    }
+    return { p: q, t, x, vb, nh, w, hills: w.bias.hills, ms: performance.now() - t0 };
+  }
+
+  // Shared run: the Lesson 3 lab sets it; the Lesson 4 labs read it.
+  const RUN = { p: { W: NB.W, sigma: NB.sigma, stride: NB.stride, kT: NB.kT, steps: NB.steps, seed: 8 }, key: "", res: null, subs: [] };
+  function sharedRun() {
+    const key = JSON.stringify(RUN.p);
+    if (key !== RUN.key) { RUN.res = runMetaD(RUN.p); RUN.key = key; }
+    return RUN.res;
+  }
+  function setRun(p) {
+    RUN.p = { W: p.W, sigma: p.sigma, stride: p.stride, kT: p.kT, steps: p.steps, seed: p.seed };
+    const r = sharedRun();
+    RUN.subs.forEach((f) => f());
+    return r;
+  }
+  const runLabel = () => {
+    const q = RUN.p;
+    return `<p class="hint" style="margin:0;color:var(--ink-3);font-size:13.5px">Using the Lesson 3 run: W = ${q.W.toFixed(2)}, σ = ${q.sigma.toFixed(3)}, τ = ${q.stride} steps, k<sub>B</sub>T = ${q.kT.toFixed(2)}, ${q.steps.toLocaleString()} steps, seed ${q.seed}. Change it with the sliders <a href="#lab-run">in the run lab</a>.</p>`;
+  };
+
+  const minimaShapes = () => [-XMIN, XMIN].map((y) => ({ type: "line", xref: "paper", x0: 0, x1: 1, y0: y, y1: y, line: { color: "s8", width: 1, dash: "dot" } }));
+
+  // ================================================================== Lesson 1: animation
+  (function () {
+    const XL = -2.5, XR = 2.5, NX = 251;
+    const XS = P.linspace(XL, XR, NX);
+    const FX = P.linspace(-2.4, 2.4, 241);
+    let w, traj, recEvery, frame, ytop, cfg;
+
+    function reset(p) {
+      w = Walker(-XMIN, 7);
+      traj = { t: [0], x: [w.x] }; recEvery = 10; frame = 0; ytop = 7;
+      cfg = { wt: p.wt, dT: p.dT };
+    }
+    function advance(p, n) {
+      for (let k = 0; k < n; k++) {
+        w.step(p);
+        if (w.i % recEvery === 0) {
+          traj.t.push(w.i * DT); traj.x.push(w.x);
+          if (traj.t.length > 20000) { traj.t = traj.t.filter((_, j) => j % 2 === 0); traj.x = traj.x.filter((_, j) => j % 2 === 0); recEvery *= 2; }
+        }
+      }
+      // keep the per-hill arrays bounded during long playback (the bias itself lives on the grid)
+      if (w.heights.length > 20000) {
+        const keep = (_, j, a) => j % 2 === 0 || j === a.length - 1;
+        w.heights = w.heights.filter(keep); w.hillT = w.hillT.filter(keep);
+      }
+      if (w.bias.hills.length > 2000) w.bias.hills.splice(0, w.bias.hills.length - 1000);
+    }
+
+    const lab = MD.lab("#lab-anim", {
+      title: "Metadynamics, live: filling the double well",
+      intro: "<p>Every τ steps a Gaussian hill (height $W$, width $\\sigma$) is dropped where the walker is. The <span style=\"color:var(--s4)\">sand</span> is the accumulated bias $V_{bias}$; the dark curve is what the walker actually feels, $V + V_{bias}$. Below: the CV trajectory, the reconstructed $F(x) = -V_{bias}$ (or the well-tempered rescaling) against the true profile, and the height of each new hill.</p>",
+      controls: [
+        { type: "range", id: "W", label: "Hill height W", min: 0.01, max: 0.5, step: 0.01, value: NB.W },
+        { type: "range", id: "sigma", label: "Hill width σ", min: 0.03, max: 0.6, step: 0.002, value: NB.sigma },
+        { type: "range", id: "stride", label: "Deposition stride τ (steps)", min: 5, max: 300, step: 5, value: NB.stride },
+        { type: "range", id: "kT", label: "Temperature k<sub>B</sub>T", min: 0.1, max: 2, step: 0.05, value: NB.kT },
+        { type: "check", id: "wt", label: "Well-tempered", value: false },
+        { type: "range", id: "dT", label: "k<sub>B</sub>ΔT (well-tempered)", min: 0.2, max: 8, step: 0.1, value: 2, hint: "Bias factor γ = (T + ΔT)/T. Toggling well-tempered or changing ΔT restarts the run." },
+        { type: "range", id: "speed", label: "MD steps per frame", min: 10, max: 500, step: 10, value: 60 },
+        { type: "buttons", items: [{ id: "play", label: "Play / pause" }, { id: "hill", label: "+1 hill", secondary: true }, { id: "ff", label: "+10,000 steps", secondary: true }, { id: "reset", label: "Reset", secondary: true }] },
+      ],
+      cols: 2,
+      panels: [
+        { id: "cv", kind: "canvas", aspect: 2.1, span: true },
+        { id: "traj", kind: "plot", cls: "short" },
+        { id: "fes", kind: "plot", cls: "short" },
+        { id: "hh", kind: "plot", cls: "short" },
+        { id: "ro", kind: "readouts" },
+      ],
+      live: true,
+      init(lab) {
+        reset(lab.p);
+        window.addEventListener("resize", () => { if (!lab.anim.running) draw(lab); });
+        lab.anim = lab.loop(() => {
+          advance(lab.p, lab.p.speed);
+          draw(lab);
+          if (++frame % 4 === 0) plots(lab); // live plots + readouts while playing (throttled)
+        });
+      },
+      run(p, lab) {
+        if (p.wt !== cfg.wt || (p.wt && p.dT !== cfg.dT)) reset(p);
+        draw(lab); plots(lab);
+      },
+      onButton(id, p, lab) {
+        if (id === "play") lab.anim.running ? lab.anim.stop() : lab.anim.start();
+        if (id === "hill") advance(p, p.stride - (w.i % p.stride));
+        if (id === "ff") advance(p, 10000);
+        if (id === "reset") { lab.anim.stop(); reset(p); }
+        draw(lab); plots(lab);
+      },
+    });
+
+    function draw(lab) {
+      const p = lab.p;
+      const { ctx, w: W, h: H } = lab.canvas("cv");
+      ctx.clearRect(0, 0, W, H);
+      const bias = XS.map((x) => w.bias.at(x));
+      const vt = XS.map(Vs), tot = XS.map((x, i) => vt[i] + bias[i]);
+      let peak = 0;
+      XS.forEach((x, i) => { if (Math.abs(x) <= 2.05) peak = Math.max(peak, tot[i], bias[i]); });
+      ytop = Math.max(ytop, peak * 1.12);
+      const ybot = -0.8;
+      const padL = 40, padR = 12, padT = 48, padB = 26;
+      const X = (x) => padL + ((x - XL) / (XR - XL)) * (W - padL - padR);
+      const Y = (y) => padT + (1 - (y - ybot) / (ytop - ybot)) * (H - padT - padB);
+      const clipY = (y) => Y(Math.min(y, ytop + 1));
+      // axes and grid
+      ctx.font = "11px system-ui, sans-serif"; ctx.lineWidth = 1;
+      const tick = ytop > 14 ? 4 : 2;
+      for (let e = 0; e <= ytop; e += tick) {
+        ctx.strokeStyle = MD.css("--grid"); ctx.beginPath(); ctx.moveTo(padL, Y(e)); ctx.lineTo(W - padR, Y(e)); ctx.stroke();
+        ctx.fillStyle = MD.css("--ink-3"); ctx.fillText(String(e), 8, Y(e) + 4);
+      }
+      for (let x = -2; x <= 2; x++) { ctx.fillStyle = MD.css("--ink-3"); ctx.fillText(String(x), X(x) - 4, H - 8); }
+      ctx.fillText("x", W - padR - 10, H - 8);
+      // sand: region between V and V + V_bias
+      ctx.beginPath();
+      XS.forEach((x, i) => (i ? ctx.lineTo(X(x), clipY(tot[i])) : ctx.moveTo(X(x), clipY(tot[i]))));
+      for (let i = NX - 1; i >= 0; i--) ctx.lineTo(X(XS[i]), clipY(vt[i]));
+      ctx.closePath(); ctx.fillStyle = MD.alpha("s4", 0.45); ctx.fill();
+      // the most recent hill, highlighted on top of the sand
+      const hl = w.bias.hills[w.bias.hills.length - 1];
+      if (hl) {
+        const idx = XS.map((_, i) => i).filter((i) => Math.abs(XS[i] - hl[0]) < 3 * hl[2]);
+        if (idx.length > 1) {
+          const g = (x) => hl[1] * Math.exp(-((x - hl[0]) ** 2) / (2 * hl[2] * hl[2]));
+          ctx.beginPath();
+          idx.forEach((i, k) => (k ? ctx.lineTo(X(XS[i]), clipY(tot[i])) : ctx.moveTo(X(XS[i]), clipY(tot[i]))));
+          for (let k = idx.length - 1; k >= 0; k--) ctx.lineTo(X(XS[idx[k]]), clipY(tot[idx[k]] - g(XS[idx[k]])));
+          ctx.closePath(); ctx.fillStyle = MD.alpha("s4", 0.9); ctx.fill();
+        }
+      }
+      const line = (ys, col, width, dash) => {
+        ctx.strokeStyle = col; ctx.lineWidth = width; ctx.setLineDash(dash || []);
+        ctx.beginPath(); XS.forEach((x, i) => (i ? ctx.lineTo(X(x), clipY(ys[i])) : ctx.moveTo(X(x), clipY(ys[i])))); ctx.stroke();
+        ctx.setLineDash([]);
+      };
+      line(bias, MD.color("s1"), 1.5, [2, 3]);
+      line(vt, MD.color("s8"), 2, [7, 5]);
+      line(tot, MD.css("--ink"), 2.5);
+      // walker
+      ctx.fillStyle = MD.color("s2");
+      ctx.beginPath(); ctx.arc(X(w.x), clipY(Vs(w.x) + w.bias.at(w.x)), 7, 0, 2 * Math.PI); ctx.fill();
+      // legend
+      const items = [["V(x) − V_min", MD.color("s8"), [7, 5]], ["V_bias (sand)", MD.color("s1"), [2, 3]], ["V + V_bias", MD.css("--ink"), []]];
+      let lx = padL + 4;
+      ctx.font = "12px system-ui, sans-serif";
+      items.forEach(([lbl, col, dash]) => {
+        ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash(dash); ctx.beginPath(); ctx.moveTo(lx, 14); ctx.lineTo(lx + 22, 14); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = MD.css("--ink-2"); ctx.fillText(lbl, lx + 28, 18); lx += 40 + ctx.measureText(lbl).width;
+      });
+      ctx.fillStyle = MD.css("--ink-3");
+      ctx.fillText(`t = ${(w.i * DT).toFixed(0)}   hills = ${w.nHills}${p.wt ? "   (well-tempered)" : ""}`, padL + 4, 36);
+    }
+
+    function plots(lab) {
+      const p = lab.p, fac = fesFactor(p);
+      const est = FX.map((x) => -fac * w.bias.at(x));
+      const m = P.min(est.filter((_, i) => Math.abs(FX[i]) <= 2));
+      lab.plot("traj", [{ x: P.thin(traj.t, 2000), y: P.thin(traj.x, 2000), name: "x(t)", color: "s1", line: { width: 1 } }],
+        { title: { text: "CV trajectory" }, showlegend: false, shapes: minimaShapes(), xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "x" }, range: [-2.4, 2.4] }, margin: { t: 30 } });
+      lab.plot("fes", [
+        { x: FX, y: FX.map(Vs), name: "true V(x)", color: "s8", line: { dash: "dash" } },
+        { x: FX, y: est.map((v) => v - m), name: p.wt ? "−(T+ΔT)/ΔT · V_bias" : "−V_bias", color: "s6" },
+      ], { title: { text: "Reconstructed F(x)" }, legend: { y: 1.12 }, xaxis: { title: { text: "x" } }, yaxis: { title: { text: "F (shifted)" }, range: [-0.5, BARRIER * 1.6] }, margin: { t: 44 } });
+      const ht = w.hillT.length ? w.hillT : [0], hv = w.heights.length ? w.heights : [p.W];
+      lab.plot("hh", [{ x: P.thin(ht, 2000), y: P.thin(hv, 2000), name: "hill height", color: "s4", mode: "markers", marker: { size: 3 } }],
+        { title: { text: "Height of each new hill" }, showlegend: false, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "W(t)" }, rangemode: "tozero" }, margin: { t: 30 } });
+      const err = rmse((x) => -fac * w.bias.at(x));
+      const i1 = nearest(FX, -XMIN), i2 = nearest(FX, XMIN), ib = nearest(FX, 0);
+      const both = w.crossings > 0;
+      lab.readouts("ro", [
+        { k: "Time (steps)", v: `${(w.i * DT).toFixed(0)} (${w.i.toLocaleString()})` },
+        { k: "Hills deposited", v: String(w.nHills) },
+        { k: "Barrier crossings", v: String(w.crossings), cls: both ? "good" : "" },
+        { k: "Last hill height", v: w.heights.length ? w.heights[w.heights.length - 1].toFixed(3) : "—" },
+        { k: "Est. barrier F(0) − F(−1.41)", v: (est[ib] - est[i1]).toFixed(2) + " (true 4.00)" },
+        { k: "Est. ΔG F(+1.41) − F(−1.41)", v: (est[i2] - est[i1]).toFixed(2) + " (true 0)" },
+        { k: "RMS error, |x| ≤ 2", v: err.toFixed(2), cls: err < 0.5 ? "good" : "" },
+        { k: "Bias factor γ", v: p.wt ? ((p.kT + p.dT) / p.kT).toFixed(1) : "∞ (plain)" },
+      ]);
+    }
+    void lab;
+  })();
+
+  // ================================================================== Lesson 2: building a bias by hand
+  MD.lab("#lab-hills", {
+    title: "Build V_bias from hills",
+    intro: "<p>Drop $n$ hills at positions scattered around the left minimum (as a walker trapped there would) and look at their sum, the effective landscape $V + V_{bias}$, and the bias force $F_{bias} = -\\partial V_{bias}/\\partial x$ from the formula above. Defaults are the Lesson 3 values $W = 0.08$ and $\\sigma = 0.154$.</p>",
+    controls: [
+      { type: "range", id: "n", label: "Number of hills n", min: 1, max: 120, step: 1, value: 50 },
+      { type: "range", id: "W", label: "Hill height W", min: 0.01, max: 0.5, step: 0.01, value: NB.W },
+      { type: "range", id: "sigma", label: "Hill width σ", min: 0.02, max: 0.6, step: 0.002, value: NB.sigma },
+      { type: "range", id: "spread", label: "Spread of hill centres", min: 0.05, max: 0.6, step: 0.01, value: 0.16, hint: "Standard deviation of the centres around x = −1.41." },
+      { type: "check", id: "each", label: "Show individual hills", value: true },
+      { type: "range", id: "seed", label: "Seed", min: 1, max: 50, step: 1, value: 3 },
+    ],
+    cols: 2,
+    panels: [{ id: "v", kind: "plot", span: true }, { id: "f", kind: "plot", cls: "short" }, { id: "ro", kind: "readouts" }],
+    run(p, lab) {
+      const rng = P.rng(p.seed);
+      const hills = [];
+      for (let k = 0; k < p.n; k++) hills.push([rng.normal(-XMIN, p.spread), p.W, p.sigma]);
+      const xs = P.linspace(-2.4, 2.4, 481);
+      const vb = xs.map((x) => biasExact(x, hills));
+      const fb = xs.map((x) => hills.reduce((s, [c, w, sg]) => s + w * Math.exp(-((x - c) ** 2) / (2 * sg * sg)) * (x - c) / (sg * sg), 0));
+      const tot = xs.map((x, i) => Vs(x) + vb[i]);
+      const traces = [];
+      if (p.each) hills.slice(0, 60).forEach(([c], k) => {
+        const hx = P.linspace(c - 3 * p.sigma, c + 3 * p.sigma, 31);
+        traces.push({ x: hx, y: hx.map((x) => p.W * Math.exp(-((x - c) ** 2) / (2 * p.sigma ** 2))), name: "individual hills", legendgroup: "h", showlegend: k === 0, color: MD.alpha("s1", 0.35), line: { width: 1 }, hoverinfo: "skip" });
+      });
+      traces.push({ x: xs, y: xs.map(Vs), name: "V(x) − V_min", color: "s8", line: { dash: "dash" } });
+      traces.push({ x: xs, y: vb, name: "V_bias", color: "s1" });
+      traces.push({ x: xs, y: tot, name: "V + V_bias", color: "ink" });
+      lab.plot("v", traces, { title: { text: "Hills, their sum, and V + V_bias" }, legend: { x: 0.5, xanchor: "center", y: 0.99, yanchor: "top" }, xaxis: { title: { text: "x" } }, yaxis: { title: { text: "Energy" }, range: [-0.3, 6] }, margin: { t: 36 } });
+      lab.plot("f", [{ x: xs, y: fb, name: "F_bias", color: "s1" }], { title: { text: "Bias force F_bias(x)" }, showlegend: false, shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, line: { color: "axis", width: 1 } }], xaxis: { title: { text: "x" } }, yaxis: { title: { text: "F_bias" } }, margin: { t: 36 } });
+      // bumps (local maxima) in V_bias, and local minima of V + V_bias on the left half
+      const vmax = P.max(vb);
+      let bumps = 0, nmin = 0;
+      for (let i = 1; i < xs.length - 1; i++) {
+        if (vb[i] > vb[i - 1] && vb[i] >= vb[i + 1] && vb[i] > 0.05 * vmax) bumps++;
+        if (xs[i] < 0 && tot[i] < tot[i - 1] && tot[i] < tot[i + 1]) nmin++;
+      }
+      lab.readouts("ro", [
+        { k: "Max of V_bias", v: vmax.toFixed(2) },
+        { k: "Bumps (local maxima) in V_bias", v: String(bumps), cls: bumps > 1 ? "bad" : "good" },
+        { k: "Local minima of V + V_bias, x < 0", v: String(nmin) },
+        { k: "Volume of one hill W·√(2π)·σ", v: (p.W * Math.sqrt(2 * Math.PI) * p.sigma).toFixed(4) },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> shrink σ to about 0.03 — the sum turns into a comb of spikes (the bump count turns red) and $V + V_{bias}$ develops several artificial minima. With the defaults the bias is one smooth mound; $V + V_{bias}$ may still show two dips simply because the well is only partly filled — add hills (n = 120) and they merge. Widen σ to 0.5 — the bias becomes a smooth blob that also spills over the barrier, smearing out the well's shape. Raise $W$ and watch the force grow: large hills give the walker big, jerky kicks.</p>",
+  });
+
+  // ================================================================== Lesson 3: unbiased run to estimate σ
+  MD.lab("#lab-unbiased", {
+    title: "Unbiased MD: CV over time → hill width σ",
+    intro: "<p>The unbiased run above, live: 3,000 Langevin steps with no bias from $x_0 = 0$ at $k_BT = 0.4$ (10% of the barrier), the first 10% discarded, and $\\sigma$ = standard deviation of $x$. With the default seed this gives σ = 0.154; a harmonic estimate around the minimum gives $\\sqrt{k_BT / V''(x_{min})} = \\sqrt{0.4/16} = 0.158$.</p>",
+    controls: [
+      { type: "range", id: "kT", label: "Temperature k<sub>B</sub>T", min: 0.1, max: 2, step: 0.05, value: NB.kT },
+      { type: "range", id: "steps", label: "num_steps_unbiased", min: 1000, max: 30000, step: 500, value: 3000 },
+      { type: "range", id: "x0", label: "Start position x₀", min: -1.5, max: 1.5, step: 0.1, value: 0 },
+      { type: "range", id: "seed", label: "Seed", min: 1, max: 50, step: 1, value: 16 },
+    ],
+    panels: [{ id: "plot", kind: "plot" }, { id: "ro", kind: "readouts" }],
+    run(p, lab) {
+      const r = P.run1D({ x0: p.x0, v0: 0, m: MASS, dt: DT, steps: p.steps, method: "langevin", gamma: GAMMA, T: p.kT, seed: p.seed, force: (x) => P.force_dw(x, A, B) });
+      // the Python code records after each step (steps 1..N, time = step*dt) and drops the first 10%
+      const xs = r.x.slice(1), ts = r.t.slice(0, -1);
+      const cut = Math.floor(p.steps / 10);
+      const x = xs.slice(cut), t = ts.slice(cut);
+      const sig = P.std(x);
+      lab.plot("plot", [{ x: P.thin(t, 3000), y: P.thin(x, 3000), name: "x(t)", color: "s1", line: { width: 1.5 } }],
+        { title: { text: "Unbiased MD: CV over Time" }, showlegend: false, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "Collective Variable (x)" } } });
+      let cross = 0, side = Math.sign(x[0]);
+      for (const v of x) { if (side < 0 && v > 0.7) { side = 1; cross++; } else if (side > 0 && v < -0.7) { side = -1; cross++; } }
+      lab.readouts("ro", [
+        { k: "Estimated hill width σ", v: sig.toFixed(3), cls: cross ? "bad" : "good" },
+        { k: "Harmonic estimate √(k<sub>B</sub>T/16)", v: Math.sqrt(p.kT / 16).toFixed(3) },
+        { k: "⟨x⟩", v: P.mean(x).toFixed(2) },
+        { k: "Barrier crossings", v: String(cross), cls: cross ? "bad" : "" },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> change the seed — the particle falls into the left or the right well, but σ barely changes, because it measures the width of <em>one</em> well. Raise $k_BT$ above ~1.2 or run longer: once the walker crosses the barrier, the standard deviation jumps to ≈ 1.4 (the distance between the wells) and is no longer a sensible hill width. Lower $k_BT$ and σ shrinks as $\\sqrt{k_BT}$.</p>",
+  });
+
+  // ================================================================== Lesson 3: full run
+  MD.lab("#lab-run", {
+    title: "Run metadynamics (30,000 steps)",
+    intro: "<p>The full simulation loop above with the parameters chosen above: starts in the left well at $x = -1.41$, one hill every τ steps, positions and $V_{bias}(x(t), t)$ recorded every 50 steps. It recomputes when you release a slider; the plots in Lesson 4 follow this run.</p>",
+    controls: [
+      { type: "range", id: "W", label: "Hill height W", min: 0.01, max: 0.5, step: 0.01, value: NB.W, hint: "Default: barrier_height / 50 = 0.08" },
+      { type: "range", id: "sigma", label: "Hill width σ", min: 0.03, max: 0.6, step: 0.002, value: NB.sigma, hint: "Default: sigma_est = 0.154" },
+      { type: "range", id: "stride", label: "Deposition stride τ (steps)", min: 20, max: 500, step: 10, value: NB.stride },
+      { type: "range", id: "kT", label: "Temperature k<sub>B</sub>T", min: 0.1, max: 2, step: 0.05, value: NB.kT },
+      { type: "range", id: "steps", label: "n_steps_metad", min: 5000, max: 100000, step: 5000, value: NB.steps },
+      { type: "range", id: "seed", label: "Seed", min: 1, max: 50, step: 1, value: 8 },
+      { type: "buttons", items: [{ id: "defaults", label: "Reset to defaults", secondary: true }] },
+    ],
+    panels: [{ id: "plot", kind: "plot" }, { id: "ro", kind: "readouts" }],
+    live: "change",
+    run(p, lab) {
+      const r = setRun(p);
+      lab.plot("plot", [
+        { x: P.thin(r.t, 3000), y: P.thin(r.x, 3000), name: "x(t)", color: "s1", line: { width: 1 } },
+        { x: [r.t[0], r.t[r.t.length - 1], null, r.t[0], r.t[r.t.length - 1]], y: [-XMIN, -XMIN, null, XMIN, XMIN], name: "Minima", mode: "lines", color: "s8", line: { width: 1, dash: "dot" }, hoverinfo: "skip" },
+      ], { title: { text: "Metadynamics Trajectory" }, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "Position (x)" } }, margin: { t: 48 } });
+      const first = r.x.findIndex((v) => v > 0.7);
+      lab.readouts("ro", [
+        { k: "Total hills deposited", v: String(r.hills.length) },
+        { k: "Barrier crossings", v: String(r.w.crossings), cls: r.w.crossings >= 4 ? "good" : r.w.crossings ? "" : "bad" },
+        { k: "First escape from the left well", v: first > 0 ? `t ≈ ${r.t[first].toFixed(0)} (${r.nh[first]} hills)` : "never" },
+        { k: "Time taken (browser)", v: r.ms.toFixed(0) + " ms" },
+      ]);
+    },
+    onButton(id, p, lab) {
+      if (id !== "defaults") return;
+      [["W", NB.W], ["sigma", NB.sigma], ["stride", NB.stride], ["kT", NB.kT], ["steps", NB.steps], ["seed", 8]].forEach(([k, v]) => lab.set(k, v));
+      lab.rerun();
+    },
+    foot: "<p><strong>What to try:</strong> note how many hills it takes before the first escape (≈ 100–170 with the defaults, depending on the seed: the left well has to be filled almost to the barrier top). Halve $W$ and the escape takes about twice as long; double τ and it also slows down. Set $W = 0.01$ to see a run that never leaves the first well within 30,000 steps — exploration is slow with tiny hills. Raise $k_BT$ to 1.5 and the walker crosses on its own even before many hills pile up.</p>",
+  });
+
+  // ================================================================== Lesson 4: trajectory + bias growth
+  MD.lab("#lab-traj", {
+    title: "Metadynamics trajectory and bias growth & convergence",
+    controls: [],
+    cols: 2,
+    panels: [{ id: "x", kind: "plot", span: true }, { id: "vb", kind: "plot" }, { id: "nh", kind: "plot" }, { id: "src", kind: "html", span: true }],
+    init(lab) { RUN.subs.push(() => lab.rerun()); },
+    run(p, lab) {
+      const r = sharedRun();
+      const t = P.thin(r.t, 3000);
+      lab.plot("x", [
+        { x: t, y: P.thin(r.x, 3000), name: "x(t)", color: "s1", line: { width: 1 } },
+        { x: [r.t[0], r.t[r.t.length - 1], null, r.t[0], r.t[r.t.length - 1]], y: [-XMIN, -XMIN, null, XMIN, XMIN], name: "Minima", mode: "lines", color: "s8", line: { width: 1, dash: "dot" }, hoverinfo: "skip" },
+      ], { title: { text: "Metadynamics Trajectory" }, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "Position (x)" } }, margin: { t: 48 } });
+      lab.plot("vb", [{ x: t, y: P.thin(r.vb, 3000), name: "V_bias(x(t), t)", color: "s1", line: { width: 1.5 } }],
+        { title: { text: "Bias Potential at x(t)" }, showlegend: false, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "V_bias(x(t), t)  (k<sub>B</sub>T units)" }, rangemode: "tozero" } });
+      lab.plot("nh", [{ x: t, y: P.thin(r.nh, 3000), name: "Num. Hills", color: "s6", line: { dash: "dash" } }],
+        { title: { text: "Number of Hills" }, showlegend: false, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "Number of Hills" }, rangemode: "tozero" } });
+      lab.panel("src").innerHTML = runLabel() + '<pre class="output" style="margin:8px 0 0">Check if the trajectory explores both wells and crosses the barrier.\nCheck if the bias potential growth starts to level off (indicating wells are being filled).</pre>';
+    },
+    foot: "<p><strong>What to look for:</strong> the bias felt at $x(t)$ climbs in a sawtooth while the walker is stuck (it is filling the well beneath itself), drops when it escapes into the empty right well, and climbs again. In plain MetaD it never truly plateaus — it keeps rising slowly as the now-flat landscape is filled uniformly. Increase <code>n_steps_metad</code> in the run lab to 100,000 to see this.</p>",
+  });
+
+  // ================================================================== Lesson 4: PMF reconstruction
+  MD.lab("#lab-pmf", {
+    title: "PMF from metadynamics vs analytical potential",
+    intro: "<p>Both figures from the code above: the reconstructed PMF $-V_{bias}$ on a 100-point grid spanning the sampled range ± 0.2 (minimum shifted to zero) against the shifted analytical potential, and the final landscape the particle feels. Use the slider to rebuild the PMF from only the first part of the run.</p>",
+    controls: [
+      { type: "range", id: "frac", label: "Hills included (% of the run)", min: 5, max: 100, step: 5, value: 100 },
+    ],
+    cols: 2,
+    panels: [{ id: "pmf", kind: "plot" }, { id: "land", kind: "plot" }, { id: "ro", kind: "readouts", span: true }, { id: "src", kind: "html", span: true }],
+    init(lab) { RUN.subs.push(() => lab.rerun()); },
+    run(p, lab) {
+      const r = sharedRun();
+      const m = Math.round((r.hills.length * p.frac) / 100);
+      const grid = P.linspace(P.min(r.x) - 0.2, P.max(r.x) + 0.2, 100);
+      const fb = grid.map((x) => biasExact(x, r.hills, m));
+      const pmf0 = fb.map((v) => -v), mn = P.min(pmf0);
+      const pmf = pmf0.map((v) => v - mn);
+      const ana = grid.map(Vs);
+      const overall = ana.map((v, i) => v + fb[i]);
+      lab.plot("pmf", [
+        { x: grid, y: ana, name: "Target PMF (Analytical Potential)", color: "s8", line: { dash: "dash", width: 2.5 } },
+        { x: grid, y: pmf, name: "PMF from Metadynamics", color: "s6" },
+      ], { title: { text: "PMF from Metadynamics vs Analytical" }, legend: { y: 1.1 }, xaxis: { title: { text: "Position (x)" } }, yaxis: { title: { text: "Free energy (shifted, k<sub>B</sub>T units)" }, range: [-1, BARRIER * 1.5] }, margin: { t: 60 } });
+      const lo = Math.min(P.min(ana), P.min(overall)) - 1;
+      const hi = Math.max(P.max(fb) * 1.2, P.max(overall) * 1.1, 10);
+      lab.plot("land", [
+        { x: grid, y: ana, name: "Underlying potential (shifted)", color: "s8", line: { dash: "dash", width: 2.5 } },
+        { x: grid, y: fb, name: "Final bias V_bias", color: "s1", line: { dash: "dot" } },
+        { x: grid, y: overall, name: "V_analytical + V_bias", color: "ink", line: { width: 2.5 } },
+      ], { title: { text: "Landscape After Metadynamics" }, legend: { y: 1.1 }, xaxis: { title: { text: "Position (x)" } }, yaxis: { title: { text: "Energy (k<sub>B</sub>T units)" }, range: [lo, hi] }, margin: { t: 60 } });
+      const i1 = nearest(grid, -XMIN), i2 = nearest(grid, XMIN), ib = nearest(grid, 0);
+      const inside = grid.map((x, i) => i).filter((i) => Math.abs(grid[i]) <= 2);
+      const d = inside.map((i) => pmf[i] - ana[i]), dm = P.mean(d);
+      const err = Math.sqrt(P.mean(d.map((v) => (v - dm) ** 2)));
+      lab.readouts("ro", [
+        { k: "PMF Barrier Height (np.max(pmf_metad))", v: P.max(pmf).toFixed(2) },
+        { k: "Barrier F(0) − F(−1.41)", v: (pmf[ib] - pmf[i1]).toFixed(2) + " (true 4.00)" },
+        { k: "ΔG = F(+1.41) − F(−1.41)", v: (pmf[i2] - pmf[i1]).toFixed(2) + " (true 0)" },
+        { k: "RMS error for |x| ≤ 2", v: err.toFixed(2), cls: err < 0.5 ? "good" : "bad" },
+        { k: "Hills used", v: `${m} of ${r.hills.length}` },
+      ]);
+      lab.panel("src").innerHTML = runLabel();
+    },
+    foot: "<p><strong>What to try:</strong> drag the slider back to 25% — the left well is already roughly reconstructed but the right one is not, so ΔG is far from zero. With all hills the black curve (what the particle feels) is nearly flat between the wells: the sand has cancelled the landscape. The printed \"PMF Barrier Height\" is <code>np.max(pmf_metad)</code>, which is the depth of the bias at the grid edges, not the barrier (see the question below). Try a run with $W = 0.3$ in the run lab: faster filling, but a bumpier, less accurate PMF.</p>",
+  });
+
+  // ================================================================== Lesson 4: convergence vs number of hills
+  MD.lab("#lab-conv", {
+    title: "MetaD PMF convergence vs. number of hills",
+    intro: "<p>The code above, live: rebuild the PMF from the first $m$ hills for $m$ = 200, 400, 600 (block size <code>nsteps = 200</code>) and read off ΔG between the minima and the barrier measured from each minimum at the grid points closest to $x = -1.41, 0, +1.41$.</p>",
+    controls: [
+      { type: "range", id: "block", label: "Hill-count step nsteps", min: 25, max: 300, step: 25, value: 200 },
+    ],
+    panels: [{ id: "plot", kind: "plot" }, { id: "ro", kind: "readouts" }, { id: "src", kind: "html" }],
+    init(lab) { RUN.subs.push(() => lab.rerun()); },
+    run(p, lab) {
+      const r = sharedRun();
+      const grid = P.linspace(P.min(r.x) - 0.2, P.max(r.x) + 0.2, 100);
+      const idx1 = nearest(grid, -1.41), idx2 = nearest(grid, 1.41), idxb = nearest(grid, 0);
+      const steps = [];
+      for (let m = p.block; m <= r.hills.length; m += p.block) steps.push(m);
+      const dg = [], b1 = [], b2 = [];
+      // bias from hills[0 … m−1], accumulated block by block (same numbers as re-summing each subset)
+      const acc = new Float64Array(grid.length);
+      let done = 0;
+      steps.forEach((m) => {
+        for (; done < m; done++) {
+          const [c, w, sg] = r.hills[done];
+          for (let j = 0; j < grid.length; j++) acc[j] += w * Math.exp(-((grid[j] - c) ** 2) / (2 * sg * sg));
+        }
+        const pmf = Array.from(acc, (v) => -v);
+        const mn = P.min(pmf);
+        const f = pmf.map((v) => v - mn);
+        dg.push(f[idx2] - f[idx1]); b1.push(f[idxb] - f[idx1]); b2.push(f[idxb] - f[idx2]);
+      });
+      const x0 = steps.length ? steps[0] : 0, x1 = steps.length ? steps[steps.length - 1] : 1;
+      lab.plot("plot", [
+        { x: steps, y: dg, mode: "lines+markers", name: "ΔG between minima", color: "s1", marker: { size: 7 } },
+        { x: steps, y: b1, mode: "lines+markers", name: "Barrier from Min1", color: "s2", marker: { size: 7, symbol: "square" } },
+        { x: steps, y: b2, mode: "lines+markers", name: "Barrier from Min2", color: "s6", marker: { size: 8, symbol: "triangle-up" } },
+        { x: [x0, x1], y: [0, 0], mode: "lines", name: "Actual ΔG (0)", color: "ink", line: { dash: "dash" }, hoverinfo: "skip" },
+        { x: [x0, x1], y: [BARRIER, BARRIER], mode: "lines", name: "Actual Barrier Height (4)", color: "s8", line: { dash: "dash" }, hoverinfo: "skip" },
+      ], { title: { text: "MetaD PMF Convergence vs. Number of Hills" }, legend: { y: 1.08 }, xaxis: { title: { text: "Number of hills included" } }, yaxis: { title: { text: "Free energy (k<sub>B</sub>T)" } }, margin: { t: 80 } });
+      const L = steps.length - 1;
+      lab.readouts("ro", L >= 0 ? [
+        { k: `ΔG with ${steps[L]} hills`, v: dg[L].toFixed(2) },
+        { k: "Barrier from Min1", v: b1[L].toFixed(2) },
+        { k: "Barrier from Min2", v: b2[L].toFixed(2) },
+        { k: "Points in the curve", v: String(steps.length) },
+      ] : [{ k: "Not enough hills", v: "—" }]);
+      lab.panel("src").innerHTML = runLabel();
+    },
+    foot: "<p><strong>What to try:</strong> set the step to 25 to see the full history: while the walker is stuck on one side, ΔG and the barriers swing by several $k_BT$ — each well is \"ahead\" in turn. They settle around 0 and 4 only after several crossings, and keep fluctuating by roughly a few hill heights — the hallmark of plain metadynamics. Lengthen the run (run lab, 100,000 steps) and compare how stable the last points become.</p>",
+  });
+
+  // ================================================================== Well-tempered vs plain
+  MD.lab("#lab-wt", {
+    title: "Plain vs well-tempered: does the estimate converge?",
+    intro: "<p>Two runs with the same hills, temperature and random numbers — one plain, one well-tempered. Every 500 steps we reconstruct $F(x)$ (plain: $-V_{bias}$; well-tempered: $-\\tfrac{T+\\Delta T}{\\Delta T}V_{bias}$) and measure its RMS error against the true double well for $|x| \\le 2$.</p>",
+    controls: [
+      { type: "range", id: "W", label: "Initial hill height W", min: 0.02, max: 0.5, step: 0.01, value: 0.08 },
+      { type: "range", id: "sigma", label: "Hill width σ", min: 0.05, max: 0.5, step: 0.002, value: NB.sigma },
+      { type: "range", id: "stride", label: "Deposition stride τ (steps)", min: 20, max: 300, step: 10, value: NB.stride },
+      { type: "range", id: "kT", label: "Temperature k<sub>B</sub>T", min: 0.1, max: 1.5, step: 0.05, value: NB.kT },
+      { type: "range", id: "dT", label: "k<sub>B</sub>ΔT", min: 0.2, max: 8, step: 0.1, value: 2 },
+      { type: "range", id: "steps", label: "MD steps", min: 20000, max: 120000, step: 10000, value: 100000 },
+      { type: "range", id: "seed", label: "Seed", min: 1, max: 50, step: 1, value: 2 },
+    ],
+    cols: 2,
+    panels: [{ id: "err", kind: "plot" }, { id: "hh", kind: "plot" }, { id: "fes", kind: "plot" }, { id: "ro", kind: "readouts" }],
+    live: "change",
+    run(p, lab) {
+      const fx = P.linspace(-2.4, 2.4, 241);
+      const out = [false, true].map((wt) => {
+        const q = { W: p.W, sigma: p.sigma, stride: p.stride, kT: p.kT, wt, dT: p.dT };
+        const w = Walker(-XMIN, p.seed), fac = fesFactor(q);
+        const t = [], e = [];
+        for (let i = 1; i <= p.steps; i++) {
+          w.step(q);
+          if (i % 500 === 0) { t.push(i * DT); e.push(rmse((x) => -fac * w.bias.at(x))); }
+        }
+        const est = fx.map((x) => -fac * w.bias.at(x));
+        const mn = P.min(est.filter((_, i) => Math.abs(fx[i]) <= 2));
+        return { w, t, e, est: est.map((v) => v - mn) };
+      });
+      const [pl, wt] = out;
+      lab.plot("err", [
+        { x: pl.t, y: pl.e, name: "plain", color: "s1" },
+        { x: wt.t, y: wt.e, name: "well-tempered", color: "s2" },
+      ], { title: { text: "RMS error of F(x) vs time" }, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "RMS error (k<sub>B</sub>T units)" }, type: "log" }, margin: { t: 56 } });
+      lab.plot("hh", [
+        { x: P.thin(pl.w.hillT, 2000), y: P.thin(pl.w.heights, 2000), name: "plain", color: "s1", mode: "lines" },
+        { x: P.thin(wt.w.hillT, 2000), y: P.thin(wt.w.heights, 2000), name: "well-tempered", color: "s2", mode: "markers", marker: { size: 3 } },
+      ], { title: { text: "Hill height decay" }, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "Height of new hill" }, rangemode: "tozero" }, margin: { t: 56 } });
+      lab.plot("fes", [
+        { x: fx, y: fx.map(Vs), name: "true", color: "s8", line: { dash: "dash" } },
+        { x: fx, y: pl.est, name: "plain −V_bias", color: "s1" },
+        { x: fx, y: wt.est, name: "well-tempered", color: "s2" },
+      ], { title: { text: "Final F(x) estimates" }, xaxis: { title: { text: "x" } }, yaxis: { title: { text: "F (shifted)" }, range: [-0.5, BARRIER * 1.6] }, margin: { t: 56 } });
+      const tail = (a) => P.mean(a.slice(Math.floor(a.length * 0.8)));
+      lab.readouts("ro", [
+        { k: "Bias factor γ = (T+ΔT)/T", v: ((p.kT + p.dT) / p.kT).toFixed(1) },
+        { k: "Plain: error, last 20% of run", v: tail(pl.e).toFixed(2) },
+        { k: "Well-tempered: error, last 20%", v: tail(wt.e).toFixed(2), cls: tail(wt.e) < tail(pl.e) ? "good" : "" },
+        { k: "Well-tempered: last hill height", v: wt.w.heights.length ? wt.w.heights[wt.w.heights.length - 1].toExponential(1) : "—" },
+        { k: "Crossings (plain / WT)", v: `${pl.w.crossings} / ${wt.w.crossings}` },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> with the defaults the plain error stalls at a level set by $W$, while the well-tempered error keeps falling as hills shrink. Raise $W$ to 0.3: plain MetaD gets noticeably worse, well-tempered barely cares. Make $\\Delta T$ small (0.4, γ = 2): the bias fills only half the wells and crossings become rare — under-biased. Make it large (8): it behaves almost like plain MetaD over this run length.</p>",
+  });
+})();
+</script>
+</body>
+</html>

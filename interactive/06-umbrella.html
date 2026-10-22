@@ -1,0 +1,1026 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 6 — Umbrella Sampling and PMF Reconstruction · MD Tutorial</title>
+<meta name="description" content="Bias potentials, harmonic umbrella windows, multi-window Langevin sampling, overlap checks, and WHAM reconstruction of the potential of mean force — with live simulations.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+</head>
+<body data-module="06">
+<main id="main">
+<article class="content">
+
+<!-- ================================================================== -->
+<header class="hero step">
+  <div class="eyebrow">Module 6 · Core track</div>
+  <h1>Umbrella Sampling and PMF Reconstruction</h1>
+  <p class="lede">Push a simulation over a barrier it would never cross on its own, then mathematically remove the push: harmonic umbrella windows plus the Weighted Histogram Analysis Method (WHAM) recover the true, unbiased free-energy profile.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Prerequisites</b> <a href="05-sampling.html">Module 5 (Sampling Challenge)</a></span>
+    <span class="chip"><b>What you run</b> Multi-window umbrella sampling simulations and WHAM reconstruction</span>
+    <span class="chip"><b>Expected runtime</b> 1–3 minutes</span>
+  </div>
+
+  <div class="objectives">
+    <h3>What you will learn</h3>
+    <ul>
+      <li>The concept of biasing potentials to overcome free-energy barriers.</li>
+      <li>How to set up umbrella sampling windows with harmonic restraints.</li>
+      <li>How to reconstruct the unbiased PMF using WHAM.</li>
+    </ul>
+  </div>
+  <p>Welcome to Module 6! In Module 5, we encountered the <strong>sampling problem</strong> when trying to calculate the Potential of Mean Force (PMF) for the double-well potential using standard NVT simulation.</p>
+  <p>This module introduces <strong>Umbrella Sampling (US)</strong>. We will run multiple biased simulations and then use a custom implementation of the <strong>Weighted Histogram Analysis Method (WHAM)</strong> equations to combine the data and reconstruct the true, unbiased PMF, demonstrating how to overcome the sampling barrier.</p>
+  <div class="callout tip">
+    <div class="callout-title">How to use this page</div>
+    <p>The Python code for every step is tucked into <strong>Python code</strong> cells you can expand and copy. The <strong>Interactive</strong> panels re-run the umbrella simulations and WHAM live in your browser, using a JavaScript port of the same <code>md_tutorial</code> functions (<code>potential_dw</code>, <code>force_dw</code>, the BAOAB Langevin step and <code>run_wham</code>). Press <kbd>P</kbd> (or the <em>Present</em> button) to step through the module slide by slide.</p>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<section class="step">
+  <h2 data-toc="Setup">Setup: Imports and Helper Functions</h2>
+  <p>We import shared utilities from <code>md_tutorial</code> and define umbrella-sampling-specific functions here: the harmonic bias potential, its force, and a Langevin (BAOAB) integrator that adds the bias force to the physical force at every step.</p>
+  <details class="code-cell"><summary>Imports and plotting style</summary><pre><code class="language-python">import numpy as np
+import matplotlib.pyplot as plt
+import warnings
+
+from md_tutorial.potentials import potential_dw, force_dw
+from md_tutorial.integrators import velocity_verlet_langevin
+
+plt.style.use('seaborn-v0_8-darkgrid')
+plt.rcParams['figure.figsize'] = (6, 4)
+plt.rcParams['lines.linewidth'] = 2
+
+k_B = 1.0</code></pre></details>
+  <details class="code-cell"><summary>Bias potential, bias force and the umbrella Langevin integrator</summary><pre><code class="language-python"># Bias potential and force for umbrella sampling
+def potential_bias_us(x, k_us, x0_us):
+    """Harmonic umbrella sampling bias potential energy."""
+    return 0.5 * k_us * (x - x0_us)**2
+
+
+def force_bias_us(x, k_us, x0_us):
+    """Force from harmonic umbrella sampling bias."""
+    return -k_us * (x - x0_us)
+
+
+def Velocity_verlet_langevin_US(x_curr, v_curr, mass, dt, gamma, target_temp,
+                                 force_physical_func, force_bias_func,
+                                 physical_args={}, bias_args={}):
+    """
+    Langevin dynamics (BAOAB) with physical + bias forces for umbrella sampling.
+    """
+    f_phys_curr = force_physical_func(x_curr, **physical_args)
+    f_bias_curr = force_bias_func(x_curr, **bias_args)
+    f_total_curr = f_phys_curr + f_bias_curr
+
+    v_half_b = v_curr + (f_total_curr / mass) * (dt / 2.0)
+    x_half_a = x_curr + v_half_b * (dt / 2.0)
+
+    c1 = np.exp(-gamma * dt)
+    c2 = np.sqrt(k_B * max(0, target_temp) * (1.0 - c1**2) / mass)
+    random_kick = np.random.normal(0, 1)
+    v_half_o = c1 * v_half_b + c2 * random_kick
+
+    x_new = x_half_a + v_half_o * (dt / 2.0)
+
+    f_phys_new = force_physical_func(x_new, **physical_args)
+    f_bias_new = force_bias_func(x_new, **bias_args)
+    f_total_new = f_phys_new + f_bias_new
+
+    v_new = v_half_o + (f_total_new / mass) * (dt / 2.0)
+    return x_new, v_new
+
+
+print("Umbrella sampling bias functions defined.")</code></pre><pre class="output">Umbrella sampling bias functions defined.</pre></details>
+  <details class="code-cell"><summary>Double-well and simulation parameters</summary><pre><code class="language-python"># Double-well and simulation parameters
+a_dw = 1.0
+b_dw = 4.0
+temperature = 1.0
+minima_pos = np.sqrt(b_dw / (2 * a_dw))
+minima_val = potential_dw(minima_pos, a=a_dw, b=b_dw)
+barrier_top_val = potential_dw(0, a=a_dw, b=b_dw)
+barrier_height = barrier_top_val - minima_val
+
+print(f"Double-well barrier height: {barrier_height:.2f}")</code></pre><pre class="output">Double-well barrier height: 4.00</pre></details>
+  <p>The physical system is the same double well as in Module 5, $V(x) = a x^4 - b x^2$ with $a = 1$, $b = 4$: minima at $x = \pm\sqrt{b/2a} = \pm\sqrt{2}$ and a barrier of height $b^2/4a = 4.00$ at $x = 0$.</p>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="The idea behind biasing"><span class="lesson-num">Lesson 1</span>The Idea Behind Biasing</h2>
+  <p>The core idea behind many enhanced sampling methods is to modify the potential energy landscape the system experiences during the simulation. We add an artificial <strong>bias potential</strong>, $V_{bias}(q)$, which depends on our chosen collective variable $q$ (in our case, $q=x$).</p>
+  <p>The total potential energy used to calculate forces in the simulation becomes:</p>
+  $$ V_{total}(x) = V_{physical}(x) + V_{bias}(x) $$
+  <p>where $V_{physical}(x)$ is the original double-well potential.</p>
+  <p>The corresponding total force is:</p>
+  $$ F_{total}(x) = F_{physical}(x) + F_{bias}(x) $$
+  <p>where $F_{bias}(x) = -\frac{dV_{bias}}{dx}$.</p>
+  <p>By carefully choosing $V_{bias}(x)$, we can make high-energy regions (like the barrier top) more favorable to visit, effectively “flattening” the energy landscape locally and encouraging transitions.</p>
+  <div class="callout warn">
+    <div class="callout-title">The catch: biased data</div>
+    <p>Of course, this simulation runs on a <em>modified</em> potential. The data we collect (histograms, averages) are <em>biased</em>. The crucial second step is to mathematically remove the effect of the bias potential afterwards to recover the properties of the original, unbiased system, such as the true PMF. Umbrella Sampling uses a specific form of bias and a method called WHAM to achieve this.</p>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Play with a bias</h3>
+  <p>The lab below shows the exact (Boltzmann) consequences of adding a bias. Pick a <em>barrier-flattening</em> bias to see the “flattening” idea, or a <em>harmonic umbrella</em> (the bias used in the rest of this module). The dotted curve multiplies the biased distribution by $e^{+V_{bias}(x)/k_BT}$ and renormalizes — that is the “mathematically remove the bias” step, and it lands exactly on the unbiased distribution.</p>
+  <div id="lab-bias"></div>
+  <div class="quiz" data-answer="3">
+    <p class="q">A biased simulation samples $V_{physical} + V_{bias}$. Why can't we read the PMF straight off its histogram?</p>
+    <ol class="choices">
+      <li>Because Langevin dynamics never reaches equilibrium</li>
+      <li>Because the histogram has too few bins</li>
+      <li>Because the histogram reflects the modified landscape; the bias must be removed afterwards (reweighting / WHAM)</li>
+    </ol>
+    <div class="explain">The biased histogram follows $e^{-[V_{physical}+V_{bias}]/k_BT}$. Removing the known bias factor $e^{-V_{bias}/k_BT}$ — exactly what the dotted curve in the lab does, and what WHAM does across many windows — recovers the unbiased distribution.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Harmonic umbrellas"><span class="lesson-num">Lesson 2</span>Harmonic Umbrella Potentials</h2>
+  <p>Umbrella Sampling uses a series of simulations, often called <strong>windows</strong>. In each window $i$, a harmonic bias potential is applied and centered at a target value $x_{0,i}$ along the collective variable $x$.</p>
+  <p>The bias potential in window $i$ is:</p>
+  <div class="eq-card">
+  $$ V_{\mathrm{bias},i}(x)=\frac{1}{2}k_{\mathrm{us}}\,(x-x_{0,i})^2 $$
+  </div>
+  <p>This potential is a harmonic (parabolic) restraint (an “umbrella”) centered at $x_{0,i}$.</p>
+  <div class="cards">
+    <div class="card"><h4>$k_{\mathrm{us}}$</h4><p>The spring constant of the umbrella potential. Larger $k_{\mathrm{us}}$ means tighter sampling around the center.</p></div>
+    <div class="card"><h4>$x_{0,i}$</h4><p>The center of the harmonic restraint for window $i$.</p></div>
+  </div>
+  <p>The corresponding biasing force is:</p>
+  <div class="eq-card">
+  $$ F_{\mathrm{bias},i}(x)=-\frac{dV_{\mathrm{bias},i}}{dx}=-k_{\mathrm{us}}(x-x_{0,i}) $$
+  </div>
+  <p>By running multiple windows with centers spanning the full region of interest (from one well, across the barrier, to the other well), we can sample high-energy regions effectively. A key requirement is good overlap between neighboring window histograms.</p>
+  <p>Switch the lab above to <em>Harmonic umbrella</em> and drag $x_0$ from $-2$ to $+2$: each position is one window. With $k_{\mathrm{us}} = 60$ the biased landscape has a single minimum near $x_0$ even at the barrier top, so the window samples a narrow, roughly Gaussian slice of $x$.</p>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Running umbrella sampling"><span class="lesson-num">Lesson 3</span>Running Umbrella Sampling</h2>
+  <h3>Setting up windows and parameters</h3>
+  <p>Define the window centers, spring constant, and simulation parameters. We'll run the simulations now.</p>
+  <details class="code-cell"><summary>Umbrella sampling parameters</summary><pre><code class="language-python"># Umbrella Sampling Parameters
+num_windows = 10 # Number of umbrella windows &lt;- change this to check the effets
+k_us = 60       # Umbrella spring constant &lt;- change this to check the effets
+# for this case best tested one: num_windows = 10 and k_us = 60
+window_centers = np.linspace(-2.0, 2.0, num_windows) # Window center positions
+
+print(f"Umbrella window centers (x0): {window_centers}")
+print(f"Umbrella spring constant (k_us): {k_us}")
+
+# Simulation parameters per window
+mass = 1.0
+dt = 0.01
+gamma = 1.0
+target_temp_us = barrier_height * 0.1 # Temperature relative to barrier
+temperature = target_temp_us # Set global temperature for WHAM
+n_steps_per_window = 100000 # Steps per window (adjust as needed)
+record_stride = 20 # Record less frequently to reduce correlation
+n_recorded_per_window = n_steps_per_window // record_stride
+burn_in_steps = 10000 # Steps to discard for equilibration
+n_burn_in_recorded = burn_in_steps // record_stride
+
+print(f"Target Temperature: {temperature:.2f}")
+print(f"Steps per window: {n_steps_per_window}, Record stride: {record_stride}")
+print(f"Recorded steps per window (after burn-in): {n_recorded_per_window - n_burn_in_recorded}")
+
+# Data storage for all windows
+all_positions_list = [] # List to hold position arrays from each window (including burn-in)</code></pre><pre class="output">Umbrella window centers (x0): [-2.         -1.55555556 -1.11111111 -0.66666667 -0.22222222  0.22222222
+  0.66666667  1.11111111  1.55555556  2.        ]
+Umbrella spring constant (k_us): 60
+Target Temperature: 0.40
+Steps per window: 100000, Record stride: 20
+Recorded steps per window (after burn-in): 4500</pre></details>
+
+  <h3>Choosing spring constant and number of windows</h3>
+  <p>For our double-well system:</p>
+  <ul>
+    <li>We used <strong>$K_{\rm us} = 60$</strong> and <strong>$N = 10$</strong> windows spanning $\xi = -2.0$ to $+2.0$.</li>
+    <li>In the umbrella histogram overlay, ensure that adjacent windows’ distributions have significant overlap.</li>
+  </ul>
+  <div class="callout key">
+    <div class="callout-title">General guidelines</div>
+    <ul>
+      <li>Pick $K_{\rm us}$ and $N$ such that adjacent windows overlap significantly.</li>
+      <li>If overlap is too small, decrease $K_{\rm us}$ or increase $N$.</li>
+      <li>If you need tighter restraint while maintaining overlap, increase $K_{\rm us}$ and adjust $N$ accordingly.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Running the simulations</h3>
+  <p>Run the simulation for each window using the modified Langevin integrator.</p>
+  <details class="code-cell"><summary>Run all umbrella windows</summary><pre><code class="language-python"># --- Run Umbrella Sampling Simulations ---
+
+print(f"Running {num_windows} Umbrella Sampling windows...")
+
+for i, center in enumerate(window_centers):
+    print(f"  Running window {i+1}/{num_windows} centered at x0 = {center:.2f}")
+
+    # Array to store positions for this window
+    positions_window = np.zeros(n_recorded_per_window)
+    record_index = 0
+
+    # Initial conditions for this window
+    x_curr = center # Start near the window center
+    v_curr = 0.0    # Start at rest
+
+    # Define bias arguments for this window
+    current_bias_args = {'k_us': k_us, 'x0_us': center}
+    current_physical_args = {'a': a_dw, 'b': b_dw}
+
+    # Simulation loop for this window
+    for step in range(n_steps_per_window):
+        x_curr, v_curr = Velocity_verlet_langevin_US(
+            x_curr, v_curr, mass, dt, gamma, target_temp_us,
+            force_dw, force_bias_us,
+            physical_args=current_physical_args, bias_args=current_bias_args
+        )
+
+        # Record position
+        if step % record_stride == 0:
+            if record_index &lt; n_recorded_per_window:
+                positions_window[record_index] = x_curr
+                record_index += 1
+
+    # Store the recorded positions for this window (including burn-in)
+    all_positions_list.append(positions_window)
+
+print(f"Umbrella Sampling simulations finished. Collected data for {len(all_positions_list)} windows.")
+
+# Discard burn-in period from each window's data
+all_positions_production = [pos[n_burn_in_recorded:] for pos in all_positions_list]
+n_i = np.array([len(pos) for pos in all_positions_production]) # Number of production samples per window i
+print(f"Number of production samples per window (n_i): {n_i}")
+
+# Check if any windows have zero production samples
+if np.any(n_i == 0):
+    print("\nWarning: Some windows have zero production samples after burn-in!")
+    # Optionally filter out windows with zero samples here if needed
+    # valid_windows_mask = n_i &gt; 0
+    # ... filter window_centers, k_us, n_i, all_positions_production ...
+    # num_windows = len(window_centers) # Update num_windows</code></pre><pre class="output">Running 10 Umbrella Sampling windows...
+  Running window 1/10 centered at x0 = -2.00
+  Running window 2/10 centered at x0 = -1.56
+  Running window 3/10 centered at x0 = -1.11
+  Running window 4/10 centered at x0 = -0.67
+  Running window 5/10 centered at x0 = -0.22
+  Running window 6/10 centered at x0 = 0.22
+  Running window 7/10 centered at x0 = 0.67
+  Running window 8/10 centered at x0 = 1.11
+  Running window 9/10 centered at x0 = 1.56
+  Running window 10/10 centered at x0 = 2.00
+Umbrella Sampling simulations finished. Collected data for 10 windows.
+Number of production samples per window (n_i): [4500 4500 4500 4500 4500 4500 4500 4500 4500 4500]</pre></details>
+  <div id="lab-us"></div>
+</section>
+
+<section class="step">
+  <h3>Try it: windows and springs</h3>
+  <details class="exercise">
+    <summary>Exercise — change <code>num_windows</code> and <code>k_us</code> and check the effects</summary>
+    <p>The parameter code marks both <code>num_windows</code> and <code>k_us</code> with “<code>&lt;- change this to check the effects</code>” (<code>num_windows = 10</code>, <code>k_us = 60</code> is the best tested combination for this system). Use the lab above to try:</p>
+    <ol>
+      <li>$N = 4$ windows with $k_{\rm us} = 60$.</li>
+      <li>$N = 10$ windows with $k_{\rm us} = 200$.</li>
+      <li>$N = 10$ windows with $k_{\rm us} = 10$.</li>
+    </ol>
+    <p>For each, look at the histogram overlay and the overlap readouts. Then scroll down and see what WHAM makes of the data.</p>
+    <details class="reveal">
+      <summary>What you should see</summary>
+      <p>(1) Four windows are about 1.33 apart, but each histogram is only a few tenths wide: gaps open between neighbours, the nearest-neighbour overlap drops to essentially zero and the reconstructed PMF is broken or wildly offset. (2) A stiff spring narrows every window (width $\sigma \approx \sqrt{k_BT/k_{\rm eff}}$), so even 10 windows leave gaps. (3) A soft spring gives broad, strongly overlapping windows, and WHAM converges in a few hundred iterations instead of a few thousand. The price is weak restraint: near the barrier top the double-well curvature ($V''(0) = -2b = -8$) almost cancels $k_{\rm us} = 10$, so the central windows wander over a wide range instead of focusing on their own slice, and for $k_{\rm us} &lt; 8$ the window centred on the barrier would itself become a double well. Overlap is what WHAM needs; tune $N$ and $k_{\rm us}$ together.</p>
+    </details>
+  </details>
+  <div class="quiz" data-answer="2">
+    <p class="q">Your histogram overlay shows a clear gap between windows 5 and 6. Which change is the right fix?</p>
+    <ol class="choices">
+      <li>Increase $k_{\rm us}$ so each window is better defined</li>
+      <li>Add windows in the gap, or decrease $k_{\rm us}$ so the windows broaden</li>
+      <li>Run WHAM for more iterations</li>
+    </ol>
+    <div class="explain">A gap means no window samples that region, so WHAM has nothing to connect the two sides with. Only more (or broader) sampling there fixes it; extra WHAM iterations cannot create data. A stiffer spring makes the gap worse.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="PMF reconstruction with WHAM"><span class="lesson-num">Lesson 4</span>PMF Reconstruction with WHAM</h2>
+  <p>We now have the biased position data from each window ($i=1...N_{win}$). We need to combine this data to get the unbiased PMF using the Weighted Histogram Analysis Method (WHAM).</p>
+  <p><strong>WHAM equations.</strong> The core idea is to find the unbiased probability distribution $P(x)$ and the free energy offsets $f_i$ for each window that are self-consistent with the observed data. The iterative equations are:</p>
+  <div class="eq-card">
+    <p><strong>1. Update the unbiased probability $P(x_j)$</strong> (for each bin $j$):</p>
+    $$P(x_j) = \frac{\sum_{i=1}^{N_{win}} N_{i,j}}{\sum_{i=1}^{N_{win}} n_i \exp\left(\frac{f_i - V_{bias,i}(x_j)}{k_B T}\right)}$$
+    <p><strong>2. Update the free energy offsets $f_i$</strong> (for each window $i$):</p>
+    $$ \exp\left(-\frac{f_i}{k_B T}\right) = \sum_{j=1}^{N_{bins}} P(x_j) \exp\left(-\frac{V_{bias,i}(x_j)}{k_B T}\right) $$
+  </div>
+  <p>Where:</p>
+  <ul>
+    <li>$N_{win}$ is the number of windows.</li>
+    <li>$N_{bins}$ is the number of bins in our histogram.</li>
+    <li>$N_{i,j}$ is the number of counts (samples) from window $i$ that fall into global bin $j$.</li>
+    <li>$n_i$ is the total number of production samples in window $i$.</li>
+    <li>$V_{bias,i}(x_j)$ is the value of the bias potential for window $i$ evaluated at the center $x_j$ of bin $j$.</li>
+    <li>$f_i$ is the free energy offset for window $i$ (relative to some reference, often $f_0=0$).</li>
+    <li>$P(x_j)$ is the estimate of the unbiased probability in bin $j$.</li>
+  </ul>
+  <p>We iterate these two equations until the values of $f_i$ (or $P(x_j)$) converge.</p>
+  <div class="callout note">
+    <div class="callout-title">Want the derivation?</div>
+    <p>The <a href="s2-wham.html">Supplement — WHAM Walkthrough</a> derives these equations step by step and lets you watch $P_j$ and $f_i$ evolve iteration by iteration.</p>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Preparing data</h3>
+  <p>Calculate the necessary inputs: histograms ($N_{i,j}$), total samples per window ($n_i$), and bias energies ($V_{bias,i}(x_j)$).</p>
+  <details class="code-cell"><summary>Prepare N_ij, n_i and reduced bias energies; plot biased histograms</summary><pre><code class="language-python"># --- Prepare Data for Custom WHAM ---
+
+# Define bins for the global histogram
+n_bins_global = 100
+# Determine range from all production data
+min_x_data = min(np.min(pos) for pos in all_positions_production if len(pos)&gt;0) - 0.1
+max_x_data = max(np.max(pos) for pos in all_positions_production if len(pos)&gt;0) + 0.1
+bin_edges_global = np.linspace(min_x_data, max_x_data, n_bins_global + 1)
+bin_centers_global = 0.5 * (bin_edges_global[1:] + bin_edges_global[:-1])
+print(f"Global histogram range: {min_x_data:.2f} to {max_x_data:.2f}")
+
+# Calculate N_ij (counts per window i in global bin j)
+N_ij = np.zeros((num_windows, n_bins_global), dtype=int)
+for i in range(num_windows):
+    if n_i[i] &gt; 0: # Only histogram windows with data
+        counts, _ = np.histogram(all_positions_production[i], bins=bin_edges_global)
+        N_ij[i, :] = counts
+
+# n_i (total samples per window) is already calculated
+
+# Calculate reduced bias energy V_bias_i(x_j) / (kB*T)
+# Bias energy = 0.5 * k_us * (x_j - x0_i)^2
+reduced_bias_energies_ij = np.zeros((num_windows, n_bins_global))
+beta = 1.0 / (k_B * temperature) # Inverse temperature
+for i in range(num_windows):
+    center_i = window_centers[i]
+    V_bias_i_j = potential_bias_us(bin_centers_global, k_us=k_us, x0_us=center_i)
+    reduced_bias_energies_ij[i, :] = beta * V_bias_i_j
+
+print("Data prepared for custom WHAM:")
+print(f"Counts matrix N_ij shape: {N_ij.shape}")
+print(f"Total samples per window n_i shape: {n_i.shape}")
+print(f"Reduced bias energies shape: {reduced_bias_energies_ij.shape}")
+
+# --- Visualize Biased Histograms (Optional but Recommended) ---
+# plt.figure(figsize=(12, 7))
+plot_hist_success = False
+for i in range(num_windows):
+    if n_i[i] &gt; 0: # Only plot windows with data
+        # Normalize counts to probability density for plotting
+        bin_width = bin_edges_global[1] - bin_edges_global[0]
+        density = N_ij[i, :] / (n_i[i] * bin_width)
+        plt.plot(bin_centers_global, density, label=f'Win {i+1} (x0={window_centers[i]:.1f})', alpha=0.6)
+        plot_hist_success = True
+
+if plot_hist_success:
+    plt.title("Biased Histograms from Umbrella Sampling Windows (Production Data)")
+    plt.xlabel("Position (x)")
+    plt.ylabel("Probability Density P_i(x) (Biased)")
+    # plt.legend() # Legend might be too crowded
+    plt.grid(True)
+    plt.show()
+    print("Observe the overlap between adjacent window histograms.")
+    print("This overlap is crucial for WHAM to connect the windows.")
+else:
+    print("Skipping histogram plot as no windows had sufficient production data.")</code></pre><pre class="output">Global histogram range: -2.18 to 2.16
+Data prepared for custom WHAM:
+Counts matrix N_ij shape: (10, 100)
+Total samples per window n_i shape: (10,)
+Reduced bias energies shape: (10, 100)
+Observe the overlap between adjacent window histograms.
+This overlap is crucial for WHAM to connect the windows.</pre></details>
+  <p>The biased-histogram figure produced by this code is the top panel of the <a href="#lab-us">umbrella lab above</a>.</p>
+
+  <h3>Implementing WHAM</h3>
+  <p>Here's a function to perform the iterative WHAM calculation.</p>
+  <div class="callout warn">
+    <div class="callout-title">⚠️ Crucial step: evaluating window overlap</div>
+    <p>For WHAM to successfully reconstruct a smooth PMF, adjacent umbrella sampling windows <strong>must overlap significantly</strong>.</p>
+    <ul>
+      <li><strong>Good overlap:</strong> The histograms of adjacent windows overlap, meaning a particle at the edge of one window occasionally experiences the bias of the neighboring window. This allows WHAM to align their free energies.</li>
+      <li><strong>Bad overlap (too few windows or too stiff spring):</strong> If histograms do not overlap (leaving gaps between them), WHAM has no data to connect the windows, resulting in severe errors or numerical failure.</li>
+    </ul>
+    <p>If you see a gap in your histogram plot, you must either <strong>add more windows</strong> at the gap or <strong>reduce the spring constant ($k$)</strong> to allow broader sampling!</p>
+  </div>
+  <details class="code-cell"><summary>WHAM solver (wrapper around md_tutorial.wham.run_wham)</summary><pre><code class="language-python">from md_tutorial.wham import run_wham as _run_wham
+
+def run_wham(N_ij, n_i, reduced_bias_energies_ij, max_iter=10000, tolerance=1e-7, verbose=True):
+    """
+    Wrapper around the package WHAM solver to match the API used in this module.
+    """
+    P_j, f_i, _ = _run_wham(N_ij, n_i, reduced_bias_energies_ij, max_iter=max_iter, tol=tolerance, verbose=verbose)
+    return P_j, f_i
+
+print("WHAM solver imported from md_tutorial.")</code></pre><pre class="output">Custom WHAM function defined.</pre></details>
+</section>
+
+<section class="step">
+  <h3>Running WHAM</h3>
+  <p>Execute the <code>run_wham</code> function with the prepared data.</p>
+  <details class="code-cell"><summary>Run WHAM and print the free-energy offsets</summary><pre><code class="language-python"># --- Run Custom WHAM ---
+# Ensure n_i has no zeros if filtering wasn't done earlier, WHAM needs &gt;0 samples
+if np.any(n_i &lt;= 0):
+    print("Error: Some windows have zero production samples. Cannot run WHAM.")
+    P_j_wham = None
+    f_i_wham = None
+else:
+    P_j_wham, f_i_wham = run_wham(
+        N_ij, n_i, reduced_bias_energies_ij,
+        max_iter=5000, tolerance=1e-5, verbose=True
+    )
+
+if P_j_wham is not None:
+    print("\nConverged Free Energy Offsets (f_i / kT):")
+    print(f_i_wham)
+else:
+    print("\nWHAM calculation failed or did not produce results.")</code></pre><pre class="output">Starting WHAM iterations...
+  Iter 1, Max Delta f_i: 4.6856e-01
+  Iter 101, Max Delta f_i: 1.2797e-02
+  Iter 201, Max Delta f_i: 8.4642e-03
+  Iter 301, Max Delta f_i: 6.4266e-03
+  Iter 401, Max Delta f_i: 4.8577e-03
+  Iter 501, Max Delta f_i: 3.6775e-03
+  Iter 601, Max Delta f_i: 2.7905e-03
+  Iter 701, Max Delta f_i: 2.1211e-03
+  Iter 801, Max Delta f_i: 1.6142e-03
+  Iter 901, Max Delta f_i: 1.2295e-03
+  Iter 1001, Max Delta f_i: 9.3707e-04
+  Iter 1101, Max Delta f_i: 7.1457e-04
+  Iter 1201, Max Delta f_i: 5.4518e-04
+  Iter 1301, Max Delta f_i: 4.1616e-04
+  Iter 1401, Max Delta f_i: 3.1786e-04
+  Iter 1501, Max Delta f_i: 2.4294e-04
+  Iter 1601, Max Delta f_i: 1.8583e-04
+  Iter 1701, Max Delta f_i: 1.4229e-04
+  Iter 1801, Max Delta f_i: 1.0942e-04
+  Iter 1901, Max Delta f_i: 8.4562e-05
+  Iter 2001, Max Delta f_i: 6.5569e-05
+  Iter 2101, Max Delta f_i: 5.1046e-05
+  Iter 2201, Max Delta f_i: 3.9931e-05
+  Iter 2301, Max Delta f_i: 3.1416e-05
+  Iter 2401, Max Delta f_i: 2.4884e-05
+  Iter 2501, Max Delta f_i: 1.9865e-05
+  Iter 2601, Max Delta f_i: 1.6002e-05
+  Iter 2701, Max Delta f_i: 1.3022e-05
+  Iter 2801, Max Delta f_i: 1.0715e-05
+WHAM converged after 2838 iterations.
+
+Converged Free Energy Offsets (f_i / kT):
+[ 0.         -6.61250169 -5.85711462 -1.51256539  2.0174466   2.04143536
+ -1.65567042 -5.68142935 -6.64075614 -0.05318298]</pre></details>
+
+  <h3>Plotting the reconstructed PMF</h3>
+  <p>Calculate the PMF from the converged probability $P_j$ and plot it against the analytical potential.</p>
+  <details class="code-cell"><summary>Compute the PMF from P_j and compare with the analytical potential</summary><pre><code class="language-python"># --- Calculate PMF from WHAM Probability ---
+pmf_wham = None
+if P_j_wham is not None:
+    # Calculate PMF = -kT * ln(P_j)
+    # Avoid log(0) for bins with zero probability
+    pmf_wham = np.full_like(P_j_wham, np.inf) # Initialize with infinity
+    valid_bins_pmf = P_j_wham &gt; 1e-12
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        pmf_wham[valid_bins_pmf] = -k_B * temperature * np.log(P_j_wham[valid_bins_pmf])
+
+    # Shift PMF so its minimum is zero
+    min_pmf_val = np.min(pmf_wham[np.isfinite(pmf_wham)])
+    if np.isfinite(min_pmf_val):
+        pmf_wham -= min_pmf_val
+        print(f"\nPMF calculated. Min value shifted to 0.")
+    else:
+        print("\nWarning: Could not find finite minimum PMF value. PMF might be invalid.")
+        pmf_wham = None # Mark as invalid
+
+
+# --- Plot Reconstructed PMF ---
+
+# Calculate analytical potential shifted to have minimum at 0
+analytical_potential_dw_plot = potential_dw(bin_centers_global, a=a_dw, b=b_dw)
+analytical_potential_dw_plot -= minima_val # Shift minimum to zero
+
+# Plot analytical potential
+plt.plot(bin_centers_global, analytical_potential_dw_plot, 'r--', linewidth=2.5, label="Target PMF (Analytical Potential)")
+
+# Plot custom WHAM PMF if available
+if pmf_wham is not None:
+    plt.plot(bin_centers_global, pmf_wham, 'bo-', markersize=5, label="PMF from US + Custom WHAM")
+    # Estimate barrier height from calculated PMF
+    barrier_region_mask = (bin_centers_global &gt; -minima_pos * 0.5) &amp; (bin_centers_global &lt; minima_pos * 0.5)
+    if np.any(barrier_region_mask &amp; np.isfinite(pmf_wham)):
+         pmf_barrier_max = np.max(pmf_wham[barrier_region_mask &amp; np.isfinite(pmf_wham)])
+         print(f"PMF Barrier Height (Custom WHAM, approx): {pmf_barrier_max:.2f}")
+    else:
+         print("Could not estimate PMF barrier height (no finite points in barrier region).")
+else:
+    plt.text(0, barrier_height / 2, "PMF Calculation Failed or Skipped.", ha='center', color='red', fontsize=12)
+
+
+plt.xlabel("Position (x)")
+plt.ylabel("Free Energy / Potential (shifted, $k_B T$ units)")
+plt.title("PMF from Umbrella Sampling + Custom WHAM vs Analytical Potential")
+plt.ylim(-1, barrier_height * 1.5 if barrier_height &gt; 0 else 5) # Adjust ylim
+plt.legend()
+plt.grid(True)
+plt.show()
+
+print("Compare the blue line (PMF from simulation) to the red dashed line (analytical potential).")
+print("Ideally, they should match closely, demonstrating successful reconstruction across the barrier.")</code></pre><pre class="output">
+PMF calculated. Min value shifted to 0.
+PMF Barrier Height (Custom WHAM, approx): 4.01
+Compare the blue line (PMF from simulation) to the red dashed line (analytical potential).
+Ideally, they should match closely, demonstrating successful reconstruction across the barrier.</pre></details>
+  <div id="lab-wham"></div>
+</section>
+
+<section class="step">
+  <h3>Convergence with simulation length</h3>
+  <p>After reconstructing the PMF with WHAM on the full dataset, verify convergence by running WHAM on increasing subsets of the umbrella trajectories. We vary the number of frames per window ($M$ = 100, 200, … up to the full length) and track:</p>
+  <ul>
+    <li>The free-energy difference between the two minima (<code>ΔG_minima</code>)</li>
+    <li>The free-energy barrier height (<code>ΔG_barrier</code>)</li>
+  </ul>
+  <div class="callout note">
+    <div class="callout-title">Important points to note</div>
+    <ul>
+      <li><strong>Physically relevant points:</strong> In a real-world scenario, you would carefully choose the points for your convergence analysis based on the specific system you are studying and the quantities you want to compute. It could be the free energy difference between two states, the barrier height between them, or other properties of interest.</li>
+      <li><strong>Assumptions:</strong> In this example, we've assumed knowledge of the minima positions and barrier position for the double-well potential. In practice, you might need to use other techniques to find these points beforehand.</li>
+      <li><strong>Convergence indicators:</strong> We're still tracking the <code>deltaG_minima</code> and <code>deltaG_barrier_min1</code> values to assess convergence. You might need to monitor other quantities depending on your system and requirements.</li>
+    </ul>
+  </div>
+  <p>Plotting these as a function of $M$ shows whether the PMF has stabilized.</p>
+  <details class="code-cell"><summary>WHAM on growing subsets of each window</summary><pre><code class="language-python">import numpy as np
+import matplotlib.pyplot as plt
+
+# --- Setup ---
+max_frames = min(len(p) for p in all_positions_production)
+nsteps = 200
+step_size  = max(1, max_frames // nsteps)
+steps      = list(range(step_size, max_frames+1, step_size))
+if steps[-1] != max_frames:
+    steps.append(max_frames)
+
+# Precompute target indices
+min1_pos    = -np.sqrt(b_dw / (2 * a_dw))
+min2_pos    =  np.sqrt(b_dw / (2 * a_dw))
+barrier_pos =  0.0
+
+idx_min1    = np.argmin(np.abs(bin_centers_global - min1_pos))
+idx_min2    = np.argmin(np.abs(bin_centers_global - min2_pos))
+idx_barrier = np.argmin(np.abs(bin_centers_global - barrier_pos))
+
+# Containers
+deltaG_minima       = []
+deltaG_barrier_min1 = []
+deltaG_barrier_min2 = []
+
+# --- Convergence loop ---
+for M in steps:
+    # build counts up to frame M for each window
+    N_ij_M = np.array([
+        np.histogram(pos[:M], bins=bin_edges_global)[0]
+        for pos in all_positions_production
+    ])
+    n_i_M = N_ij_M.sum(axis=1)
+
+    # run WHAM
+    P_j_M, _ = run_wham(N_ij_M, n_i_M, reduced_bias_energies_ij,
+                        max_iter=10000, tolerance=1e-4,verbose=False)
+
+    # compute PMF
+    pmf_M = -k_B * temperature * np.log(P_j_M + 1e-18)
+
+    # record free‐energy differences
+    deltaG_minima.append       (pmf_M[idx_min2]    - pmf_M[idx_min1])
+    deltaG_barrier_min1.append (pmf_M[idx_barrier] - pmf_M[idx_min1])
+    deltaG_barrier_min2.append (pmf_M[idx_barrier] - pmf_M[idx_min2])
+
+# --- Plot ---
+plt.figure()
+plt.plot(steps, deltaG_minima,       'o-', label='ΔG between minima')
+plt.plot(steps, deltaG_barrier_min1, 's-', label='Barrier from min1')
+plt.plot(steps, deltaG_barrier_min2, '^-', label='Barrier from min2')
+
+plt.axhline(0, linestyle='--', color='k', label='Actual ΔG (0)')
+plt.axhline(barrier_height, linestyle='--', color='r',
+            label=f'Actual barrier ({barrier_height:.2f})')
+
+plt.xlabel('Frames per window')
+plt.ylabel('Free‐energy difference ($k_B T$)')
+plt.title('Convergence of PMF with increasing data')
+plt.legend()
+plt.grid(True)
+plt.show()</code></pre><pre class="output">Font 'default' does not have a glyph for '\u2010' [U+2010], substituting with a dummy symbol.
+Font 'default' does not have a glyph for '\u2010' [U+2010], substituting with a dummy symbol.</pre></details>
+</section>
+
+<section class="step">
+  <div id="lab-conv"></div>
+  <details class="exercise">
+    <summary>Exercise — how much data is enough?</summary>
+    <p>With the default windows, read off from the convergence plot roughly how many frames per window you need before the barrier estimate stays within about 0.1 of the true value 4.00. Then halve the steps per window in the umbrella lab (the plots here update) and repeat. Does the answer depend on the total simulation length, or on the number of frames?</p>
+    <details class="reveal">
+      <summary>Hint</summary>
+      <p>The curves depend on the number of (correlated) frames per window that went into the histograms. Early on the estimates jump around by several tenths because the window histograms are still noisy, especially in the tails where neighbouring windows overlap. Once those overlap regions are well populated the curves flatten; with fewer steps per window the same plateau is reached only at the right-hand end of a shorter axis — or not at all.</p>
+    </details>
+  </details>
+  <div class="quiz" data-answer="1">
+    <p class="q">In WHAM, why do we have to <em>iterate</em> instead of solving for $P(x_j)$ in one shot?</p>
+    <ol class="choices">
+      <li>The $P(x_j)$ equation needs the offsets $f_i$, and the $f_i$ equation needs $P(x_j)$ — they must be made self-consistent</li>
+      <li>Because the histograms are recomputed from new simulations every iteration</li>
+      <li>Because each iteration adds one more umbrella window</li>
+    </ol>
+    <div class="explain">The two WHAM equations are coupled. Starting from a guess (all $f_i = 0$), we alternate between them until the $f_i$ stop changing — the max $|\Delta f_i|$ trace in the WHAM lab shows exactly this.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="step">
+  <hr>
+  <p>End of Module 6. We have successfully implemented Umbrella Sampling and used a custom WHAM implementation to reconstruct the PMF:</p>
+  <div class="cards">
+    <div class="card"><h4>Umbrella Sampling (US)</h4><p>Used harmonic bias potentials (“umbrellas”) to force sampling across the double-well potential.</p></div>
+    <div class="card"><h4>Data processing</h4><p>Handled burn-in and prepared histogram counts and bias energies.</p></div>
+    <div class="card"><h4>Custom WHAM</h4><p>Implemented the iterative WHAM equations to combine data from all windows and calculate the unbiased probability distribution.</p></div>
+    <div class="card"><h4>PMF reconstruction</h4><p>Calculated the unbiased PMF from the WHAM probability and visualized how it reproduces the true potential energy landscape, overcoming the sampling limitations of standard MD.</p></div>
+  </div>
+  <p>In Module 7, we will explore another powerful enhanced sampling technique: <strong>Metadynamics</strong>.</p>
+  <div class="takeaways">
+    <h2 data-toc="Key takeaways">📝 Key Takeaways</h2>
+    <ul>
+      <li><strong>Umbrella Sampling</strong> adds harmonic bias potentials $w_i(x) = \frac{1}{2} k_c (x - x_{c,i})^2$ to restrain the system in high-energy regions.</li>
+      <li>We run multiple <strong>independent windows</strong> across the reaction coordinate to ensure uniform sampling.</li>
+      <li>The <strong>Weighted Histogram Analysis Method (WHAM)</strong> mathematically combines the biased histograms, self-consistently subtracting the bias potentials to reconstruct the global unbiased PMF.</li>
+      <li>Always verify <strong>histogram overlap</strong> before running WHAM to avoid gaps and disconnected profiles.</li>
+    </ul>
+  </div>
+  <h3>➡️ What's next?</h3>
+  <p>If you want to understand the exact mathematical derivation of WHAM, check out <a href="s2-wham.html">Supplement — WHAM Walkthrough</a>. Otherwise, continue to <a href="07-metadynamics.html">Module 7 — Metadynamics</a> to learn about adaptive, time-dependent biasing!</p>
+</section>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script>
+(function () {
+  const P = MD.phys;
+
+  // ---------------------------------------------------------------- shared model
+  // Double well V(x) = a x⁴ − b x² with a_dw = 1, b_dw = 4.
+  const A = 1.0, B = 4.0;
+  const XM = Math.sqrt(B / (2 * A));                 // minima_pos = √2
+  const VMIN = P.potential_dw(XM, A, B);              // minima_val = −4
+  const BARRIER = P.potential_dw(0, A, B) - VMIN;     // barrier_height = 4
+  const V = (x) => P.potential_dw(x, A, B);
+  const DT = 0.01, GAMMA = 1.0, MASS = 1.0, STRIDE = 20, BURN = 10000;
+  const winColor = (i) => "s" + ((i % 8) + 1);
+  const now = () => (window.performance ? performance.now() : Date.now());
+
+  /**
+   * One umbrella window: Velocity_verlet_langevin_US (BAOAB with physical + bias force),
+   * written out inline for speed. Records x every `stride` steps, like the Python code.
+   */
+  function runWindow(x0, k, kT, nSteps, stride, rng) {
+    const c1 = Math.exp(-GAMMA * DT);
+    const c2 = Math.sqrt((P.kB * Math.max(0, kT) * (1 - c1 * c1)) / MASS);
+    // force_dw(x, a, b) + force_bias_us(x, k, x0), written out so the JIT can inline it
+    const force = (x) => -4 * A * x * x * x + 2 * B * x - k * (x - x0);
+    const out = new Float64Array(Math.floor(nSteps / stride));
+    let x = x0, v = 0, f = force(x), r = 0;
+    for (let s = 0; s < nSteps; s++) {
+      v += (f / MASS) * (DT / 2);
+      x += v * (DT / 2);
+      v = c1 * v + c2 * rng.normal();
+      x += v * (DT / 2);
+      f = force(x);
+      v += (f / MASS) * (DT / 2);
+      if (s % stride === 0 && r < out.length) out[r++] = x;
+    }
+    return out;
+  }
+
+  /** Global histogram over all windows (range = data min/max ± 0.1, like the Python code). */
+  function binData(prod, nb, M) {
+    let lo = Infinity, hi = -Infinity;
+    prod.forEach((d) => { lo = Math.min(lo, P.min(d)); hi = Math.max(hi, P.max(d)); });
+    lo -= 0.1; hi += 0.1;
+    const N = prod.map((d) => P.histogram(M ? d.subarray(0, M) : d, nb, [lo, hi]).counts);
+    const w = (hi - lo) / nb;
+    const centers = Array.from({ length: nb }, (_, j) => lo + (j + 0.5) * w);
+    return { lo, hi, w, N, centers };
+  }
+
+  /** Bhattacharyya overlap matrix BC(i,k) = Σ_j √(p_ij p_kj) from count rows. */
+  function overlapMatrix(N) {
+    const p = N.map((row) => { const s = P.sum(row); return row.map((c) => (s ? c / s : 0)); });
+    return p.map((pi) => p.map((pk) => { let s = 0; for (let j = 0; j < pi.length; j++) s += Math.sqrt(pi[j] * pk[j]); return s; }));
+  }
+  const median = (a) => { const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : 0.5 * (s[m - 1] + s[m]); };
+
+  /** PMF = −kT ln P_j (only where P_j > 1e-12), shifted so its minimum is 0. */
+  function pmfFrom(Pj, kT) {
+    const F = Pj.map((q) => (q > 1e-12 ? -kT * Math.log(q) : null));
+    const m = Math.min(...F.filter((v) => v !== null));
+    return F.map((v) => (v === null ? null : v - m));
+  }
+  const nearest = (xs, x0) => { let k = 0; xs.forEach((x, j) => { if (Math.abs(x - x0) < Math.abs(xs[k] - x0)) k = j; }); return k; };
+
+  // The umbrella simulation is shared by the US, WHAM and convergence labs.
+  const DEFAULTS = { nW: 10, k: 60, steps: 100000, kT: 0.4, seed: 1 };
+  const US = { data: null, lab: null, dependents: [] };
+  function simulate(p) {
+    const t0 = now();
+    const rng = P.rng(p.seed);
+    const centers = P.linspace(-2.0, 2.0, p.nW);
+    const nBurnRec = Math.floor(BURN / STRIDE);
+    const prod = centers.map((c) => runWindow(c, p.k, p.kT, p.steps, STRIDE, rng).subarray(nBurnRec));
+    return { p: Object.assign({}, p), centers, prod, n_i: prod.map((d) => d.length), ms: now() - t0 };
+  }
+  function getUS() {
+    if (!US.data) US.data = simulate(US.lab ? US.lab.p : DEFAULTS);
+    return US.data;
+  }
+  const usLabel = (d) => `${d.p.nW} windows, k<sub>us</sub> = ${d.p.k}, ${d.p.steps.toLocaleString()} steps/window, k<sub>B</sub>T = ${d.p.kT}`;
+
+  // ---------------------------------------------------------------- Lab 1: bias explorer
+  MD.lab("#lab-bias", {
+    title: "Bias potential explorer",
+    intro: "<p>Black: the physical double well $V(x)$ (shifted so its minima are at 0). Orange: the bias $V_{bias}(x)$. Blue: what the simulation actually feels, $V + V_{bias}$. Right: the Boltzmann distributions $P(x) \\propto e^{-V/k_BT}$ (unbiased) and $P_{bias}(x) \\propto e^{-(V+V_{bias})/k_BT}$. The default $k_BT = 0.4$ is the temperature used for the umbrella runs below (10% of the barrier).</p>",
+    controls: [
+      { type: "select", id: "mode", label: "Bias type", value: "umb", options: [{ value: "umb", label: "Harmonic umbrella ½k(x − x₀)²" }, { value: "flat", label: "Barrier flattening −λ[V(x) − V_min]" }] },
+      { type: "range", id: "k", label: "Umbrella spring k<sub>us</sub>", min: 0, max: 150, step: 1, value: 60, hint: "Harmonic umbrella only." },
+      { type: "range", id: "x0", label: "Umbrella center x₀", min: -2, max: 2, step: 0.05, value: 0, hint: "Harmonic umbrella only." },
+      { type: "range", id: "lam", label: "Flattening strength λ", min: 0, max: 1, step: 0.05, value: 0.75, hint: "Flattening only: removes a fraction λ of the barrier between the minima." },
+      { type: "range", id: "kT", label: "Temperature k<sub>B</sub>T", min: 0.2, max: 2, step: 0.05, value: 0.4 },
+    ],
+    cols: 2,
+    panels: [{ id: "land", kind: "plot" }, { id: "dist", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    run(p, lab) {
+      const xs = P.linspace(-2.5, 2.5, 501), dx = xs[1] - xs[0];
+      const Vb = (x) => (p.mode === "umb" ? 0.5 * p.k * (x - p.x0) ** 2 : (Math.abs(x) < XM ? -p.lam * (V(x) - VMIN) : 0));
+      const v = xs.map((x) => V(x) - VMIN), vb = xs.map(Vb), vt = v.map((q, j) => q + vb[j]);
+      const vtMin = P.min(vt);
+      const boltz = (E) => { const m = P.min(E); const w = E.map((e) => Math.exp(-(e - m) / p.kT)); const s = P.sum(w) * dx; return w.map((q) => q / s); };
+      const p0 = boltz(v), pb = boltz(vt);
+      const rw = boltz(pb.map((q, j) => (q > 0 ? -p.kT * Math.log(q) - vb[j] : Infinity)));
+      lab.plot("land", [
+        { x: xs, y: v, name: "V(x) physical", color: "ink" },
+        { x: xs, y: vb, name: "V<sub>bias</sub>(x)", color: "s2", line: { dash: "dot" } },
+        { x: xs, y: vt.map((q) => q - vtMin), name: "V + V<sub>bias</sub> (shifted)", color: "s1" },
+      ], { xaxis: { title: { text: "Position x" } }, yaxis: { title: { text: "Energy (shifted)" }, range: [-1.5, 12] } });
+      const step = 10, sx = xs.filter((_, j) => j % step === 0), sr = rw.filter((_, j) => j % step === 0);
+      lab.plot("dist", [
+        { x: xs, y: p0, name: "unbiased P(x)", color: "ink", fill: "tozeroy" },
+        { x: xs, y: pb, name: "biased P<sub>bias</sub>(x)", color: "s1", fill: "tozeroy" },
+        { x: sx, y: sr, name: "biased × e<sup>+βV<sub>bias</sub></sup> (reweighted)", mode: "markers", color: "s2", marker: { size: 5 } },
+      ], { xaxis: { title: { text: "Position x" } }, yaxis: { title: { text: "Probability density" }, rangemode: "tozero" } });
+      const mass = (pr, lo, hi) => P.sum(pr.filter((_, j) => xs[j] > lo && xs[j] < hi)) * dx;
+      const mb = P.sum(pb.map((q, j) => q * xs[j])) * dx;
+      const sb = Math.sqrt(P.sum(pb.map((q, j) => q * (xs[j] - mb) ** 2)) * dx);
+      lab.readouts("ro", [
+        { k: "Double-well barrier height", v: BARRIER.toFixed(2) },
+        { k: "Barrier in units of k<sub>B</sub>T", v: (BARRIER / p.kT).toFixed(1) },
+        { k: "P(|x| &lt; 0.5) unbiased", v: MD.fmt(mass(p0, -0.5, 0.5), 3) },
+        { k: "P(|x| &lt; 0.5) biased", v: MD.fmt(mass(pb, -0.5, 0.5), 3), cls: mass(pb, -0.5, 0.5) > 10 * mass(p0, -0.5, 0.5) ? "good" : "" },
+        { k: "Biased ⟨x⟩ ± σ", v: `${mb.toFixed(2)} ± ${sb.toFixed(2)}` },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> (1) <em>Flattening</em>: raise λ toward 1 and watch probability flow into the barrier region — that is the “encouraging transitions” idea. (2) <em>Umbrella</em>: set $x_0 = 0$ and compare $P(|x|&lt;0.5)$ biased vs unbiased: a sliver of probability becomes the whole window. (3) At $x_0 = 0$, lower $k_{us}$ below 8 (try 2): the umbrella can no longer beat the barrier's negative curvature ($V''(0) = -8$) and the biased distribution splits in two. (4) In every case the dotted reweighted curve sits on the black one — the bias is removable because we know it exactly.</p>",
+  });
+
+  // ---------------------------------------------------------------- Lab 2: umbrella windows
+  US.lab = MD.lab("#lab-us", {
+    title: "Multi-window umbrella sampling",
+    intro: "<p>Each window runs BAOAB Langevin dynamics ($\\Delta t = 0.01$, $\\gamma = 1$, $m = 1$) on $V(x) + \\frac{1}{2}k_{us}(x - x_{0,i})^2$, starting at its center, recording $x$ every 20 steps and discarding the first 10,000 steps as burn-in — exactly the protocol of the Python code above. The defaults are the same full-length run: 10 windows × 100,000 steps = 1,000,000 Langevin steps. Top: the biased histograms $N_{i,j}/(n_i\\,\\Delta x)$; below: the window-overlap matrix $\\mathrm{BC}(i,k) = \\sum_j \\sqrt{p_{ij}p_{kj}}$ (1 = identical histograms, 0 = no shared bins), on a log colour scale because with stiff umbrellas neighbours share only their tails — values around 0.01–0.1 already give WHAM enough to stitch with, while values near 10⁻⁶ mean a gap. Plots update when you release a slider.</p>",
+    controls: [
+      { type: "range", id: "nW", label: "Number of windows N", min: 2, max: 24, step: 1, value: DEFAULTS.nW },
+      { type: "range", id: "k", label: "Spring constant k<sub>us</sub>", min: 5, max: 300, step: 5, value: DEFAULTS.k },
+      { type: "range", id: "steps", label: "Steps per window", min: 20000, max: 100000, step: 10000, value: DEFAULTS.steps, fmt: (v) => Number(v).toLocaleString(), hint: "First 10,000 steps are burn-in." },
+      { type: "range", id: "kT", label: "Temperature k<sub>B</sub>T", min: 0.2, max: 1.2, step: 0.05, value: DEFAULTS.kT, hint: "Default: barrier_height × 0.1 = 0.40." },
+      { type: "range", id: "seed", label: "Random seed", min: 1, max: 50, step: 1, value: DEFAULTS.seed },
+      { type: "buttons", items: [{ id: "def", label: "Reset defaults", secondary: true }] },
+    ],
+    cols: 2,
+    panels: [{ id: "hist", kind: "plot", cls: "tall", span: true }, { id: "bc", kind: "plot" }, { id: "ro", kind: "readouts" }],
+    live: "change",
+    run(p, lab) {
+      US.data = simulate(p);
+      const d = US.data, H = binData(d.prod, 100);
+      const showLeg = p.nW <= 12;
+      lab.plot("hist", d.prod.map((_, i) => ({
+        x: H.centers, y: H.N[i].map((c) => c / (d.n_i[i] * H.w)), name: `Win ${i + 1} (x0=${d.centers[i].toFixed(1)})`,
+        color: winColor(i), opacity: 0.8, line: { width: 1.6 },
+      })), {
+        title: { text: "Biased histograms from umbrella sampling windows (production data)" },
+        showlegend: showLeg, legend: { y: -0.22, yanchor: "top", font: { size: 11 } }, margin: { t: 40, b: showLeg ? 110 : 48 },
+        xaxis: { title: { text: "Position (x)" } }, yaxis: { title: { text: "Probability density Pᵢ(x) (biased)" }, rangemode: "tozero" },
+      });
+      const BC = overlapMatrix(H.N);
+      const idx = Array.from({ length: p.nW }, (_, i) => i + 1);
+      // Log colour scale: with stiff umbrellas even "good" neighbours share only the tails (BC ~ 0.01–0.1).
+      const logBC = BC.map((row) => row.map((v) => Math.log10(Math.max(v, 1e-6))));
+      lab.plot("bc", [{
+        type: "heatmap", z: logBC, customdata: BC, x: idx, y: idx, zmin: -6, zmax: 0, colorscale: "Viridis",
+        colorbar: { title: { text: "overlap" }, thickness: 12, tickvals: [-6, -4, -2, 0], ticktext: ["≤10⁻⁶", "10⁻⁴", "0.01", "1"] },
+        hovertemplate: "windows %{x} & %{y}<br>BC = %{customdata:.2e}<extra></extra>",
+      }], { title: { text: "Window overlap BC (log colour scale)" }, xaxis: { title: { text: "window" }, dtick: p.nW > 12 ? 2 : 1 }, yaxis: { title: { text: "window" }, dtick: p.nW > 12 ? 2 : 1 } });
+      const nn = idx.slice(0, -1).map((i) => BC[i - 1][i]);
+      const worst = P.argmin(nn), mn = nn[worst];
+      lab.readouts("ro", [
+        { k: "Total Langevin steps", v: (p.nW * p.steps).toLocaleString() },
+        { k: "Production samples per window n<sub>i</sub>", v: String(d.n_i[0]) },
+        { k: "Global histogram range", v: `${H.lo.toFixed(2)} to ${H.hi.toFixed(2)}` },
+        { k: "Nearest-neighbour overlap BC (min)", v: MD.fmt(mn, 3), cls: mn < 1e-3 ? "bad" : mn > 5e-3 ? "good" : "" },
+        { k: "Worst neighbour pair", v: `${worst + 1} ↔ ${worst + 2}` },
+        { k: "Nearest-neighbour overlap BC (median)", v: MD.fmt(median(nn), 3) },
+        { k: "Simulation time in your browser", v: `${d.ms.toFixed(0)} ms` },
+      ]);
+      US.dependents.forEach((l) => l && l.rerun());
+    },
+    onButton(id, p, lab) {
+      if (id === "def") { Object.entries(DEFAULTS).forEach(([k, v]) => lab.set(k, v)); lab.rerun(); }
+    },
+    foot: "<p><strong>What to try:</strong> with the defaults every neighbour pair overlaps (no gaps in the overlay, bright first off-diagonal in the matrix). Now try the exercise below: drop to 4 windows, or push $k_{us}$ to 200+, and watch gaps open and the minimum overlap collapse toward 0. Raise $k_BT$ and every window broadens ($\\sigma \\approx \\sqrt{k_BT/k_{eff}}$). The WHAM and convergence labs further down re-use whatever you simulate here.</p>",
+  });
+
+  // ---------------------------------------------------------------- Lab 3: WHAM reconstruction
+  const whamLab = MD.lab("#lab-wham", {
+    title: "WHAM reconstruction of the PMF",
+    intro: "<p>Runs <code>run_wham</code> (JavaScript port of <code>md_tutorial.wham.run_wham</code>) on the windows simulated in the umbrella lab above, with reduced bias energies $u_{ij} = V_{bias,i}(x_j)/k_BT$. Left: the PMF $-k_BT\\ln P_j$ (shifted to minimum 0) against the analytical potential. Right: the convergence trace max $|\\Delta f_i|$ per iteration (log scale). Defaults: 100 bins, <code>tolerance=1e-5</code>, <code>max_iter=5000</code>.</p>",
+    controls: [
+      { type: "html", html: '<div class="hint" data-role="src"></div>' },
+      { type: "range", id: "nb", label: "Number of bins", min: 30, max: 200, step: 10, value: 100 },
+      { type: "select", id: "tol", label: "Tolerance on max |Δf<sub>i</sub>|", value: 1e-5, options: [1e-3, 1e-4, 1e-5, 1e-6, 1e-7].map((t) => ({ value: t, label: t.toExponential(0) })) },
+      { type: "range", id: "maxIter", label: "max_iter", min: 500, max: 10000, step: 500, value: 5000 },
+    ],
+    cols: 2,
+    panels: [{ id: "pmf", kind: "plot" }, { id: "conv", kind: "plot" }, { id: "ro", kind: "readouts", span: true }, { id: "fi", kind: "html", span: true }],
+    live: "change",
+    run(p, lab) {
+      const d = getUS(), kT = d.p.kT, beta = 1 / (P.kB * kT);
+      lab.root.querySelector('[data-role="src"]').innerHTML = `Data: ${usLabel(d)} (change it in the umbrella lab).`;
+      const H = binData(d.prod, p.nb);
+      const u = d.centers.map((c) => H.centers.map((x) => beta * 0.5 * d.p.k * (x - c) ** 2));
+      const exact = H.centers.map((x) => V(x) - VMIN);
+      let res;
+      try { res = P.runWham(H.N, d.n_i, u, p.maxIter, p.tol); } catch (e) {
+        lab.plot("pmf", [{ x: H.centers, y: exact, name: "Target PMF (analytical potential)", color: "s8", line: { dash: "dash", width: 2.5 } }], { yaxis: { range: [-1, BARRIER * 1.5] } });
+        lab.readouts("ro", [{ k: "WHAM", v: "failed — " + e.message, cls: "bad" }]);
+        return;
+      }
+      const pmf = pmfFrom(res.P, kT);
+      lab.plot("pmf", [
+        { x: H.centers, y: exact, name: "Target PMF (analytical potential)", color: "s8", line: { dash: "dash", width: 2.5 } },
+        { x: H.centers, y: pmf, name: "PMF from US + custom WHAM", mode: "lines+markers", color: "s1", marker: { size: 5 } },
+      ], {
+        title: { text: "PMF from US + WHAM vs analytical potential" },
+        xaxis: { title: { text: "Position (x)" } }, yaxis: { title: { text: "Free energy / potential (shifted)" }, range: [-1, BARRIER * 1.5] },
+      });
+      const it = res.deltaHist.map((_, i) => i + 1);
+      lab.plot("conv", [{ x: P.thin(it, 2000), y: P.thin(res.deltaHist, 2000), name: "max |Δfᵢ|", color: "s3" },
+        { x: [1, it.length], y: [p.tol, p.tol], name: "tolerance", color: "ink-3", line: { dash: "dot", width: 1.5 }, mode: "lines" }], {
+        title: { text: "WHAM convergence" },
+        xaxis: { title: { text: "iteration" } }, yaxis: { title: { text: "max |Δfᵢ|" }, type: "log", exponentformat: "power" },
+      });
+      // barrier estimate as in the Python code: max PMF in |x| < minima_pos/2
+      const bar = Math.max(...pmf.filter((v, j) => v !== null && Math.abs(H.centers[j]) < XM * 0.5));
+      const iM1 = nearest(H.centers, -XM), iM2 = nearest(H.centers, XM);
+      const errs = pmf.map((v, j) => (v === null ? null : v - exact[j])).filter((e, j) => e !== null && Math.abs(H.centers[j]) <= 2);
+      const rmse = Math.sqrt(P.mean(errs.map((e) => e * e)));
+      // interior holes in the combined histogram (empty bins between the first and last sampled bin) = gaps
+      const tot = H.centers.map((_, j) => H.N.reduce((s, row) => s + row[j], 0));
+      const first = tot.findIndex((c) => c > 0), lastS = tot.length - 1 - tot.slice().reverse().findIndex((c) => c > 0);
+      const gaps = tot.slice(first, lastS + 1).filter((c) => c === 0).length;
+      lab.readouts("ro", [
+        { k: "Iterations", v: `${res.iterations}${res.converged ? " (converged)" : " (not converged)"}`, cls: res.converged ? "good" : "bad" },
+        { k: "Final max |Δf<sub>i</sub>|", v: MD.fmt(res.deltaHist[res.deltaHist.length - 1], 3) },
+        { k: "PMF barrier height (approx)", v: isFinite(bar) ? bar.toFixed(2) : "—", cls: isFinite(bar) && Math.abs(bar - BARRIER) < 0.3 ? "good" : "bad" },
+        { k: "True barrier height", v: BARRIER.toFixed(2) },
+        { k: "ΔG between minima (true 0)", v: pmf[iM2] !== null && pmf[iM1] !== null ? (pmf[iM2] - pmf[iM1]).toFixed(2) : "—" },
+        { k: "RMSE vs analytical (|x| ≤ 2)", v: isFinite(rmse) ? rmse.toFixed(3) : "—" },
+        { k: "Empty bins between windows (gaps)", v: String(gaps), cls: gaps ? "bad" : "good" },
+      ]);
+      lab.panel("fi").innerHTML = `<div class="code-static" style="margin:0"><pre class="output">Converged Free Energy Offsets (f_i / kT):\n[${res.f.map((v) => v.toFixed(8)).join(" ")}]</pre></div>`;
+    },
+    foot: "<p><strong>What to try:</strong> the defaults give a barrier of about 4.0, matching the printed <code>PMF Barrier Height (Custom WHAM, approx): 4.01</code> above, and converge in a few thousand iterations — the slow, steady straight-line decay on the log plot is typical of WHAM's fixed-point iteration. Loosen the tolerance to <code>1e-3</code> and the PMF visibly tilts: the offsets $f_i$ simply haven't settled. Then go back to the umbrella lab, create a gap (4 windows, or $k_{us} = 300$) and see the PMF break apart and the convergence trace crawl. With zero overlap WHAM may even report “converged” after a single iteration — the windows are simply disconnected, so nothing ties their offsets together. Convergence of the iteration is not the same as a correct PMF; the <em>gaps</em> readout is the one to watch.</p>",
+  });
+  US.dependents.push(whamLab);
+
+  // ---------------------------------------------------------------- Lab 4: convergence with data
+  /**
+   * The same WHAM fixed-point iteration as MD.phys.runWham, with exp(f_i) hoisted out of the
+   * inner loop and an optional warm start f0. Used here because this lab runs WHAM many times.
+   */
+  function whamFast(N, n, u, f0, maxIter, tol) {
+    const nW = N.length, nB = N[0].length;
+    const numer = new Float64Array(nB);
+    for (let i = 0; i < nW; i++) for (let j = 0; j < nB; j++) numer[j] += N[i][j];
+    const eU = u.map((row) => Float64Array.from(row, (q) => Math.exp(-q)));
+    const f = f0 ? f0.slice() : new Array(nW).fill(0);
+    const Pj = new Float64Array(nB), wgt = new Float64Array(nW);
+    for (let it = 0; it < maxIter; it++) {
+      for (let i = 0; i < nW; i++) wgt[i] = n[i] * Math.exp(f[i]);
+      let s = 0;
+      for (let j = 0; j < nB; j++) {
+        let den = 0;
+        for (let i = 0; i < nW; i++) den += wgt[i] * eU[i][j];
+        Pj[j] = den > 1e-300 ? numer[j] / den : 0;
+        s += Pj[j];
+      }
+      for (let j = 0; j < nB; j++) Pj[j] /= s;
+      let d = 0, fz = 0;
+      for (let i = 0; i < nW; i++) {
+        let Z = 0;
+        for (let j = 0; j < nB; j++) Z += Pj[j] * eU[i][j];
+        const fi = -Math.log(Z);
+        if (i === 0) fz = fi;
+        d = Math.max(d, Math.abs(fi - fz - f[i]));
+        f[i] = fi - fz;
+      }
+      if (d < tol) break;
+    }
+    return { P: Array.from(Pj), f };
+  }
+
+  const convLab = MD.lab("#lab-conv", {
+    title: "Convergence of the PMF with increasing data",
+    intro: "<p>WHAM is re-run on the first $M$ frames of every window (same bins and bias energies, <code>tolerance=1e-4</code>) and three free-energy differences are read from the PMF at the bins nearest $x = -\\sqrt2$ (min1), $x = +\\sqrt2$ (min2) and $x = 0$ (barrier). The Python code evaluates about 200 subset sizes; this browser demo uses 20 by default and warm-starts each WHAM run from the previous offsets to stay fast.</p>",
+    controls: [
+      { type: "html", html: '<div class="hint" data-role="src"></div>' },
+      { type: "range", id: "npts", label: "Number of subset sizes M", min: 5, max: 40, step: 1, value: 20 },
+    ],
+    panels: [{ id: "plot", kind: "plot", cls: "tall" }, { id: "ro", kind: "readouts" }],
+    live: "change",
+    run(p, lab) {
+      const d = getUS(), kT = d.p.kT, beta = 1 / (P.kB * kT);
+      lab.root.querySelector('[data-role="src"]').innerHTML = `Data: ${usLabel(d)}.`;
+      const nb = 100;
+      const maxFrames = Math.min(...d.n_i);
+      const stepSize = Math.max(1, Math.floor(maxFrames / p.npts));
+      const Ms = [];
+      for (let M = stepSize; M <= maxFrames; M += stepSize) Ms.push(M);
+      if (Ms[Ms.length - 1] !== maxFrames) Ms.push(maxFrames);
+      const full = binData(d.prod, nb);
+      const u = d.centers.map((c) => full.centers.map((x) => beta * 0.5 * d.p.k * (x - c) ** 2));
+      const i1 = nearest(full.centers, -XM), i2 = nearest(full.centers, XM), ib = nearest(full.centers, 0);
+      const tot = full.centers.map((_, j) => full.N.reduce((s, row) => s + row[j], 0));
+      const unsampled = [i1, i2, ib].some((j) => tot[j] === 0);
+      const dGm = [], dB1 = [], dB2 = [];
+      let f0 = null;
+      for (const M of Ms) {
+        const N = d.prod.map((pos) => P.histogram(pos.subarray(0, M), nb, [full.lo, full.hi]).counts);
+        const n = N.map((row) => P.sum(row));
+        const r = whamFast(N, n, u, f0, 10000, 1e-4);
+        f0 = r.f;
+        const pmf = r.P.map((q) => -P.kB * kT * Math.log(q + 1e-18));
+        dGm.push(pmf[i2] - pmf[i1]); dB1.push(pmf[ib] - pmf[i1]); dB2.push(pmf[ib] - pmf[i2]);
+      }
+      const ends = [Ms[0], Ms[Ms.length - 1]];
+      lab.plot("plot", [
+        { x: Ms, y: dGm, name: "ΔG between minima", mode: "lines+markers", color: "s1", marker: { size: 6, symbol: "circle" } },
+        { x: Ms, y: dB1, name: "Barrier from min1", mode: "lines+markers", color: "s2", marker: { size: 6, symbol: "square" } },
+        { x: Ms, y: dB2, name: "Barrier from min2", mode: "lines+markers", color: "s6", marker: { size: 7, symbol: "triangle-up" } },
+        { x: ends, y: [0, 0], name: "Actual ΔG (0)", mode: "lines", color: "ink", line: { dash: "dash", width: 1.5 } },
+        { x: ends, y: [BARRIER, BARRIER], name: `Actual barrier (${BARRIER.toFixed(2)})`, mode: "lines", color: "s8", line: { dash: "dash", width: 1.5 } },
+      ], {
+        title: { text: "Convergence of PMF with increasing data" }, margin: { t: 70 },
+        xaxis: { title: { text: "Frames per window" } }, yaxis: { title: { text: "Free-energy difference" } },
+      });
+      const last = dGm.length - 1;
+      lab.readouts("ro", [
+        { k: "WHAM runs", v: String(Ms.length) },
+        ...(unsampled ? [{ k: "Warning", v: "a minimum or the barrier bin was never sampled — these numbers are meaningless", cls: "bad" }] : []),
+        { k: "ΔG between minima (all frames)", v: dGm[last].toFixed(2) },
+        { k: "Barrier from min1 (all frames)", v: dB1[last].toFixed(2) },
+        { k: "Barrier from min2 (all frames)", v: dB2[last].toFixed(2) },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> the three curves wobble for small $M$ and settle near the dashed reference lines (0 and 4.00) as $M$ grows — that plateau is your evidence of convergence. Re-run the umbrella lab with another seed or with fewer steps per window and see how the plateau moves; with a gap in the windows the curves never settle near the truth, however many frames you add.</p>",
+  });
+  US.dependents.push(convLab);
+})();
+</script>
+</body>
+</html>

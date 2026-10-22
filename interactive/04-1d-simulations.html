@@ -1,0 +1,1266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 4 — Simulating One-Dimensional Systems · MD Tutorial</title>
+<meta name="description" content="Your first complete MD simulations: a harmonic oscillator in NVE with Velocity Verlet, temperature control with a Langevin thermostat (NVT), and a particle in a double-well potential — with live, interactive simulations.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+</head>
+<body data-module="04">
+<main id="main">
+<article class="content">
+
+<!-- ================================================================== -->
+<header class="hero step">
+  <div class="eyebrow">Module 4 · Core track</div>
+  <h1>Simulating One-Dimensional Systems</h1>
+  <p class="lede">Your first complete MD simulations: one particle, one dimension, three potentials — a harmonic spring in NVE, the same spring coupled to a Langevin heat bath (NVT), and a double well with a barrier to cross.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Prerequisites</b> <a href="03-nonbonded.html">Module 3 (Non-Bonded Interactions)</a></span>
+    <span class="chip"><b>What you run</b> Complete 1D MD simulations with energy conservation checks and trajectory plots</span>
+    <span class="chip"><b>Expected runtime</b> Instant — every simulation runs in your browser</span>
+  </div>
+
+  <div class="objectives">
+    <h3>What you will learn</h3>
+    <ul>
+      <li>How to simulate a particle in a simple harmonic potential (NVE ensemble).</li>
+      <li>How to add temperature control with Langevin dynamics (NVT ensemble).</li>
+      <li>How to simulate a particle in a double-well potential.</li>
+    </ul>
+  </div>
+  <div class="callout tip">
+    <div class="callout-title">How to use this page</div>
+    <p>Every step of the code is in a collapsible <strong>Python code</strong> block, together with its printed output. Every figure is an <strong>Interactive</strong> panel that re-runs the simulation in your browser as you move the sliders — the default slider values reproduce the runs described in the text. Press <kbd>P</kbd> (or <em>Present</em>) to step through the module slide by slide.</p>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<section class="step">
+  <h3>From algorithms to simulations</h3>
+  <p>Now that we understand the basic physics and algorithms (Newton's laws, potential energy, Verlet integration), let's put them into practice! In this module, we will write Python code to simulate the motion of a single particle in one dimension (1D) under the influence of simple potential energy functions. This will allow us to solidify our understanding of the core MD loop and basic analysis techniques before tackling more complex systems or concepts.</p>
+  <p>We'll start with the simplest oscillating system: the Simple Harmonic Oscillator.</p>
+
+  <h3>Setup: import libraries</h3>
+  <p>First, let's import the necessary Python libraries: <code>NumPy</code> for numerical operations and <code>Matplotlib</code> for plotting our results.</p>
+  <details class="code-cell"><summary>Import NumPy and Matplotlib, set the plotting style</summary><pre><code class="language-python">import numpy as np
+import matplotlib.pyplot as plt
+
+# Plotting style configuration (optional)
+plt.style.use('seaborn-v0_8-darkgrid')
+plt.rcParams['figure.figsize'] = (6,4) # Default figure size
+plt.rcParams['lines.linewidth'] = 2</code></pre></details>
+  <div class="callout">
+    <div class="callout-title">Python code and live panels</div>
+    <p>The Python code imports its potentials and integrators from the course's <code>md_tutorial</code> Python package. Those import cells are reproduced verbatim below; the live panels on this page use a JavaScript port of exactly the same functions (<code>potential_sh</code>, <code>force_sh</code>, <code>velocity_verlet_step</code>, <code>velocity_verlet_langevin</code>, <code>potential_dw</code>, <code>force_dw</code>), so the numbers match.</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Harmonic oscillator (NVE)"><span class="lesson-num">Lesson 1</span>Harmonic Oscillator (NVE)</h2>
+  <p>The Simple Harmonic Oscillator (SHO) is a fundamental model in physics. It describes a system where the restoring force is directly proportional to the displacement from an equilibrium position. Think of a mass attached to a spring.</p>
+  <div class="cards">
+    <div class="card">
+      <h4>Potential energy</h4>
+      <p>For a 1D SHO:</p>
+      $$V(x) = \frac{1}{2}kx^2$$
+      <p>where $k$ is the spring constant (stiffness) and $x$ is the displacement from equilibrium ($x=0$).</p>
+    </div>
+    <div class="card">
+      <h4>Force</h4>
+      <p>The force is the negative derivative of the potential:</p>
+      $$F(x) = -\frac{dV}{dx} = -kx$$
+      <p>The negative sign means the force is restoring, always pulling the particle back toward $x=0$.</p>
+    </div>
+  </div>
+  <p>We will simulate this system in the <strong>microcanonical (NVE) ensemble</strong>, where total energy (kinetic + potential) should be conserved up to numerical integration error.</p>
+</section>
+
+<section class="step">
+  <h3>Defining potential and force</h3>
+  <p>Let's write Python functions for the SHO potential energy and force.</p>
+  <details class="code-cell"><summary>Import the SHO potential and force</summary><pre><code class="language-python">from md_tutorial.potentials import potential_sh, force_sh</code></pre></details>
+
+  <h3>Implementing Velocity Verlet</h3>
+  <p>Now, let's implement the Velocity Verlet algorithm we discussed in Module 2. This function will take the current position, velocity, mass, time step, and the force function as input, and return the updated position and velocity. This integrator is suitable for NVE simulations.</p>
+  <details class="code-cell"><summary>Import the Velocity Verlet step</summary><pre><code class="language-python">from md_tutorial.integrators import velocity_verlet_step</code></pre></details>
+  <details class="reveal">
+    <summary>What's inside these <code>md_tutorial</code> functions? (condensed source)</summary>
+<div class="code-static"><pre><code class="language-python">def potential_sh(x, k):
+    return 0.5 * k * x**2
+
+def force_sh(x, k):
+    return -k * x
+
+def velocity_verlet_step(x_curr, v_curr, mass, dt, force_func, **force_args):
+    f_curr = force_func(x_curr, **force_args)
+    a_curr = f_curr / mass
+
+    v_half = v_curr + 0.5 * a_curr * dt     # 1. half-step velocity
+    x_new = x_curr + v_half * dt            # 2. full-step position
+
+    f_new = force_func(x_new, **force_args) # 3. new force at x(t + dt)
+    a_new = f_new / mass
+
+    v_new = v_half + 0.5 * a_new * dt       # 4. second half-step velocity
+    return x_new, v_new</code></pre></div>
+  </details>
+
+  <h3>Setting simulation parameters</h3>
+  <p>We need to define the parameters for our simulation:</p>
+  <ul>
+    <li>Mass of the particle (<code>mass</code>)</li>
+    <li>Spring constant (<code>k</code>)</li>
+    <li>Time step (<code>dt</code>) — needs to be small enough to capture the oscillation period accurately.</li>
+    <li>Total number of simulation steps (<code>n_steps</code>)</li>
+    <li>Initial position (<code>x0</code>)</li>
+    <li>Initial velocity (<code>v0</code>)</li>
+  </ul>
+  <details class="code-cell"><summary>Simulation parameters and initial conditions</summary><pre><code class="language-python"># Simulation parameters
+mass = 1.0      # Mass of the particle (arbitrary units)
+k_sh = 1.0      # Spring constant for SHO (arbitrary units)
+dt = 0.01       # Time step (smaller is generally more accurate but slower)
+n_steps = 5000  # Total number of simulation steps
+total_time = dt * n_steps
+
+# Initial conditions
+x0 = 1.0        # Initial position
+v0 = 0.0        # Initial velocity
+
+print(f"Total simulation time: {total_time:.2f}")</code></pre><pre class="output">Total simulation time: 50.00</pre></details>
+</section>
+
+<section class="step">
+  <details class="exercise" open>
+    <summary>✏️ Coding exercise: run the NVE simulation</summary>
+    <p>Now, use the <code>velocity_verlet_step</code> function within a loop to run the simulation for <code>n_steps</code>. Store the time, position, and velocity at each step. Also, calculate and store the kinetic, potential, and total energy at each step.</p>
+    <ul>
+      <li>Kinetic energy: $E_K = \frac{1}{2} m v^2$</li>
+      <li>Potential energy: $V(x) = \frac{1}{2} k x^2$</li>
+      <li>Total energy: $E_{total} = E_K + V(x)$</li>
+    </ul>
+  </details>
+  <details class="code-cell"><summary>Solution: the NVE simulation loop</summary><pre><code class="language-python"># --- NVE Simulation Loop ---
+
+# Arrays to store results
+times = np.zeros(n_steps)
+positions = np.zeros(n_steps)
+velocities = np.zeros(n_steps)
+kinetic_energies = np.zeros(n_steps)
+potential_energies = np.zeros(n_steps)
+total_energies = np.zeros(n_steps)
+
+# Set initial values
+positions[0] = x0
+velocities[0] = v0
+
+# Calculate initial energies
+kinetic_energies[0] = 0.5 * mass * velocities[0]**2
+potential_energies[0] = potential_sh(positions[0], k=k_sh)
+total_energies[0] = kinetic_energies[0] + potential_energies[0]
+
+# Run the simulation loop
+for i in range(n_steps - 1):
+    # Perform one Verlet step
+    x_new, v_new = velocity_verlet_step(
+        positions[i], velocities[i], mass, dt, force_sh, k=k_sh
+    )
+
+    # Store new values
+    positions[i+1] = x_new
+    velocities[i+1] = v_new
+    times[i+1] = times[i] + dt
+
+    # Calculate and store energies for the new state
+    kinetic_energies[i+1] = 0.5 * mass * v_new**2
+    potential_energies[i+1] = potential_sh(x_new, k=k_sh)
+    total_energies[i+1] = kinetic_energies[i+1] + potential_energies[i+1]
+
+print("NVE Simulation finished.")</code></pre><pre class="output">NVE Simulation finished.</pre></details>
+  <div class="callout key">
+    <div class="callout-title">The core MD loop</div>
+    <p>Every MD code — from this 1D toy to a million-atom protein simulation — repeats the same three things: <strong>(1)</strong> compute forces from the current positions, <strong>(2)</strong> advance positions and velocities with the integrator, <strong>(3)</strong> record observables (here: positions, velocities and energies).</p>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Analysis: plot and interpret</h3>
+  <p>Visualize the simulation results:</p>
+  <ol>
+    <li>Plot position vs. time. Does it look like harmonic motion?</li>
+    <li>Plot velocity vs. time. How does it relate to the position plot?</li>
+    <li>Plot the phase space trajectory (velocity vs. position). What shape do you expect for an SHO?</li>
+    <li>Plot kinetic, potential, and total energy vs. time. Is the total energy conserved? How much does it fluctuate? (This fluctuation is related to the numerical error of the integrator and the time step size.)</li>
+  </ol>
+  <div class="callout">
+    <div class="callout-title">⚙️ Pedagogical note: inline vs. helper module imports</div>
+    <p>In this module, we define potentials and integrators inline first to understand their mathematical mechanics. Once we are comfortable with them, we will import their optimized, standard versions from our local <code>md_tutorial</code> helper package. This keeps our subsequent simulations clean and focused on high-level thermodynamics.</p>
+  </div>
+  <details class="code-cell"><summary>Plot NVE results: position, velocity, phase space, energies</summary><pre><code class="language-python"># --- Plotting NVE Results ---
+
+# 1. Position vs Time
+plt.figure()
+plt.plot(times, positions)
+plt.xlabel("Time")
+plt.ylabel("Position")
+plt.title("NVE Simple Harmonic Oscillator: Position vs Time")
+plt.grid(False)
+plt.show()
+
+# 2. Velocity vs Time
+plt.figure()
+plt.plot(times, velocities)
+plt.xlabel("Time")
+plt.ylabel("Velocity")
+plt.title("NVE Simple Harmonic Oscillator: Velocity vs Time")
+plt.grid(False)
+plt.show()
+
+# 3. Phase Space (Velocity vs Position)
+plt.figure()
+plt.plot(positions, velocities)
+plt.xlabel("Position")
+plt.ylabel("Velocity")
+plt.title("NVE Simple Harmonic Oscillator: Phase Space")
+plt.axis('equal') # Make aspect ratio equal
+plt.grid(False)
+plt.show()
+
+# 4. Energies vs Time
+plt.figure()
+plt.plot(times, kinetic_energies, label="Kinetic Energy")
+plt.plot(times, potential_energies, label="Potential Energy")
+plt.plot(times, total_energies, label="Total Energy", linestyle='--')
+plt.xlabel("Time")
+plt.ylabel("Energy")
+plt.title("NVE Simple Harmonic Oscillator: Energy Conservation")
+plt.legend()
+plt.grid(False)
+# Optional: Zoom in on total energy to see fluctuations
+# energy_fluctuation = total_energies - total_energies[0]
+# plt.figure()
+# plt.plot(times, energy_fluctuation)
+# plt.title("Total Energy Fluctuation")
+# plt.xlabel("Time"); plt.ylabel("Delta E")
+plt.show()</code></pre></details>
+</section>
+
+<section class="step">
+  <h3>Play along: the NVE oscillator, live</h3>
+  <div id="lab-nve"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">With $k = m = 1$, $x_0 = 1$, $v_0 = 0$ and Velocity Verlet at $\Delta t = 0.01$, what does the phase-space plot (velocity vs. position, equal axes) look like?</p>
+    <ol class="choices">
+      <li>A spiral that slowly winds in toward the origin</li>
+      <li>A closed circle of radius 1, traced over and over</li>
+      <li>A straight line through the origin</li>
+    </ol>
+    <div class="explain">Energy is conserved, so $\frac{1}{2}v^2 + \frac{1}{2}x^2 = \frac{1}{2}$ — a circle of radius 1 (an ellipse when $k \ne m$). An inward or outward spiral would mean energy is being lost or gained, which is what a thermostat (or a poor integrator such as explicit Euler, which spirals outward) does.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Langevin thermostat (NVT)"><span class="lesson-num">Lesson 2</span>Temperature Control with Langevin Dynamics</h2>
+  <p>In the NVE simulation, total energy is conserved but temperature fluctuates. To sample the canonical ensemble, we add friction and random forces to Newton's law:</p>
+  <div class="eq-card">
+  $$m\ddot{x} = F_{\rm phys}(x) - \gamma m\dot{x} + R(t), \qquad \langle R(t)R(t')\rangle = 2m\gamma k_B T_0\,\delta(t-t').$$
+  </div>
+  <h3>Integration scheme (modified Velocity Verlet)</h3>
+  <div class="cards">
+    <div class="card"><div class="card-num">1</div><h4>Half-step velocity (physical force)</h4>$$v \leftarrow v + \frac{F_{\rm phys}(x)}{m}\frac{\Delta t}{2}$$</div>
+    <div class="card"><div class="card-num">2</div><h4>Half-step position</h4>$$x \leftarrow x + v\frac{\Delta t}{2}$$</div>
+    <div class="card"><div class="card-num">3</div><h4>Full-step velocity (friction + random)</h4>$$c_1 = e^{-\gamma\Delta t}, \quad c_2 = \sqrt{\frac{k_B T_0}{m}(1-c_1^2)}$$ $$v \leftarrow c_1v + c_2\,\mathcal{N}(0,1)$$<p>where $\mathcal{N}(0,1)$ is a standard normal random variable.</p></div>
+    <div class="card"><div class="card-num">4</div><h4>Second half-step position</h4>$$x \leftarrow x + v\frac{\Delta t}{2}$$</div>
+    <div class="card"><div class="card-num">5</div><h4>Second half-step velocity (physical force)</h4>$$v \leftarrow v + \frac{F_{\rm phys}(x)}{m}\frac{\Delta t}{2}$$</div>
+  </div>
+  <p>These five sub-steps are the <strong>BAOAB</strong> splitting: <strong>B</strong> = velocity kick from the force, <strong>A</strong> = position drift, <strong>O</strong> = the thermostat (friction + noise, solved exactly over $\Delta t$).</p>
+  <h3>Instantaneous temperature (1D)</h3>
+  <div class="eq-card">$$T = \frac{mv^2}{k_B}$$</div>
+  <p>(Here we take $k_B=1$ in reduced units.)</p>
+</section>
+
+<section class="step">
+  <h3>Temperature and Langevin integrator</h3>
+  <p>Let's define the temperature calculation function and the BAOAB integration step.</p>
+  <details class="code-cell"><summary>Instantaneous temperature and the Langevin (BAOAB) integrator</summary><pre><code class="language-python"># Assume Boltzmann constant k_B = 1 for simplicity in reduced units
+k_B = 1.0
+
+def calculate_temperature_1d(velocity, mass):
+  """Calculates instantaneous temperature for a 1D particle (kB=1)."""
+  if mass &lt;= 0:
+      return 0.0 # Avoid division by zero if mass is invalid
+  kinetic_energy = 0.5 * mass * velocity**2
+  # For 1D, N_df = 1. KE = 0.5 * N_df * kB * T =&gt; T = 2 * KE / (N_df * kB)
+  temperature = 2.0 * kinetic_energy / (1.0 * k_B)
+  return temperature
+
+from md_tutorial.integrators import velocity_verlet_langevin as Velocity_verlet_langevin</code></pre></details>
+
+  <details class="exercise" open>
+    <summary>✏️ Coding exercise: run NVT Langevin</summary>
+    <p>Modify the simulation loop to use the Langevin BAOAB integrator.</p>
+    <ol>
+      <li>Choose a target temperature (<code>target_temp</code>) and friction coefficient (<code>gamma</code>). A larger gamma means stronger coupling to the heat bath.</li>
+      <li>Inside the loop, call <code>langevin_baoab_step</code> instead of <code>velocity_verlet_step</code>.</li>
+      <li>Store the instantaneous temperature at each step.</li>
+    </ol>
+  </details>
+  <details class="code-cell"><summary>Solution: the NVT Langevin simulation loop</summary><pre><code class="language-python"># NVT Langevin Simulation Parameters
+target_temp_lgv = 5.0  # Target temperature (in energy units, kB=1)
+gamma = 3.0          # Friction coefficient (adjust to see effect)
+
+# Arrays to store NVT results
+times_nvt = np.zeros(n_steps)
+positions_nvt = np.zeros(n_steps)
+velocities_nvt = np.zeros(n_steps)
+kinetic_energies_nvt = np.zeros(n_steps)
+potential_energies_nvt = np.zeros(n_steps)
+total_energies_nvt = np.zeros(n_steps) # Note: Total E is NOT conserved in NVT
+temperatures_nvt = np.zeros(n_steps) # Store temperature
+
+# Set initial values
+x0_nvt = 1.0
+v0_nvt = 0.0 # Can start at rest, Langevin will add energy
+positions_nvt[0] = x0_nvt
+velocities_nvt[0] = v0_nvt
+
+# Calculate initial energies and temperature
+kinetic_energies_nvt[0] = 0.5 * mass * velocities_nvt[0]**2
+potential_energies_nvt[0] = potential_sh(positions_nvt[0], k=k_sh)
+total_energies_nvt[0] = kinetic_energies_nvt[0] + potential_energies_nvt[0]
+temperatures_nvt[0] = calculate_temperature_1d(velocities_nvt[0], mass)
+
+
+# --- NVT Langevin Simulation Loop ---
+print(f"Starting NVT (Langevin) simulation with Target T = {target_temp_lgv}, gamma = {gamma}")
+
+for i in range(n_steps - 1):
+    # Perform one Langevin BAOAB step
+    x_new, v_new = Velocity_verlet_langevin(
+        positions_nvt[i], velocities_nvt[i], mass, dt, gamma, target_temp_lgv,
+        force_sh, k=k_sh
+    )
+
+    # Store new values
+    positions_nvt[i+1] = x_new
+    velocities_nvt[i+1] = v_new
+    times_nvt[i+1] = times_nvt[i] + dt
+
+    # Calculate and store energies and temperature using the new state
+    kinetic_energies_nvt[i+1] = 0.5 * mass * v_new**2
+    potential_energies_nvt[i+1] = potential_sh(x_new, k=k_sh) # Potential depends on position
+    total_energies_nvt[i+1] = kinetic_energies_nvt[i+1] + potential_energies_nvt[i+1]
+    temperatures_nvt[i+1] = calculate_temperature_1d(v_new, mass)
+
+print("NVT (Langevin) Simulation finished.")</code></pre><pre class="output">Starting NVT (Langevin) simulation with Target T = 5.0, gamma = 3.0
+NVT (Langevin) Simulation finished.</pre></details>
+</section>
+
+<section class="step">
+  <h3>Analysis: NVT Langevin results</h3>
+  <ol>
+    <li>Plot the instantaneous temperature vs. time. Does it fluctuate around the target temperature? How does the friction coefficient <code>gamma</code> affect the fluctuations and the speed of reaching the target temperature? (Try changing <code>gamma</code> and re-running.)</li>
+    <li>Plot the total energy vs. time. Is it conserved? It shouldn't be, as the thermostat exchanges energy with the system.</li>
+    <li>Plot the NVT phase space trajectory (velocity vs. position). How does it compare to the NVE phase space plot? Does it look more “diffusive” or “noisy”?</li>
+  </ol>
+  <details class="code-cell"><summary>Plot NVT results: temperature, total energy, phase space</summary><pre><code class="language-python"># --- Plotting NVT (Langevin) Results ---
+
+# 1. Temperature vs Time
+plt.figure()
+plt.plot(times_nvt, temperatures_nvt, label="Instantaneous Temperature", alpha=0.7)
+plt.axhline(target_temp_lgv, color='r', linestyle='--', label=f"Target Temperature ({target_temp_lgv})")
+plt.xlabel("Time")
+plt.ylabel("Temperature (kB=1)")
+plt.title(f"NVT (Langevin) SHO: Temperature (gamma={gamma})")
+plt.legend()
+plt.grid(False)
+# Optional: Add running average
+window_size = 100
+if n_steps &gt; window_size:
+    temp_avg = np.convolve(temperatures_nvt, np.ones(window_size)/window_size, mode='valid')
+    plt.plot(times_nvt[window_size-1:], temp_avg, label=f'Running Avg (w={window_size})', color='orange')
+    plt.legend()
+plt.show()
+
+# 2. Total Energy vs Time
+plt.figure()
+plt.plot(times_nvt, total_energies_nvt, label="Total Energy (NVT - Langevin)")
+# plt.plot(times, total_energies, label="Total Energy (NVE)", linestyle=':') # Comparison
+plt.xlabel("Time")
+plt.ylabel("Energy")
+plt.title(f"NVT (Langevin) SHO: Total Energy (gamma={gamma})")
+plt.legend()
+plt.grid(False)
+plt.show()
+
+# 3. Phase Space (Velocity vs Position) - NVT Langevin
+plt.figure()
+plt.plot(positions_nvt, velocities_nvt, '.', markersize=1, alpha=0.3, label=f'NVT (Langevin, T={target_temp_lgv}, gamma={gamma})')
+# Compare with NVE
+plt.plot(positions, velocities, label='NVE', linestyle='-', alpha=0.6)
+plt.xlabel("Position")
+plt.ylabel("Velocity")
+plt.title("NVT (Langevin) vs NVE SHO: Phase Space")
+plt.axis('equal')
+plt.legend()
+plt.grid(False)
+plt.show()</code></pre></details>
+</section>
+
+<section class="step">
+  <h3>Play along: the Langevin thermostat, live</h3>
+  <div id="lab-nvt"></div>
+
+  <div class="quiz" data-answer="3">
+    <p class="q">In the NVT (Langevin) run, the total energy $E_K + V$ wanders up and down instead of staying constant. Why?</p>
+    <ol class="choices">
+      <li>The time step is too large, so the integrator is inaccurate</li>
+      <li>The harmonic potential does not conserve energy</li>
+      <li>The friction removes energy and the random kicks add it — the system exchanges energy with the heat bath</li>
+    </ol>
+    <div class="explain">In NVT the thermostat plays the role of a heat bath. Friction ($-\gamma m\dot{x}$) drains energy, the random force $R(t)$ injects it, and on average they balance at the target temperature — but the instantaneous energy fluctuates. Run the same system without the thermostat (NVE) and the energy is flat.</div>
+  </div>
+  <div class="quiz" data-answer="1">
+    <p class="q">You increase the friction coefficient $\gamma$ from 0.1 to 10. What happens?</p>
+    <ol class="choices">
+      <li>The particle couples more strongly to the heat bath: velocities relax toward the target temperature faster (on a time scale of about $1/\gamma$)</li>
+      <li>The average temperature rises above the target $T_0$</li>
+      <li>The thermostat switches off and the run becomes NVE</li>
+    </ol>
+    <div class="explain">$\gamma$ sets the coupling strength: velocities forget their past in a time $\sim 1/\gamma$. The <em>average</em> temperature is still $T_0$ for any $\gamma &gt; 0$, because $c_2$ is chosen to balance the friction (fluctuation–dissipation). Very large $\gamma$ does make the motion sluggish and over-damped — look at how the phase-space cloud is explored.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Double-well potential"><span class="lesson-num">Lesson 3</span>The Double-Well Potential</h2>
+  <p>Now let's consider a more interesting potential: the <strong>double-well potential</strong>. This potential has two stable minima separated by an energy barrier. It is a simple model for systems that can exist in two different states (for example, conformational changes or reaction-like transitions).</p>
+  <div class="cards">
+    <div class="card">
+      <h4>Potential energy</h4>
+      <p>A common form is:</p>
+      $$V(x) = ax^4 - bx^2$$
+      <p>where $a&gt;0$ and $b&gt;0$.</p>
+      <ul>
+        <li>The $x^4$ term dominates at large $|x|$, confining the particle.</li>
+        <li>The $-x^2$ term creates two off-center minima.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Stationary points</h4>
+      <p>The stationary points satisfy:</p>
+      $$\frac{dV}{dx} = 4ax^3 - 2bx = 0$$
+      <p>So we get $x=0$ (barrier top) and $x=\pm\sqrt{\frac{b}{2a}}$ (minima).</p>
+    </div>
+    <div class="card">
+      <h4>Barrier height</h4>
+      <p>The barrier height relative to the minima is:</p>
+      $$E_{\rm barrier} = V(0) - V\!\left(\pm\sqrt{\frac{b}{2a}}\right) = \frac{b^2}{4a}$$
+    </div>
+    <div class="card">
+      <h4>Force</h4>
+      $$F(x) = -\frac{dV}{dx} = -\left(4ax^3 - 2bx\right) = -4ax^3 + 2bx$$
+    </div>
+  </div>
+  <p>We will simulate this system in the <strong>NVE ensemble</strong> and ask whether the particle can cross the barrier within the simulation time.</p>
+</section>
+
+<section class="step">
+  <h3>Defining the double-well system</h3>
+  <details class="code-cell"><summary>Double-well minima, barrier height, and a plot of V(x)</summary><pre><code class="language-python">from md_tutorial.potentials import potential_dw, force_dw
+
+a_dw = 1.0
+b_dw = 4.0
+
+# Calculate minima and barrier height for reference
+minima_pos = np.sqrt(b_dw / (2 * a_dw))
+minima_val = potential_dw(minima_pos, a=a_dw, b=b_dw)
+barrier_top_val = potential_dw(0, a=a_dw, b=b_dw)
+barrier_height = barrier_top_val - minima_val # Relative height
+
+print(f"Double-well minima at: +/- {minima_pos:.2f} (Value: {minima_val:.2f})")
+print(f"Barrier top at x=0 (Value: {barrier_top_val:.2f})")
+print(f"Barrier height (relative to minima): {barrier_height:.2f}")
+
+
+# Plot the potential to visualize
+x_plot = np.linspace(-2.5, 2.5, 200)
+v_plot = potential_dw(x_plot, a=a_dw, b=b_dw)
+plt.figure()
+plt.plot(x_plot, v_plot)
+plt.xlabel("Position (x)")
+plt.ylabel("Potential Energy V(x)")
+plt.title("Double-Well Potential")
+plt.ylim(minima_val - 1, barrier_height + 1) # Adjust ylim for better view
+plt.axhline(0, color='grey', linestyle='--', linewidth=0.8)
+plt.axvline(-minima_pos, color='r', linestyle=':', label=f'Minima (-{minima_pos:.2f})')
+plt.axvline(minima_pos, color='r', linestyle=':', label=f'Minima (+{minima_pos:.2f})')
+plt.axhline(barrier_top_val, color='g', linestyle=':', label='Barrier Top')
+plt.axhline(minima_val, color='b', linestyle=':', label='Minima Bottom')
+plt.legend()
+plt.grid(False)
+plt.show()</code></pre><pre class="output">Double-well minima at: +/- 1.41 (Value: -4.00)
+Barrier top at x=0 (Value: 0.00)
+Barrier height (relative to minima): 4.00</pre></details>
+  <div id="lab-dw-pot"></div>
+</section>
+
+<section class="step">
+  <details class="exercise" open>
+    <summary>✏️ Coding exercise: simulate the double well</summary>
+    <p>Adapt the NVE simulation loop from Lesson 1 in this module to use the double-well potential and force functions (<code>potential_dw</code>, <code>force_dw</code>).</p>
+    <ul>
+      <li>Choose initial conditions (<code>x0_dw</code>, <code>v0_dw</code>) such that the particle starts near one of the minima (e.g., $x \approx -\sqrt{b/(2a)}$).</li>
+      <li>Ensure the initial total energy is defined. How does the initial total energy compare to the barrier height? Do you expect the particle to cross the barrier?</li>
+      <li>Run the simulation and store the trajectory and energies.</li>
+    </ul>
+  </details>
+  <details class="code-cell"><summary>Solution: the NVE double-well simulation</summary><pre><code class="language-python"># --- NVE Double-Well Simulation ---
+
+# Initial conditions for Double Well (start near left minimum)
+x0_dw = -minima_pos + 0.1 # Start slightly offset from the minimum
+v0_dw = 0.5               # Give it some initial velocity/energy
+
+# Calculate initial energy - HOW DOES THIS COMPARE TO THE BARRIER HEIGHT?
+initial_pe_dw = potential_dw(x0_dw, a=a_dw, b=b_dw)
+initial_ke_dw = 0.5 * mass * v0_dw**2
+initial_total_energy_dw = initial_pe_dw + initial_ke_dw
+print(f"Initial position: {x0_dw:.2f}")
+print(f"Initial velocity: {v0_dw:.2f}")
+print(f"Initial Total Energy: {initial_total_energy_dw:.2f}")
+print(f"Barrier Height (relative to minima): {barrier_height:.2f}")
+print(f"Energy relative to barrier top: {initial_total_energy_dw - barrier_top_val:.2f}")
+
+
+# Arrays to store results
+n_steps_dw = 10000 # May need more steps to see transitions if energy is low
+times_dw = np.zeros(n_steps_dw)
+positions_dw = np.zeros(n_steps_dw)
+velocities_dw = np.zeros(n_steps_dw)
+kinetic_energies_dw = np.zeros(n_steps_dw)
+potential_energies_dw = np.zeros(n_steps_dw)
+total_energies_dw = np.zeros(n_steps_dw)
+
+# Set initial values
+positions_dw[0] = x0_dw
+velocities_dw[0] = v0_dw
+kinetic_energies_dw[0] = initial_ke_dw
+potential_energies_dw[0] = initial_pe_dw
+total_energies_dw[0] = initial_total_energy_dw
+
+# Run the simulation loop (NVE using Velocity Verlet)
+for i in range(n_steps_dw - 1):
+    # Perform one Verlet step using the double-well force
+    x_new, v_new = velocity_verlet_step(
+        positions_dw[i], velocities_dw[i], mass, dt, force_dw, a=a_dw, b=b_dw
+    )
+
+    # Store new values
+    positions_dw[i+1] = x_new
+    velocities_dw[i+1] = v_new
+    times_dw[i+1] = times_dw[i] + dt
+
+    # Calculate and store energies
+    kinetic_energies_dw[i+1] = 0.5 * mass * v_new**2
+    potential_energies_dw[i+1] = potential_dw(x_new, a=a_dw, b=b_dw)
+    total_energies_dw[i+1] = kinetic_energies_dw[i+1] + potential_energies_dw[i+1]
+
+print("NVE Double-Well Simulation finished.")</code></pre><pre class="output">Initial position: -1.31
+Initial velocity: 0.50
+Initial Total Energy: -3.80
+Barrier Height (relative to minima): 4.00
+Energy relative to barrier top: -3.80
+NVE Double-Well Simulation finished.</pre></details>
+  <div class="callout warn">
+    <div class="callout-title">Read the printout carefully</div>
+    <p>The initial total energy is $-3.80$, while the barrier top sits at $V(0) = 0$. The particle is $3.80$ energy units <em>below</em> the top of the barrier: in NVE, where energy is exactly conserved, it can never get over.</p>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Analysis: double-well results</h3>
+  <ol>
+    <li>Plot position vs. time. Does the particle stay in the initial well, or does it cross the barrier to the other well? How often?</li>
+    <li>Plot the phase space trajectory (velocity vs. position). What does it look like? Can you identify regions corresponding to the two wells?</li>
+    <li>Plot the energies vs. time. Is total energy conserved?</li>
+  </ol>
+  <details class="code-cell"><summary>Plot double-well NVE results: position, phase space, energies</summary><pre><code class="language-python"># --- Plotting Double-Well NVE Results ---
+
+# 1. Position vs Time
+plt.figure()
+plt.plot(times_dw, positions_dw)
+plt.xlabel("Time")
+plt.ylabel("Position")
+plt.title(f"NVE Double-Well: Position vs Time (Initial E = {initial_total_energy_dw:.2f})")
+plt.axhline(-minima_pos, color='r', linestyle=':', linewidth=0.8, label='Minima')
+plt.axhline(minima_pos, color='r', linestyle=':', linewidth=0.8)
+plt.legend()
+plt.grid(False)
+plt.show()
+
+# 2. Phase Space (Velocity vs Position)
+plt.figure()
+plt.plot(positions_dw, velocities_dw, '.', markersize=1, alpha=0.5) # Use dots for dense trajectory
+plt.xlabel("Position")
+plt.ylabel("Velocity")
+plt.title(f"NVE Double-Well: Phase Space (Initial E = {initial_total_energy_dw:.2f})")
+plt.grid(False)
+plt.show()
+
+# 3. Energies vs Time
+plt.figure()
+plt.plot(times_dw, kinetic_energies_dw, label="Kinetic Energy")
+plt.plot(times_dw, potential_energies_dw, label="Potential Energy")
+plt.plot(times_dw, total_energies_dw, label="Total Energy", linestyle='--')
+plt.xlabel("Time")
+plt.ylabel("Energy")
+plt.title(f"NVE Double-Well: Energy Conservation (Initial E = {initial_total_energy_dw:.2f})")
+plt.legend()
+plt.grid(False)
+# Optional: Plot energy relative to barrier top
+plt.axhline(barrier_top_val, color='g', linestyle=':', label='Barrier Top E')
+plt.legend()
+plt.show()</code></pre></details>
+</section>
+
+<section class="step">
+  <h3>Play along: the double well in NVE</h3>
+  <div id="lab-dw-nve"></div>
+
+  <details class="exercise">
+    <summary>💬 Discussion: energy vs. barrier height</summary>
+    <p>How does the particle's behavior depend on its initial total energy relative to the barrier height? What would happen if the initial energy was much lower than the barrier? What if it was significantly higher? (Feel free to change <code>v0_dw</code> and re-run the simulation — in the panel above, that is the <em>v₀</em> slider.)</p>
+    <p>This illustrates the <strong>sampling problem</strong>: if energy barriers are high relative to the system's energy/temperature, transitions between states (wells) become <strong>rare events</strong> that are difficult to observe in a standard MD simulation of limited length.</p>
+    <details class="reveal">
+      <summary>What you should find</summary>
+      <ul>
+        <li><strong>$E_0$ below the barrier top ($E_0 &lt; 0$ here):</strong> the particle oscillates inside its starting well forever. The phase-space orbit is a single closed loop around $x = -\sqrt{2}$; the other well is never visited, no matter how long you run.</li>
+        <li><strong>$E_0$ just above the barrier top:</strong> the particle crosses, but it slows almost to a stop on top of the barrier (where its kinetic energy $E_0 - V(0)$ is small), so each crossing takes a long time.</li>
+        <li><strong>$E_0$ well above the barrier:</strong> the particle sweeps back and forth across both wells; the phase-space orbit becomes one large loop enclosing both minima.</li>
+        <li>With the default start point, $x_0 \approx -1.31$, the particle needs $v_0 \gtrsim 2.80$ to reach the top of the barrier — the panel shows this threshold as a readout.</li>
+      </ul>
+    </details>
+  </details>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">For $a = 1$, $b = 4$ the minima are at $x = \pm\sqrt{2} \approx \pm 1.41$ with $V = -4$, and the barrier top is $V(0) = 0$. The particle starts with total energy $-3.80$ in the left well (NVE). Over the 10,000-step run it…</p>
+    <ol class="choices">
+      <li>crosses to the right well a few times</li>
+      <li>never leaves the left well</li>
+      <li>slowly drifts to the right well because of integration error</li>
+    </ol>
+    <div class="explain">Energy is conserved, and $-3.80 &lt; 0 = V(0)$, so the barrier top is energetically forbidden. Velocity Verlet keeps the energy error tiny (far below the 3.80 deficit), so no spurious crossings occur.</div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Going further: thermal barrier hopping (NVT double well)</h3>
+  <p>The double-well run above is NVE. The closing remarks point to the obvious next experiment: put the double well in contact with a <strong>Langevin heat bath</strong>, exactly as in Lesson 2. Now the energy is no longer fixed — random kicks occasionally pile up enough energy to carry the particle over the barrier. How often that happens depends on the ratio $E_{\rm barrier}/k_BT$, and over a long run the position histogram approaches the Boltzmann distribution $P(x) \propto e^{-V(x)/k_BT}$.</p>
+  <div id="lab-dw-nvt"></div>
+  <div class="callout deep">
+    <div class="callout-title">Why this matters</div>
+    <p>Each hop is a <strong>rare event</strong>: the waiting time grows roughly like $e^{E_{\rm barrier}/k_BT}$. Doubling the barrier (or halving the temperature) does not double the waiting time — it multiplies it by a large exponential factor. This is the sampling problem that Module 5 takes on.</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="step">
+  <hr>
+  <p>End of Module 4. We have successfully implemented our first MD simulations in Python!</p>
+  <ul>
+    <li>We simulated a particle in a Simple Harmonic potential using the Velocity Verlet algorithm in the NVE ensemble and observed energy conservation.</li>
+    <li>We added a <strong>Langevin thermostat</strong> using the velocity Verlet integrator to control temperature and simulate the SHO in the NVT ensemble, observing temperature fluctuations around the target and non-conservation of total energy.</li>
+    <li>We simulated a particle in a Double-Well potential (NVE) and encountered the <strong>sampling problem</strong> associated with energy barriers and rare events.</li>
+  </ul>
+  <p>This last point directly motivates the need for the <strong>enhanced sampling techniques</strong> we will explore starting in Module 5, which are designed to overcome such barriers and efficiently explore complex energy landscapes, often in conjunction with a thermostat like Langevin dynamics.</p>
+  <div class="takeaways">
+    <h2 data-toc="Key takeaways">📝 Key Takeaways</h2>
+    <ul>
+      <li>A <strong>Harmonic Potential</strong> represents stable chemical bonds and small oscillations, keeping particles confined.</li>
+      <li>A <strong>Double-Well Potential</strong> introduces metastability, representing a chemical reaction or conformation change with two states separated by a barrier.</li>
+      <li>The <strong>Langevin Thermostat</strong> balances a friction force with random stochastic kicks to control the temperature of the system (NVT ensemble).</li>
+      <li>Over a long simulation, the probability of finding a particle at a particular position is proportional to its Boltzmann weight, $P(x) \propto e^{-V(x)/kT}$.</li>
+    </ul>
+  </div>
+  <h3>➡️ What's next?</h3>
+  <p>In <a href="05-sampling.html">Module 5 — The Sampling Challenge</a>, we will discover the biggest limitation of molecular dynamics: when energy barriers are high, a standard MD simulation gets trapped and cannot sample transitions in a realistic amount of time!</p>
+</section>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script>
+(function () {
+  const P = MD.phys;
+
+  // ================================================================ helpers
+  /** Recursive merge for small layout objects. */
+  function deepMerge(a, b) {
+    const o = Object.assign({}, a);
+    for (const k in b) {
+      const v = b[k];
+      o[k] = v && typeof v === "object" && !Array.isArray(v) && o[k] && typeof o[k] === "object" ? deepMerge(o[k], v) : v;
+    }
+    return o;
+  }
+  /** Plot layout with a title and axis labels (plus optional extras). */
+  const lay = (title, xt, yt, extra) => deepMerge({ title: { text: title }, xaxis: { title: { text: xt } }, yaxis: { title: { text: yt } } }, extra || {});
+  /** Extra top margin so a title and a legend can both sit above the plot area. */
+  const LEGEND = { margin: { t: 64 } };
+  /** Equal x/y scaling (plt.axis('equal')). */
+  const EQUAL = { yaxis: { scaleanchor: "x", scaleratio: 1 } };
+
+  /** Trailing moving average like np.convolve(a, np.ones(w)/w, mode='valid'): entries for indices w-1 … n-1. */
+  function trailingMean(a, w) {
+    const out = [];
+    let s = 0;
+    for (let i = 0; i < a.length; i++) {
+      s += a[i];
+      if (i >= w) s -= a[i - w];
+      if (i >= w - 1) out.push(s / w);
+    }
+    return out;
+  }
+  /** A horizontal reference line as a trace spanning [x0, x1]. */
+  const hline = (y, x0, x1, extra) => Object.assign({ x: [x0, x1], y: [y, y], mode: "lines", hoverinfo: "skip" }, extra);
+  /** A vertical reference line as a trace spanning [y0, y1]. */
+  const vline = (x, y0, y1, extra) => Object.assign({ x: [x, x], y: [y0, y1], mode: "lines", hoverinfo: "skip" }, extra);
+  const fmt2 = (v) => (Object.is(+v.toFixed(2), -0) ? 0 : v).toFixed(2);
+  const randomSeed = () => 1 + Math.floor(Math.random() * 999);
+
+  /**
+   * Draw a particle (ball) sitting on a 1D potential-energy curve.
+   * o: { V(x), xr:[lo,hi], yr:[lo,hi], x, E?, header, eLabel?, lines?:[{x|y, color, label}], kT?, vmin? }
+   * The gap between the ball and the dashed energy line is the kinetic energy E − V(x).
+   */
+  function drawParticle(lab, id, o) {
+    const { ctx, w, h } = lab.canvas(id);
+    ctx.clearRect(0, 0, w, h);
+    const L = 16, R = 16, T = 48, B = 12;
+    const X = (x) => L + ((x - o.xr[0]) / (o.xr[1] - o.xr[0])) * (w - L - R);
+    const Y = (y) => Math.max(-1e4, Math.min(1e4, T + (1 - (y - o.yr[0]) / (o.yr[1] - o.yr[0])) * (h - T - B)));
+    ctx.font = "12px system-ui, sans-serif";
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, T - 8, w, h - T + 8); ctx.clip();
+    (o.lines || []).forEach((ln) => {
+      ctx.strokeStyle = MD.color(ln.color); ctx.fillStyle = MD.color(ln.color);
+      ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      if (ln.x !== undefined) { ctx.moveTo(X(ln.x), T - 8); ctx.lineTo(X(ln.x), h); }
+      else { ctx.moveTo(L, Y(ln.y)); ctx.lineTo(w - R, Y(ln.y)); }
+      ctx.stroke(); ctx.setLineDash([]);
+      if (ln.label) {
+        if (ln.x !== undefined) ctx.fillText(ln.label, X(ln.x) + 4, h - B - 2);
+        else ctx.fillText(ln.label, L + 2, Y(ln.y) - 4);
+      }
+    });
+    // potential curve
+    ctx.strokeStyle = MD.css("--ink-2"); ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let j = 0; j <= 400; j++) {
+      const x = o.xr[0] + ((o.xr[1] - o.xr[0]) * j) / 400;
+      if (j) ctx.lineTo(X(x), Y(o.V(x))); else ctx.moveTo(X(x), Y(o.V(x)));
+    }
+    ctx.stroke();
+    // thermal energy scale bar
+    if (o.kT !== undefined) {
+      const bx = X(o.xr[0]) + 6;
+      ctx.strokeStyle = MD.color("s5"); ctx.fillStyle = MD.color("s5"); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(bx, Y(o.vmin)); ctx.lineTo(bx, Y(o.vmin + o.kT)); ctx.stroke();
+      ctx.fillText("kT", bx + 6, Y(o.vmin + o.kT / 2) + 4);
+    }
+    const vx = o.V(o.x), xb = X(o.x), yb = Y(vx);
+    // energy level and kinetic-energy gap
+    if (o.E !== undefined && isFinite(o.E)) {
+      ctx.strokeStyle = MD.color("s3"); ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(L, Y(o.E)); ctx.lineTo(w - R, Y(o.E)); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = MD.color("s3");
+      const lbl = o.eLabel || "E (total)";
+      ctx.fillText(lbl, w - R - ctx.measureText(lbl).width - 2, Y(o.E) - 5);
+      if (o.E > vx) {
+        ctx.strokeStyle = MD.color("s1"); ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(xb, yb - 14); ctx.lineTo(xb, Y(o.E)); ctx.stroke();
+      }
+    }
+    // the particle
+    ctx.fillStyle = MD.color("s2"); ctx.strokeStyle = MD.css("--surface"); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(xb, yb - 7, 7, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    // header + legend
+    ctx.fillStyle = MD.css("--ink"); ctx.font = "600 12.5px system-ui, sans-serif";
+    ctx.fillText(o.header || "", L, 17);
+    ctx.font = "12px system-ui, sans-serif";
+    let lx = L;
+    const key = (col, txt, dash) => {
+      ctx.strokeStyle = col; ctx.lineWidth = dash === "bar" ? 3 : 2; ctx.setLineDash(dash && dash !== "bar" ? dash : []);
+      ctx.beginPath(); ctx.moveTo(lx, 33); ctx.lineTo(lx + 18, 33); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = MD.css("--ink-3"); ctx.fillText(txt, lx + 23, 37);
+      lx += 23 + ctx.measureText(txt).width + 16;
+    };
+    key(MD.css("--ink-2"), "V(x)");
+    if (o.E !== undefined) { key(MD.color("s3"), o.eLabel || "E (total)", [6, 4]); key(MD.color("s1"), "KE = E − V(x)", "bar"); }
+    ctx.fillStyle = MD.color("s2"); ctx.beginPath(); ctx.arc(lx + 6, 33, 5, 0, 2 * Math.PI); ctx.fill();
+    ctx.fillStyle = MD.css("--ink-3"); ctx.fillText("particle", lx + 16, 37);
+  }
+
+  /** Evenly strided sample indices 0 … i (at most ~max of them, always ending at i) for plotting a growing prefix. */
+  function prefix(i, n, max = 1500) {
+    const s = Math.max(1, Math.ceil(n / max)), out = [];
+    for (let j = 0; j <= i; j += s) out.push(j);
+    if (out[out.length - 1] !== i) out.push(i);
+    return out;
+  }
+  /** Padded [min, max] of an array, for fixed axis ranges while a plot grows. */
+  function span(a, pad = 0.08) {
+    let lo = P.min(a), hi = P.max(a);
+    if (!isFinite(lo) || !isFinite(hi)) return undefined;
+    const d = hi - lo || Math.abs(hi) || 1;
+    return [lo - pad * d, hi + pad * d];
+  }
+  /** The moving "now" marker(s) on a live plot. */
+  const now = (x, y) => ({ x: Array.isArray(x) ? x : [x], y: Array.isArray(y) ? y : [y], mode: "markers", name: "now", color: "s2", marker: { size: 9, line: { width: 1.5, color: MD.css("--surface") } }, showlegend: false, hoverinfo: "skip" });
+
+  /**
+   * Playback of a precomputed trajectory, revealed progressively from t = 0.
+   * drawFrame(lab, i) redraws the canvas every animation frame; update(lab, i) redraws the plots and readouts
+   * with the data up to step i every PLOT_EVERY frames, and whenever playback stops, ends or jumps.
+   */
+  const PLOT_EVERY = 4;
+  function player(lab, drawFrame, update) {
+    const st = { idx: 0, tr: null, frame: 0 };
+    const last = () => st.tr.x.length - 1;
+    const label = () => { const b = lab.button("play"); if (b) b.textContent = st.anim.running ? "⏸ Pause" : "▶ Play"; };
+    st.render = (plots) => {
+      if (!st.tr) return;
+      drawFrame(lab, st.idx);
+      if (plots) update(lab, st.idx);
+    };
+    st.anim = lab.loop(() => {
+      if (!st.tr) return false;
+      st.idx = Math.min(last(), st.idx + lab.p.speed);
+      const done = st.idx >= last();
+      st.render(done || ++st.frame % PLOT_EVERY === 0);
+      if (done) { setTimeout(label, 0); return false; }
+    });
+    st.play = () => { if (!st.tr) return; if (st.idx >= last()) st.idx = 0; st.anim.start(); label(); };
+    st.pause = () => { st.anim.stop(); label(); st.render(true); };
+    st.toggle = () => (st.anim.running ? st.pause() : st.play());
+    st.seek = (i) => { if (!st.tr) return; st.idx = Math.max(0, Math.min(last(), i)); st.render(true); };
+    /** New trajectory: rewind to t = 0 and play it. */
+    st.load = (tr) => { st.tr = tr; st.idx = 0; st.frame = 0; st.render(true); st.play(); };
+    st.onButton = (id) => {
+      if (id === "play") st.toggle();
+      if (id === "rew") st.seek(0);
+      if (id === "end") { st.anim.stop(); label(); st.seek(last()); }
+    };
+    return st;
+  }
+  const PLAYBACK_BUTTONS = [{ id: "play", label: "⏸ Pause" }, { id: "rew", label: "Rewind", secondary: true }, { id: "end", label: "Skip to end", secondary: true }];
+
+  // ================================================================ Lesson 1: NVE harmonic oscillator
+  (function () {
+    let pl = null, key = "", ranges = null;
+    MD.lab("#lab-nve", {
+      title: "NVE simple harmonic oscillator",
+      intro: "<p>The simulation loop — $V(x) = \\frac{1}{2}kx^2$ integrated with <code>velocity_verlet_step</code> — re-run in your browser every time you move a slider. The defaults are: <code>mass = 1</code>, <code>k_sh = 1</code>, <code>dt = 0.01</code>, <code>n_steps = 5000</code>, <code>x0 = 1</code>, <code>v0 = 0</code>. Each run plays back from $t = 0$: the particle rolls in the well (the blue bar is its kinetic energy, the gap up to the dashed total-energy line) while the four plots grow in step with it, the orange dot marking “now”. Use <strong>Pause</strong>, <strong>Rewind</strong> or <strong>Skip to end</strong> to see the whole run at once.</p>",
+      controls: [
+        { type: "range", id: "k", label: "Spring constant k", min: 0.1, max: 10, step: 0.1, value: 1 },
+        { type: "range", id: "m", label: "Mass m", min: 0.1, max: 5, step: 0.1, value: 1 },
+        { type: "range", id: "dt", label: "Time step Δt", min: 0.001, max: 0.5, step: 0.001, value: 0.01, hint: "Velocity Verlet is stable for Δt &lt; 2/ω, with ω = √(k/m)." },
+        { type: "range", id: "n", label: "n_steps", min: 500, max: 20000, step: 500, value: 5000 },
+        { type: "range", id: "x0", label: "Initial position x₀", min: -3, max: 3, step: 0.1, value: 1 },
+        { type: "range", id: "v0", label: "Initial velocity v₀", min: -3, max: 3, step: 0.1, value: 0 },
+        { type: "select", id: "method", label: "Integrator", value: "vv", options: [{ value: "vv", label: "Velocity Verlet" }, { value: "euler", label: "Explicit Euler (for comparison)" }] },
+        { type: "check", id: "dE", label: "Zoom: plot ΔE = E − E₀ instead", value: false },
+        { type: "range", id: "speed", label: "Playback speed (steps / frame)", min: 1, max: 80, step: 1, value: 8 },
+        { type: "buttons", items: PLAYBACK_BUTTONS },
+      ],
+      cols: 2,
+      panels: [
+        { id: "cv", kind: "canvas", aspect: 3, span: true },
+        { id: "pos", kind: "plot" }, { id: "vel", kind: "plot" },
+        { id: "phase", kind: "plot" }, { id: "en", kind: "plot" },
+        { id: "ro", kind: "readouts", span: true },
+      ],
+      init(lab) { pl = player(lab, draw, update); },
+      run(p, lab) {
+        const k = [p.k, p.m, p.dt, p.n, p.x0, p.v0, p.method].join("|");
+        if (k === key) { pl.render(true); return; }
+        key = k;
+        // n_steps array entries = n_steps − 1 integration steps after the initial state
+        const tr = P.run1D({ x0: p.x0, v0: p.v0, m: p.m, dt: p.dt, steps: p.n - 1, method: p.method,
+          force: (x) => P.force_sh(x, p.k), potential: (x) => P.potential_sh(x, p.k) });
+        const E0 = tr.te[0];
+        ranges = {
+          t: [0, tr.t[tr.t.length - 1]], x: span(tr.x), v: span(tr.v),
+          E: span(tr.ke.concat(tr.pe, tr.te)), dE: span(tr.te.map((e) => e - E0)),
+        };
+        pl.load(tr);
+      },
+      onButton(id) { pl.onButton(id); },
+      foot: "<p><strong>What to try.</strong> (1) Compare the position and velocity plots: velocity is a quarter period ahead — it is largest where $x = 0$ and zero at the turning points. (2) The phase-space orbit is a closed ellipse; set $k = m$ to make it a circle. (3) Tick <em>Zoom: ΔE</em> and raise Δt from 0.01 to 0.1: the energy error grows roughly as Δt², but stays bounded and oscillating — no drift. (4) Switch to <em>Explicit Euler</em>: the orbit spirals outward and the energy grows without bound. (5) Push Δt past $2/\\omega$ (2.0 here; lower it by raising k) and even Velocity Verlet blows up.</p>",
+    });
+
+    function update(lab, i) {
+      const p = lab.p, tr = pl.tr, ix = prefix(i, tr.x.length), g = (a) => ix.map((j) => a[j]);
+      const t = g(tr.t), tNow = tr.t[i], X = { xaxis: { range: ranges.t } };
+      lab.plot("pos", [{ x: t, y: g(tr.x), name: "Position", color: "s1" }, now(tNow, tr.x[i])],
+        lay("Position vs Time", "Time", "Position", deepMerge(X, { showlegend: false, yaxis: { range: ranges.x } })));
+      lab.plot("vel", [{ x: t, y: g(tr.v), name: "Velocity", color: "s1" }, now(tNow, tr.v[i])],
+        lay("Velocity vs Time", "Time", "Velocity", deepMerge(X, { showlegend: false, yaxis: { range: ranges.v } })));
+      lab.plot("phase", [{ x: g(tr.x), y: g(tr.v), name: "Phase space", color: "s1" }, now(tr.x[i], tr.v[i])],
+        lay("Phase Space", "Position", "Velocity", deepMerge(EQUAL, { showlegend: false, xaxis: { range: ranges.x }, yaxis: { range: ranges.v } })));
+      const E0 = tr.te[0];
+      if (p.dE) {
+        lab.plot("en", [{ x: t, y: g(tr.te).map((e) => e - E0), name: "ΔE", color: "s3" }, now(tNow, tr.te[i] - E0)],
+          lay("Total Energy Fluctuation", "Time", "ΔE = E − E₀", deepMerge(X, { showlegend: false, yaxis: { range: ranges.dE } })));
+      } else {
+        lab.plot("en", [
+          { x: t, y: g(tr.ke), name: "Kinetic Energy", color: "s1" },
+          { x: t, y: g(tr.pe), name: "Potential Energy", color: "s2" },
+          { x: t, y: g(tr.te), name: "Total Energy", color: "s3", line: { dash: "dash" } },
+          now([tNow, tNow, tNow], [tr.ke[i], tr.pe[i], tr.te[i]]),
+        ], lay("Energy Conservation", "Time", "Energy", deepMerge(LEGEND, deepMerge(X, { yaxis: { range: ranges.E } }))));
+      }
+      let dev = 0;
+      for (let j = 0; j <= i; j++) dev = Math.max(dev, Math.abs(tr.te[j] - E0));
+      const blew = tr.x.length < p.n && i === tr.x.length - 1;
+      const omega = Math.sqrt(p.k / p.m), period = (2 * Math.PI) / omega, total = p.dt * p.n;
+      const rel = E0 > 0 ? dev / E0 : NaN;
+      lab.readouts("ro", [
+        { k: "Total simulation time (dt × n_steps)", v: total.toFixed(2) },
+        { k: "Time now", v: `${tNow.toFixed(2)} (step ${i})` },
+        { k: "Period 2π√(m/k)", v: `${period.toFixed(3)} (${(total / period).toFixed(1)} oscillations)` },
+        { k: "ω·Δt (stable if &lt; 2)", v: (omega * p.dt).toFixed(3), cls: omega * p.dt < 2 ? "good" : "bad" },
+        { k: "Initial total energy E₀", v: E0.toFixed(4) },
+        { k: "max |E − E₀| so far", v: blew ? "diverged" : MD.fmt(dev, 3), cls: blew ? "bad" : "" },
+        { k: "Relative energy error so far", v: blew ? `blew up at step ${tr.x.length - 1}` : isFinite(rel) ? (100 * rel).toPrecision(2) + " %" : "—", cls: blew || rel > 0.01 ? "bad" : "good" },
+      ]);
+    }
+
+    function draw(lab, i) {
+      const p = lab.p, tr = pl.tr, E0 = Math.max(tr.te[0], 0.05);
+      const A = Math.sqrt((2 * E0) / p.k);
+      drawParticle(lab, "cv", {
+        V: (x) => P.potential_sh(x, p.k), xr: [-1.3 * A, 1.3 * A], yr: [-0.1 * E0, 1.35 * E0],
+        x: tr.x[i], E: tr.te[i],
+        header: `t = ${tr.t[i].toFixed(2)}    x = ${fmt2(tr.x[i])}    v = ${fmt2(tr.v[i])}`,
+        lines: [{ x: 0, color: "axis", label: "x = 0" }],
+      });
+    }
+  })();
+
+  // ================================================================ Lesson 2: NVT Langevin oscillator
+  MD.lab("#lab-nvt", {
+    title: "NVT (Langevin) simple harmonic oscillator",
+    intro: "<p>The Langevin run: the same spring ($k = 1$, $m = 1$, $x_0 = 1$, $v_0 = 0$, $\\Delta t = 0.01$) coupled to a heat bath with <code>target_temp_lgv = 5.0</code> and <code>gamma = 3.0</code>, integrated with the BAOAB step for <code>n_steps = 5000</code>. The noise comes from a seeded random-number generator, so a given seed always gives the same run; change the seed for a different but statistically equivalent run. The fourth plot adds the check from the key takeaways: the position histogram against the Boltzmann distribution — pick 200,000 steps to see it converge.</p>",
+    controls: [
+      { type: "range", id: "gamma", label: "Friction γ", min: 0.05, max: 20, step: 0.05, value: 3 },
+      { type: "range", id: "T0", label: "Target temperature T₀", min: 0.5, max: 10, step: 0.5, value: 5 },
+      { type: "range", id: "k", label: "Spring constant k", min: 0.2, max: 5, step: 0.1, value: 1 },
+      { type: "range", id: "dt", label: "Time step Δt", min: 0.001, max: 0.2, step: 0.001, value: 0.01 },
+      { type: "select", id: "n", label: "n_steps", value: 5000, options: [{ value: 5000, label: "5,000 (default)" }, { value: 50000, label: "50,000" }, { value: 200000, label: "200,000" }] },
+      { type: "range", id: "w", label: "Running-average window", min: 10, max: 1000, step: 10, value: 100 },
+      { type: "range", id: "seed", label: "Random seed", min: 1, max: 999, step: 1, value: 1 },
+      { type: "buttons", items: [{ id: "noise", label: "New noise" }] },
+    ],
+    live: "change",
+    cols: 2,
+    panels: [
+      { id: "temp", kind: "plot", span: true },
+      { id: "en", kind: "plot" }, { id: "phase", kind: "plot" },
+      { id: "hist", kind: "plot", span: true },
+      { id: "ro", kind: "readouts", span: true },
+    ],
+    run(p, lab) {
+      const m = 1;
+      const force = (x) => P.force_sh(x, p.k), potential = (x) => P.potential_sh(x, p.k);
+      const tr = P.run1D({ x0: 1, v0: 0, m, dt: p.dt, steps: p.n - 1, method: "langevin", gamma: p.gamma, T: p.T0, seed: p.seed, force, potential });
+      const nve = P.run1D({ x0: 1, v0: 0, m, dt: p.dt, steps: Math.min(p.n, 5000) - 1, force, potential });
+      const temp = tr.v.map((v) => (m * v * v) / P.kB); // calculate_temperature_1d
+      const N = 3000, t = P.thin(tr.t, N), tEnd = tr.t[tr.t.length - 1];
+      const traces = [
+        { x: t, y: P.thin(temp, N), name: "Instantaneous Temperature", color: "s1", opacity: 0.7, line: { width: 1 } },
+        hline(p.T0, 0, tEnd, { name: `Target Temperature (${p.T0.toFixed(1)})`, color: "s8", line: { dash: "dash" } }),
+      ];
+      if (p.n > p.w) {
+        traces.push({ x: P.thin(tr.t.slice(p.w - 1), N), y: P.thin(trailingMean(temp, p.w), N), name: `Running Avg (w=${p.w})`, color: "s2" });
+      }
+      lab.plot("temp", traces, lay(`Temperature (γ = ${p.gamma})`, "Time", "Temperature (k<sub>B</sub>=1)", LEGEND));
+
+      const Emean = P.mean(tr.te);
+      lab.plot("en", [
+        { x: t, y: P.thin(tr.te, N), name: "Total Energy (NVT - Langevin)", color: "s1", line: { width: 1.2 } },
+        hline(p.T0, 0, tEnd, { name: "⟨E⟩ = k<sub>B</sub>T₀ (equipartition)", color: "s8", line: { dash: "dot" } }),
+      ], lay(`Total Energy (γ = ${p.gamma})`, "Time", "Energy", LEGEND));
+
+      lab.plot("phase", [
+        { x: P.thin(tr.x, 4000), y: P.thin(tr.v, 4000), mode: "markers", name: `NVT (T=${p.T0.toFixed(1)}, γ=${p.gamma})`, color: "s1", marker: { size: 2.5, opacity: 0.35 } },
+        { x: P.thin(nve.x, 1500), y: P.thin(nve.v, 1500), name: "NVE", color: "s2", opacity: 0.8 },
+      ], lay("NVT vs NVE: Phase Space", "Position", "Velocity", deepMerge(LEGEND, EQUAL)));
+
+      const sig = Math.sqrt(p.T0 / p.k), R = 4 * sig;
+      const hst = P.histogram(tr.x, 60, [-R, R]);
+      const xs = P.linspace(-R, R, 200);
+      lab.plot("hist", [
+        { type: "bar", x: hst.centers, y: hst.density, name: "Simulation histogram of x", color: "s1", opacity: 0.55, width: hst.width },
+        { x: xs, y: xs.map((x) => Math.exp(-potential(x) / p.T0) / Math.sqrt(2 * Math.PI * sig * sig)), name: "Boltzmann ∝ e^(−V(x)/k<sub>B</sub>T₀)", color: "s8" },
+      ], lay("Position distribution vs Boltzmann", "Position x", "Probability density P(x)", deepMerge(LEGEND, { bargap: 0 })));
+
+      const Tm = P.mean(temp);
+      const x2 = P.mean(tr.x.map((x) => x * x));
+      lab.readouts("ro", [
+        { k: "⟨T⟩ over the run (target T₀)", v: `${Tm.toFixed(2)} (${p.T0.toFixed(2)})`, cls: Math.abs(Tm - p.T0) / p.T0 < 0.15 ? "good" : "" },
+        { k: "⟨E⟩ (equipartition: k<sub>B</sub>T₀)", v: `${Emean.toFixed(2)} (${p.T0.toFixed(2)})` },
+        { k: "⟨x²⟩ (Boltzmann: k<sub>B</sub>T₀/k)", v: `${x2.toFixed(2)} (${(p.T0 / p.k).toFixed(2)})` },
+        { k: "Velocity relaxation time 1/γ", v: (1 / p.gamma).toFixed(2) },
+        { k: "Total simulation time", v: (p.dt * p.n).toFixed(0) },
+      ]);
+    },
+    onButton(id, p, lab) {
+      if (id === "noise") { lab.set("seed", randomSeed()); lab.rerun(); }
+    },
+    foot: "<p><strong>What to try.</strong> (1) The instantaneous temperature of a single 1D particle fluctuates wildly (its spread is as large as $T_0$ itself), but the orange running average settles on the red target line. (2) Lower γ to 0.1: it takes much longer to heat up from the initial $E = 0.5$ to $\\langle E\\rangle = k_BT_0 = 5$; raise γ to 20: the target is reached almost at once. (3) Compare the phase-space cloud with the NVE circle: the thermostat lets the particle visit many energy shells instead of one. (4) Switch to 200,000 steps and watch the histogram match $P(x) \\propto e^{-V(x)/k_BT_0}$. (5) Change T₀ — every average follows it.</p>",
+  });
+
+  // ================================================================ Lesson 3a: the double-well potential
+  MD.lab("#lab-dw-pot", {
+    title: "Double-well potential V(x) = a x⁴ − b x²",
+    intro: "<p>The potential for $a = 1$, $b = 4$, with the same reference lines and y-limits. Drag the sliders and watch the formulas for the minima, $x = \\pm\\sqrt{b/2a}$, and the barrier height, $b^2/4a$, update the readouts.</p>",
+    controls: [
+      { type: "range", id: "a", label: "a (quartic confinement)", min: 0.1, max: 3, step: 0.05, value: 1 },
+      { type: "range", id: "b", label: "b (depth of the wells)", min: 0.5, max: 8, step: 0.1, value: 4 },
+    ],
+    panels: [{ id: "plot", kind: "plot", cls: "tall" }, { id: "ro", kind: "readouts" }],
+    run(p, lab) {
+      const xm = Math.sqrt(p.b / (2 * p.a));
+      const vmin = P.potential_dw(xm, p.a, p.b), top = P.potential_dw(0, p.a, p.b), dE = top - vmin;
+      const R = Math.max(2.5, 1.6 * xm), xs = P.linspace(-R, R, 200);
+      const y0 = vmin - 1, y1 = dE + 1;
+      lab.plot("plot", [
+        { x: xs, y: xs.map((x) => P.potential_dw(x, p.a, p.b)), name: "V(x)", color: "s1", showlegend: false },
+        hline(0, -R, R, { color: "axis", line: { dash: "dash", width: 1 }, showlegend: false }),
+        vline(-xm, y0, y1, { name: `Minima (−${xm.toFixed(2)})`, color: "s8", line: { dash: "dot" } }),
+        vline(xm, y0, y1, { name: `Minima (+${xm.toFixed(2)})`, color: "s8", line: { dash: "dot" } }),
+        hline(top, -R, R, { name: "Barrier Top", color: "s6", line: { dash: "dot" } }),
+        hline(vmin, -R, R, { name: "Minima Bottom", color: "s7", line: { dash: "dot" } }),
+      ], lay("Double-Well Potential", "Position (x)", "Potential Energy V(x)", deepMerge(LEGEND, { yaxis: { range: [y0, y1] }, xaxis: { range: [-R, R] } })));
+      lab.readouts("ro", [
+        { k: "Double-well minima at", v: `± ${xm.toFixed(2)}` },
+        { k: "Value at the minima", v: fmt2(vmin) },
+        { k: "Barrier top at x = 0 (value)", v: fmt2(top) },
+        { k: "Barrier height b²/4a", v: dE.toFixed(2) },
+        { k: "Well frequency ω = √(4b/m), m = 1", v: Math.sqrt(4 * p.b).toFixed(2) },
+      ]);
+    },
+    foot: "<p><strong>What to try.</strong> Double <em>b</em>: the minima move out by √2 but the barrier grows four-fold ($\\propto b^2$). Double <em>a</em>: the minima move in and the barrier halves. Because the barrier depends on $b^2/a$, small changes in the shape of a potential can change barrier heights — and, as you'll see, crossing rates — enormously.</p>",
+  });
+
+  // ================================================================ Lesson 3b: NVE double well
+  (function () {
+    let pl = null, key = "", ranges = null;
+    MD.lab("#lab-dw-nve", {
+      title: "NVE double well: does the particle cross?",
+      intro: "<p>The default run: $a = 1$, $b = 4$, start slightly offset from the left minimum (<code>x0_dw = -minima_pos + 0.1</code>) with <code>v0_dw = 0.5</code>, 10,000 Velocity Verlet steps of $\\Delta t = 0.01$. Raise <em>v₀</em> past the threshold shown in the readouts and the particle starts hopping between the wells. Each run plays back from $t = 0$: the particle moves on the potential while the position, phase-space and energy plots grow in step with it (orange dot = now). <strong>Skip to end</strong> shows the whole run.</p>",
+      controls: [
+        { type: "range", id: "v0", label: "Initial velocity v₀ (v0_dw)", min: 0, max: 6, step: 0.05, value: 0.5 },
+        { type: "range", id: "off", label: "Start offset from left minimum", min: -1, max: 1, step: 0.01, value: 0.1 },
+        { type: "range", id: "a", label: "a", min: 0.25, max: 3, step: 0.05, value: 1 },
+        { type: "range", id: "b", label: "b", min: 1, max: 8, step: 0.1, value: 4 },
+        { type: "range", id: "dt", label: "Time step Δt", min: 0.001, max: 0.05, step: 0.001, value: 0.01 },
+        { type: "range", id: "n", label: "n_steps_dw", min: 1000, max: 40000, step: 1000, value: 10000 },
+        { type: "range", id: "speed", label: "Playback speed (steps / frame)", min: 1, max: 100, step: 1, value: 10 },
+        { type: "buttons", items: PLAYBACK_BUTTONS },
+      ],
+      cols: 2,
+      panels: [
+        { id: "cv", kind: "canvas", aspect: 3, span: true },
+        { id: "pos", kind: "plot" }, { id: "phase", kind: "plot" },
+        { id: "en", kind: "plot", span: true },
+        { id: "ro", kind: "readouts", span: true },
+      ],
+      init(lab) { pl = player(lab, draw, update); },
+      run(p, lab) {
+        const k = [p.v0, p.off, p.a, p.b, p.dt, p.n].join("|");
+        if (k === key) { pl.render(true); return; }
+        key = k;
+        const xm = Math.sqrt(p.b / (2 * p.a)), top = P.potential_dw(0, p.a, p.b);
+        const tr = P.run1D({ x0: -xm + p.off, v0: p.v0, m: 1, dt: p.dt, steps: p.n - 1,
+          force: (x) => P.force_dw(x, p.a, p.b), potential: (x) => P.potential_dw(x, p.a, p.b) });
+        const xs = span(tr.x.concat([-xm, xm]));
+        ranges = { t: [0, tr.t[tr.t.length - 1]], x: xs, v: span(tr.v), E: span(tr.ke.concat(tr.pe, tr.te, [top])) };
+        pl.load(tr);
+      },
+      onButton(id) { pl.onButton(id); },
+      foot: "<p><strong>What to try.</strong> (1) With the defaults, $E_0 = -3.80 &lt; 0$: the position stays near $-1.41$ and the phase-space orbit is one small loop in the left well. (2) Raise v₀ to about 2.7: still trapped, but the loop stretches toward the barrier. (3) Go just past the threshold (≈ 2.85): the particle crosses, lingering on top of the barrier. (4) At v₀ = 5 the orbit encloses both wells. (5) Lower b to shrink the barrier and see crossings appear at the default v₀ — the barrier height relative to the energy is what matters.</p>",
+    });
+
+    function update(lab, i) {
+      const p = lab.p, tr = pl.tr, ix = prefix(i, tr.x.length), g = (a) => ix.map((j) => a[j]);
+      const xm = Math.sqrt(p.b / (2 * p.a)), top = P.potential_dw(0, p.a, p.b), dE = top - P.potential_dw(xm, p.a, p.b);
+      const E0 = tr.te[0], tEnd = ranges.t[1], t = g(tr.t), tNow = tr.t[i];
+      const X = { xaxis: { range: ranges.t } };
+      lab.plot("pos", [
+        { x: t, y: g(tr.x), name: "Position", color: "s1" },
+        hline(-xm, 0, tEnd, { name: "Minima", color: "s8", line: { dash: "dot", width: 1 }, legendgroup: "min" }),
+        hline(xm, 0, tEnd, { name: "Minima", color: "s8", line: { dash: "dot", width: 1 }, legendgroup: "min", showlegend: false }),
+        now(tNow, tr.x[i]),
+      ], lay(`Position vs Time (E₀ = ${E0.toFixed(2)})`, "Time", "Position", deepMerge(LEGEND, deepMerge(X, { yaxis: { range: ranges.x } }))));
+      const ixp = prefix(i, tr.x.length, 3000);
+      lab.plot("phase", [
+        { x: ixp.map((j) => tr.x[j]), y: ixp.map((j) => tr.v[j]), mode: "markers", name: "Phase space", color: "s1", marker: { size: 2.5, opacity: 0.5 } },
+        now(tr.x[i], tr.v[i]),
+      ], lay(`Phase Space (E₀ = ${E0.toFixed(2)})`, "Position", "Velocity", { showlegend: false, xaxis: { range: ranges.x }, yaxis: { range: ranges.v } }));
+      lab.plot("en", [
+        { x: t, y: g(tr.ke), name: "Kinetic Energy", color: "s1" },
+        { x: t, y: g(tr.pe), name: "Potential Energy", color: "s2" },
+        { x: t, y: g(tr.te), name: "Total Energy", color: "s3", line: { dash: "dash" } },
+        hline(top, 0, tEnd, { name: "Barrier Top E", color: "s6", line: { dash: "dot" } }),
+        now([tNow, tNow, tNow], [tr.ke[i], tr.pe[i], tr.te[i]]),
+      ], lay(`Energy Conservation (E₀ = ${E0.toFixed(2)})`, "Time", "Energy", deepMerge(LEGEND, deepMerge(X, { yaxis: { range: ranges.E } }))));
+
+      let cross = 0, dev = 0;
+      for (let j = 1; j <= i; j++) if (Math.sign(tr.x[j]) !== Math.sign(tr.x[j - 1])) cross++;
+      for (let j = 0; j <= i; j++) dev = Math.max(dev, Math.abs(tr.te[j] - E0));
+      const pe0 = tr.pe[0], vStar = pe0 < top ? Math.sqrt(2 * (top - pe0)) : 0;
+      lab.readouts("ro", [
+        { k: "Initial position", v: fmt2(tr.x[0]) },
+        { k: "Initial velocity", v: fmt2(tr.v[0]) },
+        { k: "Initial Total Energy", v: fmt2(E0) },
+        { k: "Barrier Height (relative to minima)", v: dE.toFixed(2) },
+        { k: "Energy relative to barrier top", v: fmt2(E0 - top), cls: E0 > top ? "good" : "bad" },
+        { k: "v₀ needed to reach the barrier top", v: vStar.toFixed(2) },
+        { k: `Barrier crossings up to t = ${tNow.toFixed(1)}`, v: String(cross), cls: cross ? "good" : "" },
+        { k: "max |E − E₀| so far", v: MD.fmt(dev, 2) },
+      ]);
+    }
+
+    function draw(lab, i) {
+      const p = lab.p, tr = pl.tr;
+      const xm = Math.sqrt(p.b / (2 * p.a)), vmin = P.potential_dw(xm, p.a, p.b), dE = -vmin;
+      const R = Math.max(1.6 * xm, 1.12 * Math.max(-ranges.x[0], ranges.x[1]));
+      const E0 = tr.te[0];
+      drawParticle(lab, "cv", {
+        V: (x) => P.potential_dw(x, p.a, p.b), xr: [-R, R], yr: [vmin - 0.12 * dE, Math.max(E0, 0) + 0.45 * dE],
+        x: tr.x[i], E: tr.te[i],
+        header: `t = ${tr.t[i].toFixed(2)}    x = ${fmt2(tr.x[i])}    v = ${fmt2(tr.v[i])}`,
+        lines: [{ y: 0, color: "s6", label: "barrier top" }],
+      });
+    }
+  })();
+
+  // ================================================================ Going further: Langevin double well
+  (function () {
+    let pl = null, key = "", fixed = null;
+    const a = 1;
+    MD.lab("#lab-dw-nvt", {
+      title: "Langevin double well: barrier hopping vs temperature",
+      badge: "Going further",
+      intro: "<p>The double well ($a = 1$) coupled to the BAOAB Langevin thermostat from Lesson 2, starting at rest in the left minimum. Hops are counted with a little hysteresis: the particle must reach halfway to the other minimum. The purple bar on the potential shows the size of $k_BT$ next to the barrier. The default run is 100,000 steps of $\\Delta t = 0.01$ (1,000 time units). It plays back from $t = 0$: the trajectory, the histogram and the hop count build up as the particle moves (orange dot = now); <strong>Skip to end</strong> shows the full run.</p>",
+      controls: [
+        { type: "range", id: "T", label: "Temperature k<sub>B</sub>T", min: 0.2, max: 5, step: 0.1, value: 1 },
+        { type: "range", id: "gamma", label: "Friction γ", min: 0.1, max: 10, step: 0.1, value: 1 },
+        { type: "range", id: "b", label: "b (barrier = b²/4)", min: 1, max: 6, step: 0.25, value: 4 },
+        { type: "select", id: "n", label: "Number of steps", value: 100000, options: [{ value: 20000, label: "20,000" }, { value: 100000, label: "100,000" }, { value: 200000, label: "200,000" }] },
+        { type: "range", id: "seed", label: "Random seed", min: 1, max: 999, step: 1, value: 7 },
+        { type: "range", id: "speed", label: "Playback speed (steps / frame)", min: 5, max: 1000, step: 5, value: 100 },
+        { type: "buttons", items: PLAYBACK_BUTTONS.concat([{ id: "noise", label: "New noise", secondary: true }]) },
+      ],
+      live: "change",
+      cols: 2,
+      panels: [
+        { id: "cv", kind: "canvas", aspect: 3, span: true },
+        { id: "pos", kind: "plot" }, { id: "hist", kind: "plot" },
+        { id: "ro", kind: "readouts", span: true },
+      ],
+      init(lab) { pl = player(lab, draw, update); },
+      run(p, lab) {
+        const k = [p.T, p.gamma, p.b, p.n, p.seed].join("|");
+        if (k === key) { pl.render(true); return; }
+        key = k;
+        const xm = Math.sqrt(p.b / (2 * a)), dE = (p.b * p.b) / (4 * a), V = (x) => P.potential_dw(x, a, p.b);
+        const tr = P.run1D({ x0: -xm, v0: 0, m: 1, dt: 0.01, steps: p.n, method: "langevin", gamma: p.gamma, T: p.T, seed: p.seed,
+          force: (x) => P.force_dw(x, a, p.b), potential: V });
+        // Boltzmann reference curve and fixed axis ranges for the growing plots
+        const R = Math.max(2.2, 1.6 * xm), xs = P.linspace(-R, R, 400), w = xs.map((x) => Math.exp(-(V(x) + dE) / p.T));
+        let Z = 0;
+        for (let j = 1; j < xs.length; j++) Z += 0.5 * (w[j] + w[j - 1]) * (xs[j] - xs[j - 1]);
+        const boltz = w.map((q) => q / Z);
+        const yMax = 1.15 * Math.max(P.max(boltz), P.max(P.histogram(tr.x, 80, [-R, R]).density));
+        const xr = span([P.min(tr.x), P.max(tr.x), -xm, xm]);
+        fixed = { R, xs, boltz, yMax, t: [0, tr.t[tr.t.length - 1]], x: xr };
+        pl.load(tr);
+      },
+      onButton(id, p, lab) {
+        if (id === "noise") { lab.set("seed", randomSeed()); lab.rerun(); }
+        else pl.onButton(id);
+      },
+      foot: "<p><strong>What to try.</strong> (1) At $k_BT = 1$ the barrier is $4\\,k_BT$: the particle hops a handful of times and the histogram roughly matches Boltzmann. (2) Lower $k_BT$ to 0.5 (barrier $= 8\\,k_BT$): hops all but vanish and the histogram only shows the left well — the run is trapped, and the sampled distribution is wrong. (3) Raise $k_BT$ to 3: hopping is frequent and the two wells fill evenly. (4) Compare the hop count with the Boltzmann factor $e^{-E_{\\rm barrier}/k_BT}$ as you change T: rates track the exponential, not the temperature itself. (5) Very large γ slows hopping too — the particle diffuses sluggishly over the barrier. (6) Watch the histogram while the run plays: early on it only knows about the well the particle has visited.</p>",
+    });
+
+    function update(lab, i) {
+      const p = lab.p, tr = pl.tr, xm = Math.sqrt(p.b / (2 * a)), dE = (p.b * p.b) / (4 * a), tEnd = fixed.t[1];
+      const ix = prefix(i, tr.x.length, 3000), tNow = tr.t[i];
+      lab.plot("pos", [
+        { x: ix.map((j) => tr.t[j]), y: ix.map((j) => tr.x[j]), name: "Position", color: "s1", line: { width: 1 } },
+        hline(-xm, 0, tEnd, { name: "Minima", color: "s8", line: { dash: "dot", width: 1 }, legendgroup: "min" }),
+        hline(xm, 0, tEnd, { name: "Minima", color: "s8", line: { dash: "dot", width: 1 }, legendgroup: "min", showlegend: false }),
+        now(tNow, tr.x[i]),
+      ], lay("Position vs Time", "Time", "Position", deepMerge(LEGEND, { xaxis: { range: fixed.t }, yaxis: { range: fixed.x } })));
+
+      // statistics over the run so far (steps 0 … i)
+      const bins = 80, R = fixed.R, bw = (2 * R) / bins, counts = new Array(bins).fill(0);
+      let n = 0, hops = 0, side = tr.x[0] < 0 ? -1 : 1, right = 0;
+      for (let j = 0; j <= i; j++) {
+        const x = tr.x[j];
+        if (x >= -R && x <= R) { counts[Math.min(bins - 1, Math.floor((x + R) / bw))]++; n++; }
+        if (side < 0 && x > xm / 2) { side = 1; hops++; } else if (side > 0 && x < -xm / 2) { side = -1; hops++; }
+        if (x > 0) right++;
+      }
+      lab.plot("hist", [
+        { type: "bar", x: counts.map((_, k) => -R + (k + 0.5) * bw), y: counts.map((c) => (n ? c / (n * bw) : 0)), name: "Simulation (so far)", color: "s1", opacity: 0.55, width: bw },
+        { x: fixed.xs, y: fixed.boltz, name: "Boltzmann", color: "s8" },
+        now(tr.x[i], 0),
+      ], lay("Position distribution", "Position x", "P(x)", deepMerge(LEGEND, { bargap: 0, xaxis: { range: [-R, R] }, yaxis: { range: [0, fixed.yMax] } })));
+
+      lab.readouts("ro", [
+        { k: "Barrier height b²/4a", v: dE.toFixed(2) },
+        { k: "Barrier / k<sub>B</sub>T", v: (dE / p.T).toFixed(1) },
+        { k: "Boltzmann factor e^(−barrier/k<sub>B</sub>T)", v: MD.fmt(Math.exp(-dE / p.T), 2) },
+        { k: "Hops between wells so far", v: String(hops), cls: hops ? "good" : "bad" },
+        { k: "Fraction of time in right well so far (equilibrium: 0.50)", v: (right / (i + 1)).toFixed(2) },
+        { k: "Time now / total", v: `${tNow.toFixed(0)} / ${tEnd.toFixed(0)}` },
+      ]);
+    }
+
+    function draw(lab, i) {
+      const p = lab.p, tr = pl.tr;
+      const xm = Math.sqrt(p.b / (2 * a)), vmin = P.potential_dw(xm, a, p.b), dE = -vmin;
+      const R = Math.max(2.2, 1.6 * xm);
+      drawParticle(lab, "cv", {
+        V: (x) => P.potential_dw(x, a, p.b), xr: [-R, R], yr: [vmin - 0.12 * dE, Math.max(0.6 * dE, vmin + 4 * p.T)],
+        x: tr.x[i], E: tr.te[i], eLabel: "E(t)", kT: p.T, vmin,
+        header: `t = ${tr.t[i].toFixed(1)}    x = ${fmt2(tr.x[i])}    kT = ${p.T.toFixed(1)}`,
+        lines: [{ y: 0, color: "s6", label: "barrier top" }],
+      });
+    }
+  })();
+})();
+</script>
+</body>
+</html>

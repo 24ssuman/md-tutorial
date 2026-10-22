@@ -1,0 +1,1561 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 8 — Multi-Particle LJ Simulation with ASE · MD Tutorial</title>
+<meta name="description" content="A 3D Lennard-Jones fluid with the Atomic Simulation Environment: building an fcc box, energy minimisation, Maxwell–Boltzmann velocities, Langevin NVT dynamics and the radial distribution function — with a live 3D simulation in your browser.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+<style>
+  /* page-local: log panels in the labs and the ASE diagram */
+  .lab pre.output.live-log { max-height: 260px; overflow: auto; margin: 0; font-size: 11px; white-space: pre; }
+  .lab canvas.sim { cursor: grab; }
+  .lab .lab-stage > * { min-width: 0; }
+  .ase-diagram { width: 100%; max-width: 760px; display: block; margin: 1rem auto; }
+</style>
+</head>
+<body data-module="08">
+<main id="main">
+<article class="content">
+
+<!-- ================================================================== -->
+<header class="hero step">
+  <div class="eyebrow">Module 8 · Core track</div>
+  <h1>Multi-Particle LJ Simulation with ASE</h1>
+  <p class="lede">Welcome to Module 8! Having explored 1D systems and enhanced sampling, we now move to simulating more realistic, multi-particle systems in 3D — a Lennard-Jones fluid of 500 argon atoms, run with the Atomic Simulation Environment.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Prerequisites</b> All previous modules</span>
+    <span class="chip"><b>What you run</b> An ASE-based LJ fluid simulation with trajectory visualization</span>
+    <span class="chip"><b>Expected runtime</b> 2–5 minutes (depends on system size and hardware)</span>
+  </div>
+
+  <div class="objectives">
+    <h3>What you will learn</h3>
+    <ul>
+      <li>How to use the Atomic Simulation Environment (ASE) for 3D MD simulations.</li>
+      <li>How to set up a Lennard-Jones fluid with periodic boundary conditions.</li>
+      <li>How to run NVT simulations and compute properties like the radial distribution function.</li>
+    </ul>
+  </div>
+  <div class="callout tip">
+    <div class="callout-title">How to use this page</div>
+    <p>ASE is a Python library, so it cannot run inside your browser. Every step is shown as real ASE code below (expand the <strong>Python code</strong> cells), together with the output it prints. The <strong>Interactive</strong> panels are driven by a small JavaScript Lennard-Jones engine written for this page: the same 500-atom fcc box, the same cutoff convention as ASE's <code>LennardJones</code> calculator, Velocity Verlet + Langevin dynamics, periodic boundaries with the minimum image convention, and an RDF calculator. It reproduces the printed numbers (for example the initial potential energy of −34.9023 eV), and the 10 ps NVT run that takes about two minutes with ASE's reference calculator finishes here in a few seconds. Drag any 3D view to rotate it. Press <kbd>P</kbd> for presentation mode.</p>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<section class="step">
+  <p>Writing efficient MD code for many particles is complex, involving neighbor lists, parallelization, and robust integrators. Therefore, we will use a powerful library designed for this purpose: the <strong>Atomic Simulation Environment (ASE)</strong>.</p>
+  <p>In this module, we will learn the basics of ASE by setting up, running, and analyzing a simulation of a classic model system: the Lennard-Jones (LJ) fluid. This system, composed of particles interacting via the LJ potential, serves as a fundamental model for simple liquids and gases.</p>
+
+  <div class="callout key">
+    <div class="callout-title">🌉 Bridging the gap: from scratch to professional libraries</div>
+    <p>In Modules 1 through 7, we built everything from scratch in 1D (potentials, Langevin integrators, biasing, WHAM). This was critical to establish complete mathematical and physical intuition.</p>
+    <p>However, real physical systems are three-dimensional and contain thousands of atoms. Developing optimized 3D neighbor lists, bond constraints, and fast electrostatic solvers from scratch is incredibly labor-intensive. That's where professional computational chemistry packages come in. In this final module, we transition to using <strong>ASE (Atomic Simulation Environment)</strong>, showing you how your core concepts apply directly to professional-grade tools.</p>
+  </div>
+
+  <p>Every ingredient you have already met has a direct ASE counterpart:</p>
+  <table>
+    <thead><tr><th>What you built by hand</th><th>Where you met it</th><th>ASE equivalent in this module</th></tr></thead>
+    <tbody>
+      <tr><td>Lennard-Jones potential and forces, cutoff</td><td>Module 3</td><td><code>ase.calculators.lj.LennardJones(sigma, epsilon, rc)</code></td></tr>
+      <tr><td>Periodic box + minimum image convention</td><td>Modules 1–2</td><td><code>atoms.cell</code> and <code>atoms.pbc</code> (set by <code>bulk(...)</code>)</td></tr>
+      <tr><td>Velocity Verlet with a Langevin thermostat (<code>velocity_verlet_langevin</code>)</td><td>Modules 2 and 4</td><td><code>ase.md.langevin.Langevin(atoms, timestep, temperature_K, friction)</code></td></tr>
+      <tr><td>Drawing initial velocities at temperature $T$</td><td>Module 4</td><td><code>MaxwellBoltzmannDistribution</code> + <code>Stationary</code></td></tr>
+      <tr><td>Histograms of sampled configurations</td><td>Modules 5–7</td><td><code>ase.geometry.analysis.get_rdf</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Introduction to ASE"><span class="lesson-num">Lesson 1</span>Introduction to ASE</h2>
+
+  <h3>What is ASE?</h3>
+  <p>ASE is a Python library for setting up, manipulating, running, visualizing, and analyzing atomistic simulations. It doesn't perform the core calculations itself (like integrating equations of motion or calculating forces for complex potentials) but acts as a powerful interface or <strong>“glue”</strong> connecting various external simulation codes (like LAMMPS, GPAW, VASP, Quantum Espresso) and internal calculators (like the Lennard-Jones calculator we'll use).</p>
+
+  <h3>Key features</h3>
+  <div class="cards">
+    <div class="card"><h4>Atoms object</h4><p>A central object representing a collection of atoms with positions, momenta, cell dimensions, boundary conditions, etc.</p></div>
+    <div class="card"><h4>Calculators</h4><p>Objects attached to <code>Atoms</code> that compute energy and forces (e.g., LJ potential, EMT potential, interfaces to DFT codes or complex force fields via OpenMM/LAMMPS).</p></div>
+    <div class="card"><h4>Dynamics / optimization</h4><p>Modules for running MD simulations (NVE, NVT, NPT using various integrators/thermostats) or performing structure optimization.</p></div>
+    <div class="card"><h4>Input / output</h4><p>Reading and writing various file formats common in atomistic simulations.</p></div>
+    <div class="card"><h4>Analysis tools</h4><p>Built-in functions for common analysis tasks (e.g., RDF).</p></div>
+    <div class="card"><h4>Building tools</h4><p>Functions for creating common structures (surfaces, bulk crystals, nanotubes, etc.).</p></div>
+  </div>
+
+  <figure class="figure">
+    <svg class="ase-diagram" viewBox="0 0 760 250" role="img" aria-label="How the ASE pieces used in this module fit together: ase.build creates an Atoms object; a LennardJones calculator attached to it supplies energies and forces; BFGS and Langevin move the atoms; Trajectory and get_rdf save and analyse them.">
+      <defs>
+        <marker id="m8-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--ink-3)"/></marker>
+      </defs>
+      <g style="font-family:inherit;font-size:13px">
+        <rect x="285" y="80" width="190" height="90" rx="12" style="fill:var(--surface);stroke:var(--s1);stroke-width:2"/>
+        <text x="380" y="108" text-anchor="middle" style="fill:var(--ink);font-weight:700">Atoms</text>
+        <text x="380" y="130" text-anchor="middle" style="fill:var(--ink-2)">positions · momenta</text>
+        <text x="380" y="150" text-anchor="middle" style="fill:var(--ink-2)">cell · pbc · .calc</text>
+
+        <rect x="10" y="95" width="200" height="60" rx="10" style="fill:var(--surface-2);stroke:var(--border-strong)"/>
+        <text x="110" y="120" text-anchor="middle" style="fill:var(--ink);font-weight:600">Build</text>
+        <text x="110" y="140" text-anchor="middle" style="fill:var(--ink-3)">bulk('Ar', 'fcc').repeat()</text>
+
+        <rect x="550" y="10" width="200" height="60" rx="10" style="fill:var(--surface-2);stroke:var(--border-strong)"/>
+        <text x="650" y="35" text-anchor="middle" style="fill:var(--ink);font-weight:600">Calculator</text>
+        <text x="650" y="55" text-anchor="middle" style="fill:var(--ink-3)">LennardJones → E, F</text>
+
+        <rect x="550" y="95" width="200" height="60" rx="10" style="fill:var(--surface-2);stroke:var(--border-strong)"/>
+        <text x="650" y="120" text-anchor="middle" style="fill:var(--ink);font-weight:600">Optimizer / Dynamics</text>
+        <text x="650" y="140" text-anchor="middle" style="fill:var(--ink-3)">BFGS · Langevin</text>
+
+        <rect x="550" y="180" width="200" height="60" rx="10" style="fill:var(--surface-2);stroke:var(--border-strong)"/>
+        <text x="650" y="205" text-anchor="middle" style="fill:var(--ink);font-weight:600">I/O &amp; analysis</text>
+        <text x="650" y="225" text-anchor="middle" style="fill:var(--ink-3)">Trajectory · write · get_rdf</text>
+
+        <g style="stroke:var(--ink-3);stroke-width:1.6;fill:none">
+          <path d="M210,125 L283,125" marker-end="url(#m8-arrow)"/>
+          <path d="M475,105 C510,95 520,50 548,42" marker-end="url(#m8-arrow)" marker-start="url(#m8-arrow)"/>
+          <path d="M475,125 L548,125" marker-end="url(#m8-arrow)" marker-start="url(#m8-arrow)"/>
+          <path d="M475,148 C510,160 520,200 548,208" marker-end="url(#m8-arrow)"/>
+        </g>
+      </g>
+    </svg>
+    <figcaption>The ASE pieces used in this module. Everything revolves around the <code>Atoms</code> object: a calculator is attached to it, optimizers and dynamics move it, and I/O and analysis read it.</figcaption>
+  </figure>
+</section>
+
+<section class="step">
+  <h3>Installation</h3>
+  <p>If you haven't installed ASE yet, you can typically do so via pip:</p>
+<div class="code-static"><pre><code class="language-bash">pip install ase</code></pre></div>
+  <p>Or conda:</p>
+<div class="code-static"><pre><code class="language-bash">conda install -c conda-forge ase</code></pre></div>
+
+  <h3>Basic ASE objects</h3>
+  <ul>
+    <li><code>ase.Atoms</code>: Stores the state of the system (positions, numbers, cell, pbc, calculator, momenta).</li>
+    <li><code>ase.calculators</code>: Contains modules for different ways to calculate energy and forces. We'll use <code>ase.calculators.lj.LennardJones</code>.</li>
+  </ul>
+
+  <h3>Import ASE</h3>
+  <p>Let's import the necessary ASE modules along with NumPy and Matplotlib.</p>
+  <div class="callout note">
+    <div class="callout-title">Note</div>
+    <p>ASE should already be installed. If not, run <code>pip install ase</code> in your terminal before running the code below.</p>
+  </div>
+  <details class="code-cell" open><summary>Import NumPy, Matplotlib and the ASE modules</summary><pre><code class="language-python">import numpy as np
+import matplotlib.pyplot as plt
+import os
+import time
+
+# ASE imports
+try:
+    from ase import Atoms, units
+    from ase.calculators.lj import LennardJones
+    from ase.md.langevin import Langevin
+    from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary, ZeroRotation
+    from ase.optimize import BFGS
+    from ase.io import read, write, Trajectory
+    from ase.build import bulk
+    from ase.geometry.analysis import get_rdf
+
+    print("ASE modules imported successfully.")
+except ImportError as e:
+    print(f"Error importing ASE modules: {e}")
+    print("Please ensure ASE is installed (run pip install ase)")
+
+plt.style.use('seaborn-v0_8-darkgrid')
+plt.rcParams['figure.figsize'] = (6, 4)</code></pre><pre class="output">ASE modules imported successfully.</pre></details>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Setting up the LJ fluid"><span class="lesson-num">Lesson 2</span>Setting Up the LJ Fluid</h2>
+  <p>We'll simulate Argon (Ar), a noble gas often modeled using the Lennard-Jones potential. The LJ potential is:</p>
+  <div class="eq-card">
+    $$ V_{LJ}(r) = 4\epsilon \left[ \left(\frac{\sigma}{r}\right)^{12} - \left(\frac{\sigma}{r}\right)^{6} \right] $$
+  </div>
+  <p>For Argon, typical parameters are:</p>
+  <ul>
+    <li>$\sigma \approx 3.405$ Å (Angstroms)</li>
+    <li>$\epsilon \approx 0.0103$ eV (electron Volts) or $119.8$ K $\times k_B$</li>
+  </ul>
+  <p>ASE uses specific units internally (eV for energy, Å for length).</p>
+
+  <h3>Steps</h3>
+  <ol>
+    <li>Create an initial configuration of Ar atoms (e.g., start from a face-centered cubic (fcc) lattice).</li>
+    <li>Define the simulation box and apply Periodic Boundary Conditions (PBC).</li>
+    <li>Set up the Lennard-Jones calculator with the appropriate parameters.</li>
+    <li>Assign initial velocities corresponding to a desired temperature.</li>
+  </ol>
+
+  <div class="callout deep">
+    <div class="callout-title">💡 Deep dive: reduced LJ units (what the browser engine uses)</div>
+    <p>Because the LJ potential has only two parameters, every LJ system can be written in <strong>reduced units</strong> with $\sigma = \epsilon = m = k_B = 1$. Results for argon are then just a rescaling. The JavaScript engine on this page works in reduced units and converts back to argon units (Å, eV, K, fs) for display:</p>
+    <table>
+      <thead><tr><th>Quantity</th><th>Reduced unit</th><th>Argon value</th><th>Setting in this module → reduced</th></tr></thead>
+      <tbody>
+        <tr><td>Length</td><td>$\sigma$</td><td>3.405 Å</td><td>cutoff <code>rc = 3σ</code> = 10.215 Å</td></tr>
+        <tr><td>Energy</td><td>$\epsilon$</td><td>0.0103 eV ($\epsilon/k_B \approx 119.5$ K)</td><td>90 K → $T^* = k_BT/\epsilon \approx 0.75$</td></tr>
+        <tr><td>Time</td><td>$\tau = \sigma\sqrt{m/\epsilon}$</td><td>≈ 2.16 ps</td><td>5 fs → $\Delta t^* \approx 0.0023$</td></tr>
+        <tr><td>Density</td><td>$\sigma^{-3}$</td><td>1 atom per 39.5 Å³</td><td>0.0216 Å⁻³ → $\rho^* = \rho\sigma^3 \approx 0.85$</td></tr>
+        <tr><td>Friction</td><td>$\tau^{-1}$</td><td>≈ 0.46 ps⁻¹</td><td>0.01 fs⁻¹ → $\gamma^* \approx 21.6$</td></tr>
+      </tbody>
+    </table>
+    <p>In these units this module's state point, $T^* \approx 0.75$ and $\rho^* \approx 0.85$, sits just above the LJ triple point ($T^* \approx 0.69$), right at the freezing line: both the dense liquid and the (slightly stretched) fcc crystal can survive here for a long time. Lesson 4 shows why that matters.</p>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Create initial configuration</h3>
+  <p>We can use <code>ase.build.bulk</code> to create a unit cell and then repeat it to get a larger system. We choose a lattice constant <code>a</code> appropriate for the desired density. The density affects the phase (solid, liquid, gas). Let's aim for a liquid-like density.</p>
+  <details class="code-cell"><summary>Build a 5×5×5 fcc argon box (500 atoms) and report its density</summary><pre><code class="language-python"># Parameters for Argon LJ potential
+sigma_Ar = 3.405 # Angstrom
+epsilon_Ar = 0.0103 # eV (approx 120 K * kB)
+
+# Simulation box setup
+N_side = 5 # Number of unit cells per side (N = 4 * N_side^3 atoms for fcc)
+lattice_constant = 5.7 # Angstroms (chosen for liquid-like density)
+
+# Create the bulk fcc structure and repeat it
+atoms = bulk('Ar', 'fcc', a=lattice_constant, cubic=True)
+atoms = atoms.repeat((N_side, N_side, N_side))
+N_atoms = len(atoms)
+
+print(f"PBC enabled: {atoms.pbc.all()}")
+print(f"Number of atoms: {N_atoms}")
+print(f"Simulation box dimensions:{atoms.cell}")
+box_volume = atoms.get_volume()
+print(f"Initial volume: {box_volume:.2f} A^3")
+
+# Calculate initial density
+mass_Ar_amu = 39.948 # amu
+mass_Ar_ase = mass_Ar_amu * units._amu # ASE mass unit
+number_density = N_atoms / box_volume
+print(f"Number density: {number_density:.4f} atoms/A^3")</code></pre><pre class="output">PBC enabled: True
+Number of atoms: 500
+Simulation box dimensions:Cell([28.5, 28.5, 28.5])
+Initial volume: 23149.12 A^3
+Number density: 0.0216 atoms/A^3</pre></details>
+
+  <div id="lab-build"></div>
+</section>
+
+<section class="step">
+  <h3>Set up the LJ calculator</h3>
+  <p>Attach the <code>LennardJones</code> calculator to the <code>Atoms</code> object. ASE's LJ calculator uses $\sigma$ and $\epsilon$. Here we also set a cutoff radius <code>rc = 3σ</code>: pairs farther apart than $r_c$ are ignored, and ASE shifts the pair energy so that it is exactly zero at $r_c$ (no jump in energy when a pair crosses the cutoff — see Module 3).</p>
+  <details class="code-cell"><summary>Attach the LennardJones calculator and minimise with BFGS</summary><pre><code class="language-python"># Set the calculator
+atoms.calc = LennardJones(sigma=sigma_Ar, epsilon=epsilon_Ar, rc=sigma_Ar * 3.0) # rc is cutoff radius
+
+# Check initial energy and forces (should be non-zero due to initial lattice)
+initial_potential_energy = atoms.get_potential_energy()
+initial_forces = atoms.get_forces()
+print(f"Initial Potential Energy: {initial_potential_energy:.4f} eV")
+# print(f"Max initial force component: {np.max(np.abs(initial_forces)):.4f} eV/A")
+
+# Optional: Minimize energy to get a more stable starting point (removes initial forces)
+print("Minimizing initial structure...")
+optimizer = BFGS(atoms, logfile='minimization.log')
+optimizer.run(fmax=0.01) # Run until max force component is below 0.01 eV/A
+minimized_potential_energy = atoms.get_potential_energy()
+print(f"Minimized Potential Energy: {minimized_potential_energy:.4f} eV")
+write('minimized_structure.xyz', atoms)</code></pre><pre class="output">Initial Potential Energy: -34.9023 eV
+Minimizing initial structure...
+Minimized Potential Energy: -34.9023 eV</pre></details>
+
+  <div class="callout note">
+    <div class="callout-title">Why did the minimiser change nothing?</div>
+    <p>The initial and minimized energies are identical (−34.9023 eV). In a <em>perfect</em> fcc lattice every atom sits at a centre of symmetry: each neighbour pulling one way is matched by a neighbour pulling the opposite way, so the net force on every atom is zero. BFGS finds the largest force already below <code>fmax = 0.01</code> eV/Å and stops at step 0. Minimisation matters when the starting structure has <strong>clashes</strong> — atoms placed too close together, as happens with random placement, solvated molecules, or structures built by hand. The lab below lets you create such clashes and watch a minimiser remove them.</p>
+  </div>
+
+  <div class="quiz" data-answer="3">
+    <p class="q">The 500-atom fcc box with <code>a = 5.7</code> Å has a potential energy of −34.9023 eV both before and after <code>BFGS(...).run(fmax=0.01)</code>. Why?</p>
+    <ol class="choices">
+      <li>BFGS is not able to minimise Lennard-Jones systems.</li>
+      <li>The cutoff <code>rc = 3σ</code> removes all forces between atoms.</li>
+      <li>By symmetry, the forces on every atom of a perfect lattice cancel, so the convergence criterion is met before any step is taken.</li>
+      <li>The lattice constant 5.7 Å is exactly the energy minimum of the crystal.</li>
+    </ol>
+    <div class="explain">Every atom in a perfect fcc lattice is a centre of inversion, so its neighbours' forces cancel pairwise. That makes the structure a <em>stationary point</em> (zero force), even though it is not the lowest-energy lattice: the box builder above shows the energy is lower near a ≈ 5.27 Å.</div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Play along: minimisation removes clashes</h3>
+  <div id="lab-minimize"></div>
+</section>
+
+<section class="step">
+  <h3>Assign initial velocities</h3>
+  <p>Use <code>MaxwellBoltzmannDistribution</code> to assign velocities corresponding to a target temperature. It's also good practice to remove any center-of-mass motion.</p>
+  <details class="code-cell"><summary>Maxwell–Boltzmann velocities at 90 K and zero total momentum</summary><pre><code class="language-python"># Target temperature for initialization (and simulation)
+target_temperature_K = 90.0 # Kelvin (liquid Argon range)
+target_temperature_eV = target_temperature_K * units.kB # Convert K to eV using ase.units
+
+# Set initial velocities
+MaxwellBoltzmannDistribution(atoms, temperature_K=target_temperature_K)
+# Remove center-of-mass motion (avoids box drifting)
+Stationary(atoms)
+# Remove rotation (optional, less critical for fluids)
+# ZeroRotation(atoms)
+
+# Check initial kinetic energy and temperature
+initial_kinetic_energy = atoms.get_kinetic_energy()
+initial_temperature = initial_kinetic_energy / (1.5 * units.kB * len(atoms)) # 3N DOF -&gt; 1.5 N kB T
+print(f"Initial Target Temperature: {target_temperature_K:.1f} K ({target_temperature_eV:.4f} eV)")
+print(f"Initial Kinetic Energy: {initial_kinetic_energy:.4f} eV")
+print(f"Initial Temperature (from KE): {initial_temperature:.1f} K")</code></pre><pre class="output">Initial Target Temperature: 90.0 K (0.0078 eV)
+Initial Kinetic Energy: 5.8141 eV
+Initial Temperature (from KE): 90.0 K</pre></details>
+
+  <div id="lab-mb"></div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Running NVT with ASE"><span class="lesson-num">Lesson 3</span>Running NVT with ASE</h2>
+  <p>Now we set up the Molecular Dynamics simulation run itself. We'll use the <strong>Langevin thermostat</strong> to maintain the target temperature (NVT ensemble).</p>
+  <h3>Steps</h3>
+  <ol>
+    <li>Choose simulation parameters (time step, total steps).</li>
+    <li>Create a <code>Langevin</code> dynamics object, linking the <code>Atoms</code> object, time step, temperature, and friction coefficient.</li>
+    <li>Define how to log data or save the trajectory during the run.</li>
+    <li>Run the simulation using the <code>dyn.run()</code> method.</li>
+  </ol>
+  <p>Notice how much of the code below is bookkeeping (logging, trajectory files, error handling): the physics is a single line, <code>dyn.run(n_steps)</code>. The friction <code>0.01 / units.fs</code> means velocities forget their direction on a time scale of $1/\gamma = 100$ fs, so the thermostat pulls the temperature to 90 K quickly.</p>
+  <details class="code-cell"><summary>Langevin NVT run: 2000 steps of 5 fs with logging and a trajectory file</summary><pre><code class="language-python"># Simulation parameters
+time_step_fs = 5.0 # femtoseconds
+time_step = time_step_fs * units.fs
+# Define picoseconds numerically based on femtoseconds
+# This 'ps' variable holds the value of 1 picosecond in ASE's internal time units
+ps = 1000.0 * units.fs
+total_simulation_time_ps = 10.0 # picoseconds
+total_simulation_time = total_simulation_time_ps * ps # Total time in ASE units
+n_steps = int(total_simulation_time / time_step)
+log_interval = 200 # Print status less often
+traj_interval = 1000 # Save trajectory frame less often
+traj_filename = 'lj_argon_nvt.traj'
+
+print(f"Simulation time step: {time_step_fs:.1f} fs ({time_step / units.fs:.3f} ASE time units)")
+print(f"1 Picosecond equals: {ps:.3f} ASE time units")
+print(f"Total simulation time: {total_simulation_time_ps:.1f} ps ({total_simulation_time:.3f} ASE time units)")
+print(f"Number of steps: {n_steps}")
+
+# Set up Langevin dynamics
+friction_coeff = 0.01 / units.fs
+dyn = Langevin(atoms, timestep=time_step, temperature_K=target_temperature_K, friction=friction_coeff)
+
+# Function to print progress
+def print_status(a=atoms):
+    """Function called by the dynamics to print status."""
+    step = dyn.get_number_of_steps()
+    if step % log_interval == 0: # Print only at log_interval
+        epot = a.get_potential_energy() / len(a)
+        ekin = a.get_kinetic_energy() / len(a)
+        # Ensure temperature calculation is safe (avoid division by zero if ekin is zero)
+        temp = ekin / (1.5 * units.kB) if ekin &gt; 1e-9 else 0.0
+        # Calculate current time in picoseconds using the 'ps' variable defined earlier
+        current_time_ps = (step * time_step) / ps
+        print(f'Step: {step:6d}, Time: {current_time_ps:6.2f} ps, '
+              f'Epot/N: {epot:.4f} eV, Ekin/N: {ekin:.4f} eV, Temp: {temp:.1f} K')
+
+# Attach status printing
+# The dyn object will call print_status() at each step internally.
+# The check for log_interval is handled inside print_status.
+dyn.attach(print_status, interval=1) # Attach to be called every step
+
+# Set up trajectory saving
+# Check if file exists, delete if you want to overwrite cleanly
+if os.path.exists(traj_filename):
+    try:
+        os.remove(traj_filename)
+        print(f"Removed existing trajectory file: {traj_filename}")
+    except OSError as e:
+        print(f"Error removing existing trajectory file {traj_filename}: {e}")
+        # Decide if you want to exit or continue
+        # exit() or pass
+
+# Use a try-finally block to ensure the trajectory file is opened and closed properly
+trajectory = None # Initialize trajectory to None
+try:
+    trajectory = Trajectory(traj_filename, 'w', atoms)
+    # Attach trajectory writing with the specified interval
+    dyn.attach(trajectory.write, interval=traj_interval)
+
+    print("-" * 60)
+    print(f"Starting NVT simulation for {n_steps} steps...")
+    print(f"Target Temperature: {target_temperature_K:.1f} K")
+    print(f"Trajectory will be saved to: {traj_filename} every {traj_interval} steps.")
+    print(f"Status will be printed every {log_interval} steps.")
+    print("-" * 60)
+
+
+    # Run the dynamics!
+    sim_start_time = time.time()
+    dyn.run(n_steps)
+    sim_end_time = time.time()
+    print("-" * 60)
+    print(f"NVT simulation finished successfully in {sim_end_time - sim_start_time:.2f} seconds.")
+    print("-" * 60)
+
+except Exception as e:
+    sim_end_time = time.time()
+    print("-" * 60)
+    print(f"Error during simulation run after {sim_end_time - sim_start_time:.2f} seconds: {e}")
+    import traceback
+    traceback.print_exc() # Print detailed traceback
+    print("-" * 60)
+
+finally:
+    # Important: Always close the trajectory file if it was opened
+    if trajectory is not None:
+        try:
+            trajectory.close()
+            print("Trajectory file closed.")
+        except Exception as e:
+            print(f"Error closing trajectory file: {e}")</code></pre><pre class="output">Simulation time step: 5.0 fs (5.000 ASE time units)
+1 Picosecond equals: 98.227 ASE time units
+Total simulation time: 10.0 ps (982.269 ASE time units)
+Number of steps: 2000
+------------------------------------------------------------
+Starting NVT simulation for 2000 steps...
+Target Temperature: 90.0 K
+Trajectory will be saved to: lj_argon_nvt.traj every 1000 steps.
+Status will be printed every 200 steps.
+------------------------------------------------------------
+Step:      0, Time:   0.00 ps, Epot/N: -0.0698 eV, Ekin/N: 0.0116 eV, Temp: 90.0 K
+Step:    200, Time:   1.00 ps, Epot/N: -0.0615 eV, Ekin/N: 0.0120 eV, Temp: 92.7 K
+Step:    400, Time:   2.00 ps, Epot/N: -0.0617 eV, Ekin/N: 0.0113 eV, Temp: 87.7 K
+Step:    600, Time:   3.00 ps, Epot/N: -0.0615 eV, Ekin/N: 0.0109 eV, Temp: 84.6 K
+Step:    800, Time:   4.00 ps, Epot/N: -0.0605 eV, Ekin/N: 0.0121 eV, Temp: 93.5 K
+Step:   1000, Time:   5.00 ps, Epot/N: -0.0606 eV, Ekin/N: 0.0112 eV, Temp: 86.6 K
+Step:   1200, Time:   6.00 ps, Epot/N: -0.0604 eV, Ekin/N: 0.0112 eV, Temp: 86.5 K
+Step:   1400, Time:   7.00 ps, Epot/N: -0.0606 eV, Ekin/N: 0.0124 eV, Temp: 95.6 K
+Step:   1600, Time:   8.00 ps, Epot/N: -0.0601 eV, Ekin/N: 0.0115 eV, Temp: 88.6 K
+Step:   1800, Time:   9.00 ps, Epot/N: -0.0599 eV, Ekin/N: 0.0117 eV, Temp: 90.7 K
+Step:   2000, Time:  10.00 ps, Epot/N: -0.0610 eV, Ekin/N: 0.0111 eV, Temp: 86.1 K
+------------------------------------------------------------
+NVT simulation finished successfully in 120.06 seconds.
+------------------------------------------------------------
+Trajectory file closed.</pre></details>
+</section>
+
+<section class="step">
+  <h3>Play along: the NVT run, live in 3D</h3>
+  <div id="lab-nvt"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">In the NVT log, the temperature wanders between about 84 K and 96 K instead of staying at exactly 90 K. What does this mean?</p>
+    <ol class="choices">
+      <li>The thermostat is broken; a correct Langevin thermostat holds the temperature fixed at every step.</li>
+      <li>This is expected: the thermostat fixes the <em>average</em> temperature, and the instantaneous kinetic temperature of a finite system fluctuates.</li>
+      <li>The time step is too large, so energy is not conserved.</li>
+    </ol>
+    <div class="explain">In the canonical (NVT) ensemble the kinetic energy fluctuates. For $N$ atoms the relative size of the temperature fluctuations is about $\sqrt{2/(3N)}$, which is 3.7% (≈ 3 K) for 500 atoms — just what the log shows. Compare 256 and 500 atoms in the phase explorer below: the smaller system fluctuates more.</div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Running at different temperatures</h3>
+  <p>To observe different phases (solid, liquid, gas), you would typically run similar simulations but change the <code>target_temperature_K</code> (and potentially the initial density/lattice constant).</p>
+  <div class="cards">
+    <div class="card"><h4>🧊 Solid</h4><p>Lower temperature (e.g., 20 K) and potentially slightly higher density.</p></div>
+    <div class="card"><h4>💨 Gas</h4><p>Higher temperature (e.g., 300 K) and lower density (larger <code>lattice_constant</code> or fewer atoms in the box).</p></div>
+  </div>
+  <p>You would then analyze properties like the RDF (see next section) to characterize the phase. The <a href="#lab-phase">phase explorer</a> in Lesson 4 lets you do exactly this, with temperature and density sliders.</p>
+
+  <details class="exercise">
+    <summary>Exercise 1 — Time step and friction</summary>
+    <p>In the NVT lab above, press <strong>Reset</strong>, then change one parameter at a time and run the full 10 ps:</p>
+    <ol>
+      <li>Increase the time step from 5 fs to 20, 40, 80 and finally 100 fs. When does the average temperature start to deviate from the 90 K target, and when does the simulation blow up?</li>
+      <li>Go back to 5 fs and change the friction from 0.01 fs⁻¹ to 0.001 fs⁻¹ and to 0.05 fs⁻¹. How does the size of the temperature fluctuations change, and how quickly does the temperature settle after you move the target slider?</li>
+    </ol>
+    <details class="reveal">
+      <summary>What you should see</summary>
+      <p><strong>Time step.</strong> Up to about 20 fs the run looks fine. At 40–80 fs the measured temperature settles a few kelvin <em>below</em> the target: the discretisation error now distorts the sampled distribution even though nothing explodes. Near 100 fs ($\Delta t^* \approx 0.05$) atoms move so far in one step that two of them land almost on top of each other, the $r^{-12}$ repulsion produces an enormous force, and the run blows up within a few dozen steps. The 5 fs used in this module is a cautious, safe choice.</p>
+      <p><strong>Friction.</strong> The temperature fluctuations are a property of the ensemble, so they stay roughly the same size; what changes is how fast the thermostat reacts and how strongly it perturbs the dynamics. With heavy friction (0.05 fs⁻¹) atoms are constantly kicked by the bath and diffuse more slowly; with light friction (0.001 fs⁻¹) the dynamics is close to Newtonian (NVE) between gentle corrections, and the temperature takes picoseconds rather than a few hundred femtoseconds to follow a new target. For static properties such as $g(r)$ the choice hardly matters; for dynamical properties (diffusion, viscosity) use a weak thermostat.</p>
+    </details>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Analyzing the LJ fluid"><span class="lesson-num">Lesson 4</span>Analyzing the LJ Fluid</h2>
+  <p>After the simulation, we analyze the results stored in the log files and trajectory.</p>
+
+  <h3>Thermodynamic properties</h3>
+  <p>Temperature, potential energy, kinetic energy, and total energy were printed during the run. We can also extract them from the saved trajectory or log files for plotting time series or calculating averages. Pressure can also be calculated (related to forces and kinetic energy via the virial theorem), especially important for NPT simulations.</p>
+
+  <h3>Structural properties</h3>
+  <ul>
+    <li><strong>Density:</strong> Calculated from the number of atoms, mass, and box volume. Should remain constant in NVT.</li>
+    <li><strong>Radial Distribution Function (RDF), $g(r)$:</strong> This is a crucial function describing the structure of fluids and solids. $g(r)$ measures the probability of finding another particle at a distance $r$ from a reference particle, relative to the probability expected for a uniform random distribution (ideal gas).</li>
+  </ul>
+  <div class="eq-card">
+    $$ g(r) = \frac{\langle n(r, r+\Delta r)\rangle}{\rho \, 4\pi r^2 \Delta r} $$
+    <p style="margin-top:0">where $\langle n(r, r+\Delta r)\rangle$ is the average number of neighbours in a thin shell around a reference atom and $\rho = N/V$. An ideal gas has $g(r) = 1$ everywhere.</p>
+  </div>
+  <div class="cards">
+    <div class="card"><h4>💨 Gases</h4><p>$g(r)$ quickly approaches 1 for $r > \sigma$, indicating little structure.</p></div>
+    <div class="card"><h4>💧 Liquids</h4><p>Show a strong peak around $r \approx \sigma$ (first solvation shell), followed by damped oscillations approaching 1, indicating short-range order.</p></div>
+    <div class="card"><h4>🧊 Solids</h4><p>Show sharp, distinct peaks corresponding to crystallographic neighbor distances, indicating long-range order.</p></div>
+  </div>
+
+  <h3>Calculating RDF using ASE</h3>
+  <p>ASE provides tools to calculate the RDF from an <code>Atoms</code> object or a trajectory.</p>
+</section>
+
+<section class="step">
+  <h3>Computing the radial distribution function</h3>
+  <p>Let's calculate the RDF for the <em>final</em> state of our simulation. For a proper analysis, one would typically average the RDF over several frames from the production phase of the trajectory.</p>
+  <details class="code-cell"><summary>Compute and plot g(r) of the final state with get_rdf</summary><pre><code class="language-python"># --- RDF Calculation ---
+# We need the final Atoms object from the simulation
+# The 'atoms' object should hold the final state after dyn.run()
+
+# Parameters for RDF calculation
+rmax = min(atoms.cell.lengths()) / 2.0 - 0.1 # Maximum distance (up to half the box size)
+nbins = 100 # Number of bins for the RDF histogram
+
+print(f"Calculating RDF up to rmax = {rmax:.2f} A with {nbins} bins...")
+
+try:
+    # get_rdf returns rdf values and corresponding bin centers (r)
+    rdf, r = get_rdf(atoms, rmax, nbins) # Use the final 'atoms' state
+
+    # Plot the RDF
+    plt.figure(figsize=(8, 5))
+    plt.plot(r, rdf)
+    plt.xlabel("Distance r (Å)")
+    plt.ylabel("Radial Distribution Function g(r)")
+    plt.title(f"RDF for LJ Argon at T = {target_temperature_K:.0f} K (Final State)")
+    plt.axhline(1.0, color='grey', linestyle='--', linewidth=1) # Reference line for ideal gas
+    plt.grid(True)
+    plt.show()
+
+    # Interpretation based on expected liquid state at 90K
+    print("Interpretation:")
+    print("- Expect a strong peak near sigma (~3.4 A) representing the first neighbor shell.")
+    print("- Expect subsequent peaks (oscillations) indicating short-range liquid order.")
+    print("- Expect g(r) to approach 1 at larger distances.")
+
+except Exception as e:
+    print(f"Error calculating RDF: {e}")
+    print("This might happen if the simulation state is unusual or ASE version differs.")</code></pre><pre class="output">Calculating RDF up to rmax = 14.15 A with 100 bins...</pre><p class="figcaption">The figure this code draws is reproduced live in the interactive panel below.</p><pre class="output">Interpretation:
+- Expect a strong peak near sigma (~3.4 A) representing the first neighbor shell.
+- Expect subsequent peaks (oscillations) indicating short-range liquid order.
+- Expect g(r) to approach 1 at larger distances.</pre></details>
+
+  <div id="lab-rdf"></div>
+
+  <div class="quiz" data-answer="1">
+    <p class="q">The RDF code sets <code>rmax = min(atoms.cell.lengths()) / 2.0 - 0.1</code>. Why stop $g(r)$ just short of half the box length?</p>
+    <ol class="choices">
+      <li>With periodic boundaries and the minimum image convention, separations beyond half the box are not uniquely defined — beyond $L/2$ a pair's nearest image distance can no longer be counted correctly.</li>
+      <li>Because $g(r)$ is always exactly 1 beyond half the box length.</li>
+      <li>To make the calculation faster; any larger value would give the same curve.</li>
+    </ol>
+    <div class="explain">The minimum image of a neighbour is never farther than $L/2$ along each axis, so shells with $r > L/2$ are only partly sampled and $g(r)$ would be biased low there. The same reasoning is why the cutoff $r_c$ must also be smaller than $L/2$.</div>
+  </div>
+</section>
+
+<section class="step">
+  <div class="callout warn">
+    <div class="callout-title">🔎 A closer look: liquid, or hot crystal?</div>
+    <p>The $g(r)$ above looks like a textbook liquid, and 90 K is in the liquid range of argon. But this state point ($T^* \approx 0.75$, $\rho^* \approx 0.85$) lies right on the freezing line, and the run <em>started from a perfect fcc crystal</em>. Ten picoseconds are not enough to melt it:</p>
+    <ul>
+      <li><strong>Energy.</strong> The rise of Epot/N from −0.0698 eV to about −0.061 eV in the first picosecond is mostly <em>equipartition</em>, not melting: the kinetic energy given to the atoms is shared with the potential energy of their vibrations (a harmonic crystal gains $\tfrac{3}{2}k_BT \approx 0.0116$ eV per atom). A genuinely molten sample at the same $T$ and $\rho$ sits higher, near −0.058 eV.</li>
+      <li><strong>Dynamics.</strong> The mean-squared displacement (MSD) in the NVT lab levels off near 1 Å²: atoms rattle in strongly distorted cages but do not diffuse. In the melted liquid the MSD keeps growing, about 0.2 Å² per ps with this thermostat.</li>
+      <li><strong>Structure.</strong> At 90 K the thermal vibrations are large enough to smear the crystal peaks into liquid-like ones. The first peaks of the two are almost identical (≈ 3 near 3.75 Å). What gives the crystal away is further out: a taller second peak (≈ 1.45 vs ≈ 1.3) and a sharper third peak at 10.6 Å — the large fcc shell at $a\sqrt{7/2}$ with 48 neighbours — where the liquid has only a weak, broad bump near 10.1 Å.</li>
+    </ul>
+    <p>The lesson is general: one $g(r)$ snapshot from a short run can mislead. Check that energies have reached a plateau, look at dynamics (MSD or diffusion), and, when a state is close to a phase boundary, prepare it from both sides (here: melt at high temperature first, then cool). The phase explorer below has a <strong>start from a melt</strong> option to do exactly that.</p>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Play along: solid, liquid or gas?</h3>
+  <div id="lab-phase"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">A simulation gives a $g(r)$ with a first peak of height ≈ 3 near 3.7 Å, a second, weaker peak near 7 Å, and oscillations that die out to 1 by about 12 Å. The highlighted atom slowly wanders away from its starting point. Which phase is it?</p>
+    <ol class="choices">
+      <li>A crystalline solid</li>
+      <li>A liquid</li>
+      <li>A dilute gas</li>
+    </ol>
+    <div class="explain">Strong but broad neighbour shells that decay to 1 signal short-range order without long-range order, and wandering atoms mean the system flows — a liquid. A solid has sharp peaks that persist across the whole box and atoms that only vibrate; a dilute gas has a single weak peak and $g(r) \approx 1$ beyond about $1.5\sigma$.</div>
+  </div>
+
+  <details class="exercise">
+    <summary>Exercise 2 — Map out solid, liquid and gas</summary>
+    <p>Use the phase explorer to reproduce the three cases suggested above: a solid (20 K, slightly higher density), the liquid from this module (90 K, 0.0216 Å⁻³) and a gas (300 K, low density). For each, wait until $g(r)$ has stopped changing and note (a) the height of the first peak, (b) whether there is structure beyond the second shell, and (c) how the mean-squared displacement (MSD) grows with time.</p>
+    <details class="reveal">
+      <summary>What you should find</summary>
+      <ul>
+        <li><strong>Solid (20 K, ≈ 0.0255 Å⁻³):</strong> very tall, narrow peaks at the fcc neighbour distances ($a/\sqrt2$, $a$, $a\sqrt{3/2}$, …) and $g(r) = 0$ between some of them; the MSD saturates at a small value (atoms only vibrate about their lattice sites).</li>
+        <li><strong>Liquid (90 K, 0.0216 Å⁻³, “start from a melt” ticked):</strong> first peak ≈ 3 near 3.7 Å, a broad second shell near 7 Å, decay to 1 with little left beyond; the MSD grows steadily (about 0.2 Å² per ps with this friction). Untick “start from a melt” at the same state and you get the hot crystal of the NVT lab instead: a similar first peak, but taller second and third peaks and an MSD stuck near 1 Å².</li>
+        <li><strong>Gas (300 K, ≈ 0.003 Å⁻³):</strong> a single low peak (≈ 1.3) just beyond σ and $g(r) \approx 1$ after that; the MSD grows fastest.</li>
+      </ul>
+    </details>
+  </details>
+
+  <details class="exercise">
+    <summary>Exercise 3 — Average the RDF over the trajectory</summary>
+    <p>The code above computes $g(r)$ from the final frame only. Write a short Python snippet that reads <code>lj_argon_nvt.traj</code>, computes <code>get_rdf</code> for every saved frame after the starting lattice, and averages them. Why does <code>traj_interval = 1000</code> make this average poor, and what would you change?</p>
+    <details class="reveal">
+      <summary>One possible solution</summary>
+<div class="code-static"><pre><code class="language-python">from ase.io import read
+from ase.geometry.analysis import get_rdf
+
+frames = read('lj_argon_nvt.traj', index=':')   # every saved frame
+production = frames[1:]                          # skip the initial fcc lattice
+
+rdfs = []
+for frame in production:
+    g, r = get_rdf(frame, rmax, nbins)
+    rdfs.append(g)
+rdf_avg = np.mean(rdfs, axis=0)
+
+plt.plot(r, rdf_avg, label=f"average of {len(rdfs)} frames")
+plt.axhline(1.0, color='grey', linestyle='--', linewidth=1)
+plt.xlabel("Distance r (Å)")
+plt.ylabel("g(r)")
+plt.legend()
+plt.show()</code></pre></div>
+      <p>With a frame saved only every 1000 steps, a 2000-step run leaves just a couple of production frames, so the average is barely better than a single snapshot. Save frames more often (e.g. <code>traj_interval = 50</code>) and discard the first couple of picoseconds while the lattice melts. The <strong>“time-average over the run”</strong> curve in the RDF lab does exactly this (one frame every 20 steps after 2 ps), and it is visibly smoother than the final-frame curve.</p>
+    </details>
+  </details>
+</section>
+
+<section class="step">
+  <h3>Visualizing the trajectory</h3>
+  <p>The trajectory was saved to <code>lj_argon_nvt.traj</code>. This file can be opened with external visualization software that understands ASE trajectories, such as:</p>
+  <div class="cards">
+    <div class="card"><h4>Ovito</h4><p><a href="https://www.ovito.org/" target="_blank" rel="noopener">ovito.org</a> — Powerful, free (for non-commercial use) scientific visualization and analysis software. Recommended.</p></div>
+    <div class="card"><h4>VMD</h4><p><a href="https://www.ks.uiuc.edu/Research/vmd/" target="_blank" rel="noopener">ks.uiuc.edu/Research/vmd</a> — Widely used molecular visualization program, particularly in biophysics. Free.</p></div>
+    <div class="card"><h4>ASE GUI</h4><p>ASE has its own simple GUI (<code>ase gui lj_argon_nvt.traj</code> from the terminal), but it's less feature-rich than Ovito or VMD.</p></div>
+  </div>
+  <p>Visualizing the trajectory helps understand the dynamics, check for equilibration, and observe phase behavior (e.g., melting, evaporation). The rotating 3D views on this page are a minimal version of what these programs do: watch the highlighted atom rattle in its cage in the NVT lab, a melted liquid flow in the phase explorer, or its gas spread through the box.</p>
+</section>
+
+<!-- ================================================================== -->
+<section class="step">
+  <hr>
+  <p>End of Module 8. We have taken a significant step from 1D models to 3D multi-particle simulations using the Atomic Simulation Environment (ASE):</p>
+  <ul>
+    <li>Introduced <strong>ASE</strong> as a powerful Python interface for atomistic simulations.</li>
+    <li>Learned to set up a <strong>Lennard-Jones fluid</strong> system (Argon) using <code>ase.build</code>, applying PBC, and setting the <code>LennardJones</code> calculator.</li>
+    <li>Initialized particle velocities using <code>MaxwellBoltzmannDistribution</code>.</li>
+    <li>Ran an <strong>NVT simulation</strong> using the <code>Langevin</code> dynamics module in ASE.</li>
+    <li>Discussed basic analysis, focusing on calculating and interpreting the <strong>Radial Distribution Function (RDF)</strong> using ASE tools.</li>
+    <li>Mentioned tools for <strong>visualizing</strong> the simulation trajectory.</li>
+  </ul>
+  <p>This module provides a practical starting point for using standard simulation tools to study more complex systems.</p>
+
+  <div class="takeaways">
+    <h2 data-toc="Key takeaways">📝 Key Takeaways</h2>
+    <ul>
+      <li><strong>ASE (Atomic Simulation Environment)</strong> is a powerful Python library that standardizes the setup, running, and analysis of multi-particle simulations.</li>
+      <li>Before starting molecular dynamics, <strong>Energy Minimization</strong> is required to relax high-force atomic clashes that would otherwise make the simulation unstable.</li>
+      <li>We simulated a 3D <strong>Lennard-Jones</strong> system at liquid-argon conditions (90 K), analyzing its physical properties — and saw that telling a liquid from a hot crystal needs dynamics (MSD) as well as structure.</li>
+      <li>The <strong>Radial Distribution Function (RDF, $g(r)$)</strong> measures local liquid structure, showing clear peaks corresponding to shells of neighboring atoms.</li>
+    </ul>
+  </div>
+
+  <h3>🎓 Congratulations! What to study next</h3>
+  <p>You have completed the entire course! You now have a solid first-principles foundation in Molecular Dynamics, thermodynamics, and enhanced sampling.</p>
+  <p><strong>Recommended next steps:</strong></p>
+  <ol>
+    <li><strong>Explore large-scale packages:</strong> Learn to set up and run GROMACS, OpenMM, or LAMMPS on multi-thousand atom biomolecules or materials.</li>
+    <li><strong>Deeper theory:</strong> Read Tuckerman's <em>Statistical Mechanics: Theory and Molecular Simulation</em> companion text.</li>
+    <li><strong>Contribute:</strong> Try modifying the code in these modules, adding new potentials, or building your own simulation projects!</li>
+  </ol>
+  <p>Want to keep going on this site? The supplements dig deeper into two topics from the enhanced-sampling modules, starting with <a href="s1-choosing-cvs.html">Supplement S1 — Choosing Good Collective Variables</a>.</p>
+</section>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script>
+(function () {
+  "use strict";
+  const P = MD.phys;
+
+  // ================================================================ units
+  // The engine works in reduced LJ units (σ = ε = m = k_B = 1); everything shown
+  // on the page is converted back to argon units (Å, eV, K, fs).
+  const U = (function () {
+    const sigma = 3.405, eps = 0.0103, kB = 8.617333262e-5, massAmu = 39.948;
+    const amuKg = 1.66053906660e-27, eVJ = 1.602176634e-19;
+    const tauFs = sigma * 1e-10 * Math.sqrt((massAmu * amuKg) / (eps * eVJ)) * 1e15; // ≈ 2159 fs
+    return {
+      sigma, eps, kB, tauFs,
+      epsK: eps / kB,                                          // ε/k_B ≈ 119.5 K
+      velMs: (sigma * 1e-10) / (tauFs * 1e-15),                // σ/τ in m/s
+      toTstar: (K) => K / (eps / kB),
+      toK: (Ts) => Ts * (eps / kB),
+      rhoStar: (rhoA3) => rhoA3 * sigma ** 3,
+    };
+  })();
+
+  // ================================================================ LJ engine
+  // Periodic cubic box, minimum image, plain O(N²) pair loop (fine for ≤ 500 atoms),
+  // truncated at rc and shifted so V(rc) = 0 (the same convention as ASE's LennardJones).
+  function fccPositions(nSide, a) {
+    const basis = [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]];
+    const N = 4 * nSide ** 3, pos = new Float64Array(3 * N);
+    let k = 0;
+    for (let i = 0; i < nSide; i++) for (let j = 0; j < nSide; j++) for (let l = 0; l < nSide; l++) {
+      for (const b of basis) { pos[k++] = (i + b[0]) * a; pos[k++] = (j + b[1]) * a; pos[k++] = (l + b[2]) * a; }
+    }
+    return pos;
+  }
+
+  function LJSystem(pos, L, rc) {
+    const N = pos.length / 3;
+    const s = {
+      N, L, rc, pos, vel: new Float64Array(3 * N), frc: new Float64Array(3 * N),
+      epot: 0, virial: 0, step: 0,
+    };
+    s.wrap = () => { const p = s.pos, L = s.L; for (let i = 0; i < p.length; i++) { p[i] -= L * Math.floor(p[i] / L); } };
+    s.forces = () => computeForces(s);
+    s.wrap();
+    s.forces();
+    return s;
+  }
+
+  function computeForces(s) {
+    const { N, L, pos, frc } = s, hL = 0.5 * L, rc2 = s.rc * s.rc;
+    const ir6c = 1 / (rc2 * rc2 * rc2), shift = 4 * (ir6c * ir6c - ir6c);
+    frc.fill(0);
+    let ep = 0, vir = 0;
+    for (let i = 0; i < N; i++) {
+      const xi = pos[3 * i], yi = pos[3 * i + 1], zi = pos[3 * i + 2];
+      let fxi = 0, fyi = 0, fzi = 0;
+      for (let j = i + 1; j < N; j++) {
+        let dx = xi - pos[3 * j]; if (dx > hL) dx -= L; else if (dx < -hL) dx += L;
+        let dy = yi - pos[3 * j + 1]; if (dy > hL) dy -= L; else if (dy < -hL) dy += L;
+        let dz = zi - pos[3 * j + 2]; if (dz > hL) dz -= L; else if (dz < -hL) dz += L;
+        const r2 = dx * dx + dy * dy + dz * dz;
+        if (r2 >= rc2) continue;
+        const ir2 = 1 / r2, ir6 = ir2 * ir2 * ir2;
+        ep += 4 * (ir6 * ir6 - ir6) - shift;
+        const w = 24 * (2 * ir6 * ir6 - ir6);   // r·F
+        vir += w;
+        const f = w * ir2;
+        fxi += f * dx; fyi += f * dy; fzi += f * dz;
+        frc[3 * j] -= f * dx; frc[3 * j + 1] -= f * dy; frc[3 * j + 2] -= f * dz;
+      }
+      frc[3 * i] += fxi; frc[3 * i + 1] += fyi; frc[3 * i + 2] += fzi;
+    }
+    s.epot = ep; s.virial = vir;
+    return ep;
+  }
+
+  const kinetic = (s) => { let k = 0; for (let i = 0; i < s.vel.length; i++) k += s.vel[i] * s.vel[i]; return 0.5 * k; };
+  const tempOf = (s) => (2 * kinetic(s)) / (3 * s.N);   // 3N degrees of freedom, as in the Python code
+  const maxForce = (s) => { let m = 0; for (let i = 0; i < s.N; i++) { const f = Math.hypot(s.frc[3 * i], s.frc[3 * i + 1], s.frc[3 * i + 2]); if (f > m) m = f; } return m; };
+
+  /** MaxwellBoltzmannDistribution + Stationary: Gaussian velocities at T*, zero total momentum. */
+  function maxwellBoltzmann(s, Ts, rng, stationary = true) {
+    const sd = Math.sqrt(Ts), v = s.vel, N = s.N;
+    for (let i = 0; i < v.length; i++) v[i] = rng.normal(0, sd);
+    if (stationary) for (let d = 0; d < 3; d++) {
+      let m = 0; for (let i = 0; i < N; i++) m += v[3 * i + d];
+      m /= N; for (let i = 0; i < N; i++) v[3 * i + d] -= m;
+    }
+  }
+
+  /** One BAOAB Langevin step (3D version of MD.phys.langevinBAOAB). Returns false if it blew up. */
+  function langevinStep(s, dt, gamma, Ts, rng) {
+    const { pos, vel, frc } = s, n = pos.length;
+    const c1 = Math.exp(-gamma * dt), c2 = Math.sqrt(Math.max(0, Ts) * (1 - c1 * c1));
+    for (let i = 0; i < n; i++) {
+      vel[i] += 0.5 * dt * frc[i];                       // B
+      pos[i] += 0.5 * dt * vel[i];                       // A
+      vel[i] = c1 * vel[i] + c2 * rng.normal();          // O
+      pos[i] += 0.5 * dt * vel[i];                       // A
+    }
+    s.wrap();
+    computeForces(s);
+    for (let i = 0; i < n; i++) vel[i] += 0.5 * dt * frc[i];   // B
+    s.step++;
+    return isFinite(s.epot) && Math.abs(s.epot) < 1e9;
+  }
+
+  /** FIRE minimiser state (Bitzek et al. 2006) with a per-step displacement cap. */
+  function fireInit(s) {
+    return { s, v: new Float64Array(s.pos.length), dt: 0.002, dtMax: 0.02, alpha: 0.1, nPos: 0, it: 0 };
+  }
+  function fireStep(st) {
+    const { s, v } = st, f = s.frc, n = v.length;
+    let P = 0, vv = 0, ff = 0;
+    for (let i = 0; i < n; i++) { P += f[i] * v[i]; vv += v[i] * v[i]; ff += f[i] * f[i]; }
+    const vn = Math.sqrt(vv), fn = Math.sqrt(ff) || 1;
+    if (P > 0) {
+      for (let i = 0; i < n; i++) v[i] = (1 - st.alpha) * v[i] + st.alpha * (f[i] / fn) * vn;
+      if (++st.nPos > 5) { st.dt = Math.min(st.dt * 1.1, st.dtMax); st.alpha *= 0.99; }
+    } else {
+      v.fill(0); st.nPos = 0; st.dt *= 0.5; st.alpha = 0.1;
+    }
+    const maxDisp = 0.1;   // σ — keeps the first steps out of a clash sane
+    for (let i = 0; i < n; i++) {
+      v[i] += st.dt * f[i];
+      let d = st.dt * v[i];
+      if (d > maxDisp) d = maxDisp; else if (d < -maxDisp) d = -maxDisp;
+      s.pos[i] += d;
+    }
+    s.wrap();
+    computeForces(s);
+    st.it++;
+  }
+
+  /** Pair-distance histogram for g(r), normalised like ase.geometry.analysis.get_rdf. */
+  function rdfAccumulator(nbins, rmax) {
+    const acc = { nbins, rmax, dr: rmax / nbins, counts: new Float64Array(nbins), frames: 0, Nrho: 0 };
+    acc.add = (s) => {
+      const { N, L, pos } = s, hL = 0.5 * L, r2max = rmax * rmax;
+      for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+        let dx = pos[3 * i] - pos[3 * j]; if (dx > hL) dx -= L; else if (dx < -hL) dx += L;
+        let dy = pos[3 * i + 1] - pos[3 * j + 1]; if (dy > hL) dy -= L; else if (dy < -hL) dy += L;
+        let dz = pos[3 * i + 2] - pos[3 * j + 2]; if (dz > hL) dz -= L; else if (dz < -hL) dz += L;
+        const r2 = dx * dx + dy * dy + dz * dz;
+        if (r2 < r2max) acc.counts[Math.floor(Math.sqrt(r2) / acc.dr)] += 2;
+      }
+      acc.frames++; acc.N = N; acc.rho = N / (L * L * L);
+    };
+    /** g(r) on `nb` bins (nb must divide nbins; the fine histogram is re-binned). */
+    acc.result = (nb = nbins) => {
+      const fac = Math.max(1, Math.round(nbins / nb)), n = Math.floor(nbins / fac), dr = acc.dr * fac, r = [], g = [];
+      for (let k = 0; k < n; k++) {
+        let c = 0; for (let q = 0; q < fac; q++) c += acc.counts[k * fac + q];
+        const r1 = k * dr, r2 = r1 + dr, shell = (4 / 3) * Math.PI * (r2 ** 3 - r1 ** 3);
+        r.push(r1 + 0.5 * dr);
+        g.push(acc.frames ? c / (acc.frames * acc.N * acc.rho * shell) : 0);
+      }
+      return { r, g, dr };
+    };
+    acc.reset = () => { acc.counts.fill(0); acc.frames = 0; };
+    return acc;
+  }
+
+  // ================================================================ page helpers
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const pad = (s, n) => String(s).padStart(n);
+  /** Python-style fixed formatting (round half to even, like f"{x:.2f}" on exact halves). */
+  const pyFixed = (x, d) => {
+    const f = 10 ** d, m = x * f;
+    let r = Math.round(m);
+    if (Math.abs(m - Math.trunc(m)) === 0.5) { r = Math.trunc(m); if (r % 2) r += Math.sign(m); }
+    return (r / f).toFixed(d);
+  };
+  const pyFloat = (x) => (Number.isInteger(+x.toFixed(6)) ? x.toFixed(1) : String(+x.toFixed(6)));
+  function rgbOf(c) {
+    const col = MD.color(c) || "#888888";
+    let m = /^#([0-9a-f]{3})$/i.exec(col);
+    if (m) return [0, 1, 2].map((i) => parseInt(m[1][i] + m[1][i], 16));
+    m = /^#([0-9a-f]{6})/i.exec(col);
+    if (m) { const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+    m = /rgba?\(([^)]+)\)/.exec(col);
+    if (m) return m[1].split(",").slice(0, 3).map((v) => parseFloat(v));
+    return [128, 128, 128];
+  }
+  const mixRgb = (a, b, t) => `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
+  /** Call fn when the element scrolls out of view (used to pause animations nobody is watching). */
+  function whenHidden(el, fn) {
+    if (!("IntersectionObserver" in window)) return;
+    new IntersectionObserver((es) => { if (!es[0].isIntersecting) fn(); }).observe(el);
+  }
+
+  // The module's system and run settings (from the Python code cells).
+  const NB = { nSide: 5, a: 5.7, rcSig: 3.0, T: 90, dtFs: 5, friction: 0.01, runPs: 10, logInterval: 200, seed: 111 };
+  const shared = { nvt: null, refreshRdf: null };
+
+  // ================================================================ 3D viewer
+  // Perspective projection of the periodic box, depth-sorted spheres with depth shading,
+  // drag to rotate (pointer events), optional slow auto-rotation.
+  function makeViewer(lab, id, redraw) {
+    const cv = lab.panel(id);
+    const v = { yaw: 0.6, pitch: 0.35, spin: 0.004 };
+    cv.style.touchAction = "pan-y";
+    let drag = null;
+    cv.addEventListener("pointerdown", (e) => {
+      drag = { x: e.clientX, y: e.clientY };
+      try { cv.setPointerCapture(e.pointerId); } catch (err) { /* not supported */ }
+      cv.style.cursor = "grabbing";
+    });
+    cv.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      v.yaw += (e.clientX - drag.x) * 0.01;
+      v.pitch = clamp(v.pitch + (e.clientY - drag.y) * 0.01, -1.45, 1.45);
+      drag = { x: e.clientX, y: e.clientY };
+      redraw();
+    });
+    const end = () => { drag = null; cv.style.cursor = ""; };
+    cv.addEventListener("pointerup", end);
+    cv.addEventListener("pointercancel", end);
+    v.tick = () => { if (!drag) v.yaw += v.spin; };
+    v.draw = (s, o) => drawAtoms(lab, id, v, s, o || {});
+    return v;
+  }
+
+  function drawAtoms(lab, id, view, s, o) {
+    const { ctx, w, h } = lab.canvas(id);
+    ctx.clearRect(0, 0, w, h);
+    const L = s.L, c = L / 2, R = 0.87 * L, D = 3.4 * L;
+    const cy = Math.cos(view.yaw), sy = Math.sin(view.yaw), cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+    const f = (0.46 * Math.min(w, h) * (D - R)) / R;
+    const out = [0, 0, 0, 0];
+    const pr = (x, y, z) => {
+      x -= c; y -= c; z -= c;
+      const x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
+      const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+      const k = f / (D - z2);
+      out[0] = w / 2 + x1 * k; out[1] = h / 2 - y2 * k; out[2] = z2; out[3] = k;
+      return out;
+    };
+    // box edges
+    const corners = [];
+    for (let i = 0; i < 8; i++) { const q = pr((i & 1) * L, ((i >> 1) & 1) * L, ((i >> 2) & 1) * L); corners.push([q[0], q[1]]); }
+    ctx.strokeStyle = MD.css("--axis"); ctx.lineWidth = 1; ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) for (const b of [1, 2, 4]) if (!(i & b)) {
+      ctx.moveTo(corners[i][0], corners[i][1]); ctx.lineTo(corners[i | b][0], corners[i | b][1]);
+    }
+    ctx.stroke();
+    // atoms, far to near
+    const N = s.N, X = new Float64Array(N), Y = new Float64Array(N), Z = new Float64Array(N), K = new Float64Array(N);
+    const order = new Array(N);
+    for (let i = 0; i < N; i++) {
+      pr(s.pos[3 * i], s.pos[3 * i + 1], s.pos[3 * i + 2]);
+      X[i] = out[0]; Y[i] = out[1]; Z[i] = out[2]; K[i] = out[3]; order[i] = i;
+    }
+    order.sort((a, b) => Z[a] - Z[b]);
+    const base = rgbOf("s1"), hot = rgbOf("s8"), baseStr = mixRgb(base, base, 0), tagStr = mixRgb(rgbOf("s2"), rgbOf("s2"), 0);
+    const rad = o.radius || 0.36;
+    for (const i of order) {
+      if (!isFinite(X[i]) || !isFinite(Y[i])) continue;
+      const t = clamp((Z[i] + R) / (2 * R), 0, 1);
+      const r = Math.max(1.2, rad * K[i]);
+      ctx.globalAlpha = 0.25 + 0.75 * t;
+      ctx.fillStyle = o.tag && i === 0 ? tagStr : o.heat ? mixRgb(base, hot, o.heat[i]) : baseStr;
+      ctx.beginPath(); ctx.arc(X[i], Y[i], r, 0, 2 * Math.PI); ctx.fill();
+      if (r > 2.5 && t > 0.45) {
+        ctx.fillStyle = "rgba(255,255,255,0.32)";
+        ctx.beginPath(); ctx.arc(X[i] - 0.3 * r, Y[i] - 0.3 * r, 0.38 * r, 0, 2 * Math.PI); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    // trail + ring for the highlighted atom (drawn on top so it can always be followed)
+    if (o.tag) {
+      const col = MD.color("s2");
+      if (o.trail && o.trail.length > 1) {
+        ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        o.trail.forEach((p, j) => { pr(p[0], p[1], p[2]); if (j) ctx.lineTo(out[0], out[1]); else ctx.moveTo(out[0], out[1]); });
+        ctx.stroke(); ctx.globalAlpha = 1;
+      }
+      if (isFinite(X[0])) {
+        ctx.strokeStyle = col; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(X[0], Y[0], Math.max(4, rad * K[0]) + 3, 0, 2 * Math.PI); ctx.stroke();
+      }
+    }
+    ctx.fillStyle = MD.css("--ink-3"); ctx.font = "12px system-ui, sans-serif";
+    if (o.label) ctx.fillText(o.label, 10, h - 10);
+    ctx.fillText("drag to rotate", w - 92, 18);
+  }
+
+  /** Follows unwrapped coordinates (for the trail and the mean-squared displacement). */
+  function makeTracker(s) {
+    const t = { unw: Float64Array.from(s.pos), last: Float64Array.from(s.pos), ref: Float64Array.from(s.pos), trail: [] };
+    t.update = () => {
+      const L = s.L, hL = L / 2;
+      for (let i = 0; i < s.pos.length; i++) {
+        let d = s.pos[i] - t.last[i];
+        if (d > hL) d -= L; else if (d < -hL) d += L;
+        t.unw[i] += d; t.last[i] = s.pos[i];
+      }
+      t.trail.push([t.unw[0], t.unw[1], t.unw[2]]);
+      if (t.trail.length > 400) t.trail.shift();
+    };
+    t.msd = () => { let m = 0; for (let i = 0; i < t.unw.length; i++) m += (t.unw[i] - t.ref[i]) ** 2; return m / s.N; };
+    t.resetRef = () => { t.ref.set(t.unw); t.trail = []; };
+    t.trailInBox = () => {
+      const ox = s.pos[0] - t.unw[0], oy = s.pos[1] - t.unw[1], oz = s.pos[2] - t.unw[2];
+      return t.trail.map((p) => [p[0] + ox, p[1] + oy, p[2] + oz]);
+    };
+    return t;
+  }
+
+  /** Simple g(r) analysis: first peak, first minimum after it, coordination number up to that minimum. */
+  function analyseRdf(r, g, rho, dr) {
+    let pk = 0;
+    for (let k = 1; k < g.length; k++) if (g[k] > g[pk]) pk = k;
+    let mn = pk;
+    for (let k = pk + 1; k < g.length; k++) {
+      if (g[k] < g[mn]) mn = k;
+      if (g[k] > 1 && r[k] > r[pk] + 0.35 && mn > pk) break;
+    }
+    let cn = 0;
+    for (let k = 0; k <= mn; k++) cn += 4 * Math.PI * rho * g[k] * r[k] * r[k] * dr;
+    return { rPeak: r[pk], gPeak: g[pk], rMin: r[mn], cn };
+  }
+
+  // ================================================================ Lab: build the box
+  (function () {
+    let sys = null, view;
+    function fccShells(a, rc) {
+      const n = Math.ceil(rc / a) + 1, basis = [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]], m = new Map();
+      for (let i = -n; i <= n; i++) for (let j = -n; j <= n; j++) for (let k = -n; k <= n; k++) for (const b of basis) {
+        const d = a * Math.hypot(i + b[0], j + b[1], k + b[2]);
+        if (d > 1e-9 && d < rc) { const key = d.toFixed(5); m.set(key, (m.get(key) || 0) + 1); }
+      }
+      return [...m.entries()].map(([d, c]) => ({ d: +d, c })).sort((x, y) => x.d - y.d);
+    }
+    function draw(lab) {
+      if (sys) view.draw(sys, { tag: false, label: `N = ${sys.N} · L = ${(sys.L * U.sigma).toFixed(2)} Å` });
+    }
+    MD.lab("#lab-build", {
+      title: "Build the fcc argon box",
+      intro: "<p>The same construction as the Python code above: a cubic fcc unit cell (4 atoms) of side <code>a</code>, repeated <code>N_side</code> times along each axis, with periodic boundaries. The defaults reproduce the printed output above and the <em>initial potential energy</em> printed by the calculator code below. On the right, the LJ potential of argon with the distances of the fcc neighbour shells marked on it (marker size ∝ number of neighbours in the shell).</p>",
+      controls: [
+        { type: "range", id: "n", label: "N_side (unit cells per side)", min: 2, max: 6, step: 1, value: NB.nSide },
+        { type: "range", id: "a", label: "lattice_constant a (Å)", min: 4.8, max: 8, step: 0.01, value: NB.a },
+      ],
+      cols: 2,
+      panels: [{ id: "cv", kind: "canvas", aspect: 1.15 }, { id: "pot", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+      init(lab) { view = makeViewer(lab, "cv", () => draw(lab)); },
+      run(p, lab) {
+        const a = p.a / U.sigma, L = p.n * a, rc = NB.rcSig;
+        sys = LJSystem(fccPositions(p.n, a), L, rc);
+        draw(lab);
+        const LA = L * U.sigma, V = LA ** 3, rho = sys.N / V, okBox = L / 2 > rc;
+        // potential + neighbour shells
+        const rs = P.linspace(3.0, 11.2, 300), Vlj = (rA) => P.lj(rA / U.sigma) * U.eps;
+        const shells = fccShells(a, rc);
+        lab.plot("pot", [
+          { x: rs, y: rs.map(Vlj), name: "V<sub>LJ</sub>(r), argon", color: "s1", hovertemplate: "r = %{x:.2f} Å<br>V = %{y:.5f} eV<extra></extra>" },
+          { x: shells.map((q) => q.d * U.sigma), y: shells.map((q) => Vlj(q.d * U.sigma)), mode: "markers", name: "fcc neighbour shells", color: "s2",
+            marker: { size: shells.map((q) => 5 + Math.sqrt(q.c) * 1.6), line: { width: 0 } },
+            customdata: shells.map((q, i) => [i + 1, q.c]), hovertemplate: "shell %{customdata[0]}: %{customdata[1]} neighbours<br>r = %{x:.2f} Å<extra></extra>" },
+        ], {
+          title: { text: "Pair potential and neighbour shells" },
+          xaxis: { title: { text: "r (Å)" }, range: [3, 11.2] }, yaxis: { title: { text: "V(r) (eV)" }, range: [-0.0125, 0.012] },
+          shapes: [
+            { type: "line", x0: rc * U.sigma, x1: rc * U.sigma, yref: "paper", y0: 0, y1: 1, line: { color: "ink-3", dash: "dash", width: 1.5 } },
+            { type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, line: { color: "axis", width: 1 } },
+          ],
+          annotations: [{ x: rc * U.sigma, y: 0.0105, text: "r<sub>c</sub> = 3σ", showarrow: false, xanchor: "right", xshift: -4 }],
+          legend: { y: 1.12 }, margin: { t: 64 },
+        });
+        lab.readouts("ro", [
+          { k: "PBC enabled", v: "True" },
+          { k: "Number of atoms", v: String(sys.N) },
+          { k: "Simulation box dimensions", v: `Cell([${pyFloat(LA)}, ${pyFloat(LA)}, ${pyFloat(LA)}])` },
+          { k: "Initial volume", v: `${pyFixed(V, 2)} Å³` },
+          { k: "Number density", v: `${rho.toFixed(4)} atoms/Å³` },
+          { k: "Reduced density ρσ³", v: (rho * U.sigma ** 3).toFixed(3) },
+          { k: "Nearest-neighbour distance a/√2", v: `${(p.a / Math.SQRT2).toFixed(2)} Å` },
+          { k: "Half box L/2 vs cutoff r<sub>c</sub> = 10.22 Å", v: `${(LA / 2).toFixed(2)} Å ${okBox ? "✓" : "✗ too small"}`, cls: okBox ? "good" : "bad" },
+          { k: "Initial Potential Energy", v: okBox ? `${(sys.epot * U.eps).toFixed(4)} eV` : "— (needs L/2 > r<sub>c</sub>)", cls: okBox ? "" : "bad" },
+        ]);
+      },
+      foot: "<p><strong>What to try.</strong> (1) At the defaults (5 cells, 5.7 Å) you get the 500 atoms, 28.5 Å box, 0.0216 atoms/Å³ and −34.9023 eV. (2) Lower <code>a</code> to ≈ 5.27 Å: the nearest neighbours slide into the bottom of the well (2<sup>1/6</sup>σ ≈ 3.82 Å) and the energy reaches its lowest value, ≈ −40.88 eV. That is the zero-temperature LJ crystal, close to the measured lattice constant of solid argon (≈ 5.26 Å). At 5.7 Å the lattice is stretched to a liquid-like density (nearest neighbours at 4.03 Å, beyond the well minimum). (3) Set <code>N_side = 2</code>: half the box is smaller than the cutoff, so an atom would interact with two images of the same neighbour and the minimum image convention breaks — a box must always be larger than 2 r<sub>c</sub>.</p>",
+    });
+  })();
+
+  // ================================================================ Lab: minimisation
+  (function () {
+    const FMAX = (0.01 * U.sigma) / U.eps;          // 0.01 eV/Å in reduced units
+    let sys, fire, hist, logLines, startE, built = "", view, done = false, seed = 3, frame = 0;
+    const key = (p) => `${p.start}|${p.jit}|${seed}`;
+    const clock = () => { const d = new Date(); return [d.getHours(), d.getMinutes(), d.getSeconds()].map((x) => String(x).padStart(2, "0")).join(":"); };
+    function randomPositions(N, L, dmin, rng) {
+      const pos = new Float64Array(3 * N), d2 = dmin * dmin, hL = L / 2;
+      let k = 0, tries = 0;
+      while (k < N && tries < 400000) {
+        tries++;
+        const x = rng() * L, y = rng() * L, z = rng() * L;
+        let ok = true;
+        for (let j = 0; j < k && ok; j++) {
+          let dx = x - pos[3 * j]; if (dx > hL) dx -= L; else if (dx < -hL) dx += L;
+          let dy = y - pos[3 * j + 1]; if (dy > hL) dy -= L; else if (dy < -hL) dy += L;
+          let dz = z - pos[3 * j + 2]; if (dz > hL) dz -= L; else if (dz < -hL) dz += L;
+          if (dx * dx + dy * dy + dz * dz < d2) ok = false;
+        }
+        if (ok) { pos[3 * k] = x; pos[3 * k + 1] = y; pos[3 * k + 2] = z; k++; }
+      }
+      return pos;
+    }
+    function minPair(s) {
+      const { N, L, pos } = s, hL = L / 2;
+      let m = Infinity;
+      for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+        let dx = pos[3 * i] - pos[3 * j]; if (dx > hL) dx -= L; else if (dx < -hL) dx += L;
+        let dy = pos[3 * i + 1] - pos[3 * j + 1]; if (dy > hL) dy -= L; else if (dy < -hL) dy += L;
+        let dz = pos[3 * i + 2] - pos[3 * j + 2]; if (dz > hL) dz -= L; else if (dz < -hL) dz += L;
+        const r2 = dx * dx + dy * dy + dz * dz; if (r2 < m) m = r2;
+      }
+      return Math.sqrt(m);
+    }
+    function build(p) {
+      const a = NB.a / U.sigma, L = NB.nSide * a, rng = P.rng(seed);
+      let pos = fccPositions(NB.nSide, a);
+      if (p.start === "jitter") for (let i = 0; i < pos.length; i++) pos[i] += rng.normal(0, p.jit / U.sigma);
+      if (p.start === "random") pos = randomPositions(pos.length / 3, L, 0.75, rng);
+      sys = LJSystem(pos, L, NB.rcSig);
+      fire = fireInit(sys); startE = sys.epot; done = false;
+      hist = { it: [], e: [], f: [] };
+      logLines = ["         Step     Time          Energy          fmax"];
+      record();
+      built = key(p);
+    }
+    function record() {
+      const fm = (maxForce(sys) * U.eps) / U.sigma, e = sys.epot * U.eps;
+      hist.it.push(fire.it); hist.e.push(e); hist.f.push(fm);
+      logLines.push(`FIRE:  ${pad(fire.it, 4)} ${clock()} ${pad(e.toFixed(6), 15)} ${pad(fm.toFixed(6), 13)}`);
+      if (fm <= 0.01) done = true;
+    }
+    function heat() {
+      const h = new Float64Array(sys.N);
+      for (let i = 0; i < sys.N; i++) {
+        const fm = Math.hypot(sys.frc[3 * i], sys.frc[3 * i + 1], sys.frc[3 * i + 2]);
+        h[i] = clamp(Math.log10(Math.max(fm, 1e-12) / FMAX) / 3, 0, 1);
+      }
+      return h;
+    }
+    function draw(lab) { view.draw(sys, { heat: heat(), label: `${sys.N} atoms · colour = |force| (blue ≤ fmax, red ≥ 1000 × fmax)` }); }
+    function report(lab) {
+      lab.plot("en", [{ x: hist.it.slice(), y: hist.e.slice(), name: "potential energy", color: "s1", mode: hist.it.length > 1 ? "lines" : "markers" }], {
+        title: { text: "Potential energy" }, xaxis: { title: { text: "optimizer step" }, rangemode: "tozero" }, yaxis: { title: { text: "E (eV)" } },
+      });
+      const fpos = hist.f.map((v) => Math.max(v, 1e-6));
+      lab.plot("fm", [
+        { x: hist.it.slice(), y: fpos, name: "max |F| on any atom", color: "s2", mode: hist.it.length > 1 ? "lines" : "markers" },
+        { x: [0, Math.max(10, hist.it[hist.it.length - 1])], y: [0.01, 0.01], name: "fmax = 0.01 eV/Å", color: "ink-3", line: { dash: "dash", width: 1.5 }, mode: "lines" },
+      ], {
+        title: { text: "Largest force" }, xaxis: { title: { text: "optimizer step" }, rangemode: "tozero" },
+        yaxis: { title: { text: "max |F| (eV/Å)" }, type: "log" }, legend: { y: 1.12 }, margin: { t: 64 },
+      });
+      const pre = lab.panel("log").querySelector("pre");
+      pre.textContent = logLines.join("\n"); pre.scrollTop = pre.scrollHeight;
+      const fm = hist.f[hist.f.length - 1];
+      lab.readouts("ro", [
+        { k: "Initial Potential Energy", v: `${(startE * U.eps).toFixed(4)} eV` },
+        { k: done ? "Minimized Potential Energy" : "Current potential energy", v: `${(sys.epot * U.eps).toFixed(4)} eV`, cls: done ? "good" : "" },
+        { k: "Optimizer steps", v: String(fire.it) },
+        { k: "max |F| (target ≤ 0.01 eV/Å)", v: `${fm.toFixed(4)} eV/Å`, cls: fm <= 0.01 ? "good" : "bad" },
+        { k: "Closest pair of atoms", v: `${(minPair(sys) * U.sigma).toFixed(2)} Å` },
+      ]);
+    }
+    MD.lab("#lab-minimize", {
+      title: "Energy minimisation of the 500-atom box",
+      intro: "<p>The same box (500 atoms, a = 5.7 Å, r<sub>c</sub> = 3σ) minimised to the same criterion, <code>fmax = 0.01</code> eV/Å. Choose <em>Perfect fcc lattice</em> to reproduce the BFGS result above exactly (zero steps, −34.9023 eV), or give the minimiser something to do: displace every atom randomly, or drop the atoms at random positions (no two closer than 0.75σ ≈ 2.6 Å — far inside the repulsive wall). This page uses the <strong>FIRE</strong> minimiser (also available in ASE as <code>ase.optimize.FIRE</code>) rather than BFGS; both stop at the same <code>fmax</code> test. The log mimics ASE's <code>minimization.log</code>.</p>",
+      controls: [
+        { type: "select", id: "start", label: "Starting structure", value: "jitter", options: [
+          { value: "fcc", label: "Perfect fcc lattice (as above)" },
+          { value: "jitter", label: "fcc + random displacements" },
+          { value: "random", label: "Random positions (clashes)" },
+        ] },
+        { type: "range", id: "jit", label: "Displacement size (Å, std. dev.)", min: 0.05, max: 0.8, step: 0.05, value: 0.3, hint: "Used by “fcc + random displacements”." },
+        { type: "range", id: "spf", label: "Optimizer steps per frame", min: 1, max: 10, step: 1, value: 2 },
+        { type: "buttons", items: [{ id: "go", label: "Minimize / pause" }, { id: "reset", label: "Reset", secondary: true }, { id: "seed", label: "New random start", secondary: true }] },
+      ],
+      cols: 2,
+      panels: [
+        { id: "cv", kind: "canvas", aspect: 1.15 }, { id: "en", kind: "plot" },
+        { id: "log", kind: "html", html: '<pre class="output live-log"></pre>' }, { id: "fm", kind: "plot" },
+        { id: "ro", kind: "readouts", span: true },
+      ],
+      init(lab) {
+        view = makeViewer(lab, "cv", () => draw(lab));
+        lab.anim = lab.loop(() => {
+          if (done) { report(lab); draw(lab); return false; }
+          for (let k = 0; k < lab.p.spf && !done; k++) { fireStep(fire); record(); }
+          view.tick(); draw(lab);
+          if (++frame % 3 === 0 || done) report(lab);
+          if (fire.it > 5000) done = true;
+        });
+        whenHidden(lab.root, () => lab.anim.stop());
+      },
+      run(p, lab) {
+        if (key(p) !== built) { lab.anim.stop(); build(p); report(lab); }
+        draw(lab);
+      },
+      onButton(id, p, lab) {
+        if (id === "go") { if (lab.anim.running) lab.anim.stop(); else if (!done) lab.anim.start(); }
+        if (id === "reset" || id === "seed") {
+          if (id === "seed") seed++;
+          lab.anim.stop(); build(p); report(lab); draw(lab);
+        }
+      },
+      foot: "<p><strong>What to try.</strong> (1) <em>Perfect fcc lattice</em>: the minimiser stops immediately with the energy unchanged, exactly like the BFGS run above. (2) <em>fcc + random displacements</em>: the energy drops back close to −34.9 eV in a few dozen steps and the red (high-force) atoms turn blue. Larger displacements end in a slightly different, higher-energy arrangement — a minimiser only finds the <em>nearest</em> local minimum. (3) <em>Random positions</em>: the start is more than 150 eV above the crystal because of clashes (the closest pair is ~2.6 Å apart, where the r<sup>−12</sup> wall is steep). Minimisation removes the clashes, but the result is a disordered (glassy) local minimum, not the crystal. Starting MD from the unminimised clash would give some atoms huge accelerations in the first step — the instability that minimisation prevents.</p>",
+    });
+  })();
+
+  // ================================================================ Lab: Maxwell–Boltzmann velocities
+  (function () {
+    let seed = NB.seed;
+    MD.lab("#lab-mb", {
+      title: "MaxwellBoltzmannDistribution + Stationary",
+      intro: "<p>Each velocity component of each of the 500 atoms is drawn from a Gaussian with variance $k_BT/m$; <code>Stationary</code> then subtracts the centre-of-mass velocity. The histogram shows the resulting atomic speeds against the Maxwell–Boltzmann speed distribution $f(v) = 4\\pi \\left(\\frac{m}{2\\pi k_BT}\\right)^{3/2} v^2 e^{-mv^2/2k_BT}$. The readouts repeat the three lines printed by the Python code.</p>",
+      controls: [
+        { type: "range", id: "T", label: "target_temperature_K (K)", min: 10, max: 300, step: 5, value: NB.T },
+        { type: "check", id: "stat", label: "Apply Stationary(atoms)", value: true },
+        { type: "buttons", items: [{ id: "new", label: "New random velocities" }] },
+      ],
+      panels: [{ id: "plot", kind: "plot" }, { id: "ro", kind: "readouts" }],
+      run(p, lab) {
+        const N = 500, s = { N, vel: new Float64Array(3 * N) }, Ts = U.toTstar(p.T);
+        maxwellBoltzmann(s, Ts, P.rng(seed), p.stat);
+        const KE = kinetic(s), Tk = U.toK(tempOf(s));
+        let vc = 0;
+        for (let d = 0; d < 3; d++) { let m = 0; for (let i = 0; i < N; i++) m += s.vel[3 * i + d]; vc += (m / N) ** 2; }
+        const speeds = []; for (let i = 0; i < N; i++) speeds.push(Math.hypot(s.vel[3 * i], s.vel[3 * i + 1], s.vel[3 * i + 2]) * U.velMs);
+        const vmax = 4.2 * Math.sqrt(Ts) * U.velMs, hst = P.histogram(speeds, 30, [0, vmax]);
+        const vs = P.linspace(0, vmax, 200);
+        const mb = (v) => { const x = v / U.velMs; return (Math.sqrt(2 / Math.PI) * x * x * Math.exp(-x * x / (2 * Ts))) / Ts ** 1.5 / U.velMs; };
+        lab.plot("plot", [
+          { type: "bar", x: hst.centers, y: hst.density, name: "500 sampled atoms", color: "s1", opacity: 0.7, width: hst.width * 0.95, hovertemplate: "%{x:.0f} m/s<br>%{y:.2e}<extra></extra>" },
+          { x: vs, y: vs.map(mb), name: "Maxwell–Boltzmann f(v)", color: "s2" },
+        ], {
+          title: { text: `Speed distribution at ${p.T} K` }, xaxis: { title: { text: "speed |v| (m/s)" } }, yaxis: { title: { text: "probability density (s/m)" } },
+          bargap: 0, legend: { y: 1.12 }, margin: { t: 64 },
+        });
+        lab.readouts("ro", [
+          { k: "Initial Target Temperature", v: `${p.T.toFixed(1)} K (${(p.T * U.kB).toFixed(4)} eV)` },
+          { k: "Initial Kinetic Energy", v: `${(KE * U.eps).toFixed(4)} eV` },
+          { k: "Initial Temperature (from KE)", v: `${Tk.toFixed(1)} K` },
+          { k: "Expected ⟨KE⟩ = 3/2 N k<sub>B</sub>T", v: `${(1.5 * N * U.kB * p.T).toFixed(4)} eV` },
+          { k: "Centre-of-mass speed", v: `${(Math.sqrt(vc) * U.velMs).toFixed(2)} m/s`, cls: p.stat ? "good" : "" },
+          { k: "Random seed", v: String(seed) },
+        ]);
+      },
+      onButton(id, p, lab) { if (id === "new") { seed++; lab.rerun(); } },
+      foot: "<p><strong>What to try.</strong> Click <em>New random velocities</em> a few times: with only 500 atoms the temperature computed from the kinetic energy scatters by a few kelvin around the target (the Python output above shows one such draw, 90.0 K and 5.8141 eV; the default seed here gives 5.8164 eV). Untick <em>Stationary</em> to see the small random drift of the whole box that <code>Stationary</code> removes. Raise the temperature: the distribution broadens and its peak moves to $\\sqrt{2k_BT/m}$.</p>",
+    });
+  })();
+
+  // ================================================================ Lab: the NVT run
+  (function () {
+    let sim = null, view, frame = 0;
+    function reset(p) {
+      const a = NB.a / U.sigma;
+      const sys = LJSystem(fccPositions(NB.nSide, a), NB.nSide * a, NB.rcSig);
+      const rng = P.rng(NB.seed);
+      maxwellBoltzmann(sys, U.toTstar(p.T), rng, true);
+      sim = {
+        sys, rng, tracker: makeTracker(sys), hist: { t: [], ep: [], T: [] }, Tprod: [],
+        log: ["Press “Run / pause” to start the NVT run."], acc: rdfAccumulator(200, sys.L / 2 - 0.1 / U.sigma),
+        wallMs: 0, status: "ready", timeFs: 0, T0: p.T,
+      };
+      record();
+      shared.nvt = sim;
+      if (shared.refreshRdf) shared.refreshRdf();
+    }
+    const tempK = () => U.toK(tempOf(sim.sys));
+    function record() {
+      sim.hist.t.push(sim.timeFs / 1000); sim.hist.ep.push((sim.sys.epot * U.eps) / sim.sys.N); sim.hist.T.push(tempK());
+    }
+    function statusLine() {
+      const s = sim.sys, ep = (s.epot * U.eps) / s.N, ek = (kinetic(s) * U.eps) / s.N;
+      return `Step: ${pad(s.step, 6)}, Time: ${pad((sim.timeFs / 1000).toFixed(2), 6)} ps, Epot/N: ${ep.toFixed(4)} eV, Ekin/N: ${ek.toFixed(4)} eV, Temp: ${tempK().toFixed(1)} K`;
+    }
+    function start(p) {
+      const n = Math.round((NB.runPs * 1000) / p.dt), line = "-".repeat(60);
+      sim.log = [
+        `Simulation time step: ${p.dt.toFixed(1)} fs`,
+        `Total simulation time: ${NB.runPs.toFixed(1)} ps`,
+        `Number of steps: ${n}`, line,
+        `Starting NVT simulation for ${n} steps...`,
+        `Target Temperature: ${p.T.toFixed(1)} K`,
+        `Status will be printed every ${NB.logInterval} steps.`, line,
+        statusLine(),
+      ];
+      sim.status = "running";
+    }
+    function advance(p) {
+      const s = sim.sys, dt = p.dt / U.tauFs, gam = p.fr * U.tauFs, Ts = U.toTstar(p.T);
+      sim.Ttarget = p.T;
+      const t0 = performance.now();
+      for (let k = 0; k < p.spf; k++) {
+        const ok = langevinStep(s, dt, gam, Ts, sim.rng);
+        sim.timeFs += p.dt;
+        const T = tempK();
+        if (!ok || !isFinite(T) || T > 1e4) {
+          sim.wallMs += performance.now() - t0;
+          sim.status = "blown";
+          sim.log.push("-".repeat(60), `Error during simulation run after ${(sim.wallMs / 1000).toFixed(2)} seconds: step ${s.step}: atoms overlapped and the energy diverged (time step too large?)`, "-".repeat(60));
+          return;
+        }
+        if (s.step % 10 === 0) record();
+        if (s.step % NB.logInterval === 0) sim.log.push(statusLine());
+        if (sim.timeFs > 2000 + 1e-9) { sim.Tprod.push(T); if (s.step % 20 === 0) sim.acc.add(s); }
+        if (sim.timeFs >= NB.runPs * 1000 - 1e-9) {
+          sim.wallMs += performance.now() - t0;
+          if (s.step % NB.logInterval !== 0) sim.log.push(statusLine());
+          sim.status = "finished";
+          sim.log.push("-".repeat(60), `NVT simulation finished successfully in ${(sim.wallMs / 1000).toFixed(2)} seconds.`, "-".repeat(60));
+          return;
+        }
+      }
+      sim.wallMs += performance.now() - t0;
+    }
+    function speedHeat(p) {
+      const s = sim.sys, h = new Float64Array(s.N), vref = 2.6 * Math.sqrt(U.toTstar(p.T));
+      for (let i = 0; i < s.N; i++) h[i] = clamp(Math.hypot(s.vel[3 * i], s.vel[3 * i + 1], s.vel[3 * i + 2]) / vref, 0, 1);
+      return h;
+    }
+    function draw(lab) {
+      const p = lab.p;
+      view.draw(sim.sys, {
+        heat: p.color === "speed" ? speedHeat(p) : null, tag: true,
+        trail: p.trail ? sim.tracker.trailInBox() : null,
+        label: `500 Ar atoms · L = 28.5 Å · t = ${(sim.timeFs / 1000).toFixed(2)} ps`,
+      });
+    }
+    function report(lab) {
+      const p = lab.p, h = sim.hist, s = sim.sys;
+      lab.plot("ep", [{ x: h.t.slice(), y: h.ep.slice(), name: "Epot/N", color: "s1" }], {
+        title: { text: "Potential energy per atom" }, xaxis: { title: { text: "Time (ps)" }, range: [0, Math.max(NB.runPs, h.t[h.t.length - 1] || 0)] },
+        yaxis: { title: { text: "Epot/N (eV)" } },
+      });
+      lab.plot("tp", [{ x: h.t.slice(), y: h.T.slice(), name: "Temperature", color: "s2" }], {
+        title: { text: "Temperature" }, xaxis: { title: { text: "Time (ps)" }, range: [0, Math.max(NB.runPs, h.t[h.t.length - 1] || 0)] },
+        yaxis: { title: { text: "Temp (K)" } },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: p.T, y1: p.T, line: { color: "ink-3", dash: "dash", width: 1.5 } }],
+        annotations: [{ xref: "paper", x: 1, y: p.T, text: `target ${p.T} K`, showarrow: false, xanchor: "right", yanchor: "bottom" }],
+      });
+      const pre = lab.panel("log").querySelector("pre");
+      pre.textContent = sim.log.join("\n"); pre.scrollTop = pre.scrollHeight;
+      const st = { ready: "ready", running: "running…", finished: "finished", blown: "blew up" }[sim.status];
+      lab.readouts("ro", [
+        { k: "Step · time", v: `${s.step} · ${(sim.timeFs / 1000).toFixed(2)} ps` },
+        { k: "Epot/N", v: `${((s.epot * U.eps) / s.N).toFixed(4)} eV` },
+        { k: "Ekin/N", v: `${((kinetic(s) * U.eps) / s.N).toFixed(4)} eV` },
+        { k: "Temp (instantaneous)", v: `${tempK().toFixed(1)} K` },
+        { k: "⟨T⟩ after 2 ps", v: sim.Tprod.length ? `${P.mean(sim.Tprod).toFixed(1)} ± ${P.std(sim.Tprod).toFixed(1)} K` : "—" },
+        { k: "MSD since 2 ps (all atoms)", v: sim.msdSet ? `${(sim.tracker.msd() * U.sigma ** 2).toFixed(2)} Å²` : "—" },
+        { k: "Compute time per MD step (your browser)", v: s.step ? `${(sim.wallMs / s.step).toFixed(2)} ms` : "—" },
+        { k: "Status", v: st, cls: sim.status === "finished" ? "good" : sim.status === "blown" ? "bad" : "" },
+      ]);
+    }
+    MD.lab("#lab-nvt", {
+      title: "Langevin NVT run of 500 argon atoms",
+      intro: "<p>The run from the Python code above, step for step: 500 atoms from the fcc lattice (a = 5.7 Å), Maxwell–Boltzmann velocities at 90 K, Langevin dynamics with a 5 fs time step and friction 0.01 fs⁻¹, 2000 steps = 10 ps, status printed every 200 steps. <strong>No reductions</strong> — the browser engine runs the full system. The only difference is the Langevin integrator: this page uses the BAOAB splitting of Module 4 in 3D, ASE uses a different (equally valid) discretisation, so the individual numbers differ by the noise, not on average. The highlighted orange atom (with its trail) lets you see whether atoms vibrate in place or wander.</p>",
+      controls: [
+        { type: "range", id: "T", label: "target_temperature_K (K)", min: 10, max: 300, step: 5, value: NB.T, hint: "Changes the thermostat target immediately; Reset also re-draws the initial velocities at this temperature." },
+        { type: "select", id: "dt", label: "time_step_fs (fs)", value: NB.dtFs, options: [1, 2, 5, 10, 20, 40, 60, 80, 100] },
+        { type: "select", id: "fr", label: "friction (fs⁻¹)", value: NB.friction, options: [0.001, 0.002, 0.005, 0.01, 0.02, 0.05] },
+        { type: "range", id: "spf", label: "MD steps per animation frame", min: 1, max: 20, step: 1, value: 8 },
+        { type: "select", id: "color", label: "Colour atoms by", value: "uniform", options: [{ value: "uniform", label: "nothing (uniform)" }, { value: "speed", label: "speed (slow → fast)" }] },
+        { type: "check", id: "trail", label: "Trail for the highlighted atom", value: true },
+        { type: "check", id: "spin", label: "Auto-rotate", value: true },
+        { type: "buttons", items: [{ id: "play", label: "Run / pause" }, { id: "reset", label: "Reset", secondary: true }] },
+      ],
+      cols: 2,
+      panels: [
+        { id: "cv", kind: "canvas", aspect: 1.1 }, { id: "log", kind: "html", html: '<pre class="output live-log"></pre>' },
+        { id: "ep", kind: "plot" }, { id: "tp", kind: "plot" }, { id: "ro", kind: "readouts", span: true },
+      ],
+      init(lab) {
+        view = makeViewer(lab, "cv", () => draw(lab));
+        reset(lab.p);
+        lab.anim = lab.loop(() => {
+          if (sim.status === "running") advance(lab.p);
+          sim.tracker.update();
+          if (!sim.msdSet && sim.timeFs >= 2000) { sim.tracker.ref.set(sim.tracker.unw); sim.msdSet = true; }
+          if (lab.p.spin) view.tick();
+          draw(lab);
+          const over = sim.status !== "running";
+          if (++frame % 4 === 0 || over) report(lab);
+          if ((frame % 6 === 0 || over) && shared.refreshRdf) shared.refreshRdf();
+          if (over) return false;
+        });
+      },
+      run(p, lab) { draw(lab); report(lab); },
+      onButton(id, p, lab) {
+        if (id === "play") {
+          if (lab.anim.running) { lab.anim.stop(); return; }
+          if (sim.status === "finished" || sim.status === "blown") reset(p);
+          if (sim.status === "ready") start(p);
+          lab.anim.start();
+        }
+        if (id === "reset") { lab.anim.stop(); reset(p); draw(lab); report(lab); }
+      },
+      foot: "<p><strong>What to try.</strong> (1) Press <em>Run</em> and watch the first picosecond: Epot/N jumps from −0.0698 eV (the perfect lattice) to about −0.061 eV — the same jump as in the printed log above — as the atoms' kinetic energy is shared with the potential energy of their vibrations; then it fluctuates around a plateau while the temperature fluctuates around 90 K. (2) Compare the live log with the printed one above: same format, same plateau values (Epot/N ≈ −0.061 eV, Ekin/N ≈ 0.0116 eV), different random noise. (3) Switch the colouring to <em>speed</em>: fast and slow atoms are mixed everywhere, as in a Maxwell–Boltzmann distribution. (4) Watch the highlighted atom and the MSD readout: at 90 K the atom only rattles in its cage (MSD ≈ 1 Å²), so this run is a hot, distorted crystal (see “A closer look” in Lesson 4). Now drag the target to 150 K mid-run: the crystal melts, Epot/N climbs and the MSD starts to grow. (5) Try the time steps and frictions of Exercise 1 below.</p>",
+    });
+  })();
+
+  // ================================================================ Lab: RDF of the NVT run
+  (function () {
+    let fallback = null;
+    MD.lab("#lab-rdf", {
+      title: "get_rdf: final state vs time average",
+      intro: "<p>$g(r)$ of the NVT lab's 500 atoms with the settings used above (<code>rmax = L/2 − 0.1 Å</code>, 100 bins), updated while that simulation runs. <strong>Final frame</strong> is what the Python code plots: one snapshot, so it is noisy. <strong>Time-average</strong> adds one frame every 20 steps after the first 2 ps (once the energy has reached its plateau) — the “proper analysis” recommended above. If you have not run the NVT lab yet, you see the perfect starting lattice: isolated spikes at the fcc neighbour distances.</p>",
+      controls: [
+        { type: "select", id: "nb", label: "nbins", value: 100, options: [25, 50, 100, 200] },
+        { type: "check", id: "fin", label: "Show the final (current) frame", value: true },
+        { type: "check", id: "avg", label: "Show the time-average over the run", value: true },
+        { type: "buttons", items: [{ id: "refresh", label: "Refresh from the NVT lab" }] },
+      ],
+      panels: [{ id: "gr", kind: "plot", cls: "tall" }, { id: "ro", kind: "readouts" }],
+      init(lab) { shared.refreshRdf = () => lab.rerun(); },
+      run(p, lab) {
+        let sim = shared.nvt, s;
+        if (sim) s = sim.sys;
+        else {
+          if (!fallback) { const a = NB.a / U.sigma; fallback = LJSystem(fccPositions(NB.nSide, a), NB.nSide * a, NB.rcSig); }
+          s = fallback;
+        }
+        const rmax = s.L / 2 - 0.1 / U.sigma, one = rdfAccumulator(200, rmax);
+        one.add(s);
+        const fin = one.result(p.nb);
+        const avg = sim && sim.acc.frames ? sim.acc.result(p.nb) : null;
+        const toA = (r) => r.map((x) => x * U.sigma);
+        const traces = [];
+        if (p.fin) traces.push({ x: toA(fin.r), y: fin.g, name: "final frame", color: "s1" });
+        if (p.avg && avg) traces.push({ x: toA(avg.r), y: avg.g, name: `time-average (${sim.acc.frames} frames)`, color: "s2" });
+        const Tlab = sim ? sim.Ttarget || sim.T0 : NB.T;
+        lab.plot("gr", traces, {
+          title: { text: `RDF for LJ Argon at T = ${Tlab.toFixed(0)} K (${avg && p.avg ? "final state + time average" : "Final State"})` },
+          xaxis: { title: { text: "Distance r (Å)" }, range: [0, rmax * U.sigma + 0.5] },
+          yaxis: { title: { text: "Radial Distribution Function g(r)" }, rangemode: "tozero" },
+          shapes: [
+            { type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: "ink-3", dash: "dash", width: 1 } },
+            { type: "line", x0: U.sigma, x1: U.sigma, yref: "paper", y0: 0, y1: 1, line: { color: "axis", dash: "dot", width: 1 } },
+          ],
+          annotations: [{ x: U.sigma, yref: "paper", y: 1, text: "σ", showarrow: false, xanchor: "left", yanchor: "top", xshift: 3 }],
+          showlegend: traces.length > 1, legend: { y: 1.1 }, margin: { t: 64 },
+        });
+        const use = avg && p.avg ? avg : fin, dr = rmax / p.nb;
+        const an = analyseRdf(use.r, use.g, s.N / s.L ** 3, dr);
+        const src = !sim ? "initial fcc lattice (NVT lab not started)"
+          : sim.sys.step === 0 ? "NVT lab, step 0 (perfect lattice)"
+          : `NVT lab, step ${sim.sys.step} (${(sim.timeFs / 1000).toFixed(2)} ps)`;
+        lab.readouts("ro", [
+          { k: "print(...)", v: `Calculating RDF up to rmax = ${(rmax * U.sigma).toFixed(2)} A with ${p.nb} bins...` },
+          { k: "Configuration", v: src },
+          { k: `First peak (${avg && p.avg ? "average" : "final frame"})`, v: `r = ${(an.rPeak * U.sigma).toFixed(2)} Å, g = ${an.gPeak.toFixed(2)}` },
+          { k: "First minimum after the peak", v: `r = ${(an.rMin * U.sigma).toFixed(2)} Å` },
+          { k: "Coordination number (neighbours up to the first minimum)", v: an.cn.toFixed(1) },
+        ]);
+      },
+      onButton(id, p, lab) { if (id === "refresh") lab.rerun(); },
+      foot: "<p><strong>What to try.</strong> Run the NVT lab and watch this plot: the lattice spikes are smeared into broad peaks within the first picosecond by thermal vibration. At the end of the 10 ps run the final frame shows a liquid-like RDF — first peak ≈ 3 near 3.75 Å, second shell near 7 Å, a third near 10.6 Å, $g(r) \\to 1$ beyond — and the time-average shows the same shape with much less noise. The coordination number (≈ 12–13) matches the 12 nearest neighbours of fcc; in a dense liquid it is also ≈ 12, which is why local packing alone cannot tell a liquid from a hot crystal (see the next step). Change <em>nbins</em>: more bins give finer resolution but more noise per bin.</p>",
+    });
+  })();
+
+  // ================================================================ Lab: phase explorer
+  (function () {
+    const DT_FS = 10, BURN = 300, EVERY = 10, SEED = 5, MELT_STEPS = 500, MELT_K = 300;
+    let sys, rng, acc, tracker, built = {}, since = 0, Tlog = [], view, frame = 0, inst = null, meltLeft = 0;
+    function build(p) {
+      const nSide = p.N === 500 ? 5 : 4, a = Math.cbrt(4 / U.rhoStar(p.rho));
+      sys = LJSystem(fccPositions(nSide, a), nSide * a, NB.rcSig);
+      rng = P.rng(SEED);
+      meltLeft = p.melt ? MELT_STEPS : 0;
+      maxwellBoltzmann(sys, U.toTstar(meltLeft ? MELT_K : p.T), rng, true);
+      tracker = makeTracker(sys);
+      acc = rdfAccumulator(100, sys.L / 2 - 0.1 / U.sigma);
+      since = 0; Tlog = []; inst = null;
+    }
+    function restartStats() { acc.reset(); since = 0; Tlog = []; tracker.resetRef(); }
+    function advance(p) {
+      const dt = DT_FS / U.tauFs, gam = NB.friction * U.tauFs;
+      for (let k = 0; k < p.spf; k++) {
+        const Ts = U.toTstar(meltLeft ? MELT_K : p.T);
+        if (!langevinStep(sys, dt, gam, Ts, rng)) { build(p); return; }
+        if (meltLeft) { if (--meltLeft === 0) { tracker.update(); restartStats(); } continue; }
+        since++;
+        if (since > BURN) { Tlog.push(U.toK(tempOf(sys))); if (Tlog.length > 20000) Tlog.shift(); if (since % EVERY === 0) acc.add(sys); }
+      }
+      tracker.update();
+    }
+    function draw(lab) {
+      const p = lab.p;
+      view.draw(sys, { tag: true, trail: tracker.trailInBox(), radius: 0.36, label: `${sys.N} atoms · L = ${(sys.L * U.sigma).toFixed(1)} Å · ${meltLeft ? `melting at ${MELT_K} K` : `${p.T} K`}` });
+    }
+    function report(lab) {
+      const p = lab.p, rmax = acc.rmax;
+      if (frame % 2 === 0 || !inst) { const one = rdfAccumulator(100, rmax); one.add(sys); inst = one.result(); }
+      const traces = [{ x: inst.r.map((x) => x * U.sigma), y: inst.g, name: "current frame", color: "s3", line: { width: 1 }, opacity: 0.6 }];
+      let an = null;
+      if (acc.frames) {
+        const avg = acc.result();
+        traces.push({ x: avg.r.map((x) => x * U.sigma), y: avg.g, name: `time-average (${acc.frames} frames)`, color: "s1" });
+        an = analyseRdf(avg.r, avg.g, sys.N / sys.L ** 3, acc.dr);
+      }
+      lab.plot("gr", traces, {
+        title: { text: `g(r) at ${p.T} K, ρ = ${p.rho.toFixed(4)} Å⁻³` },
+        xaxis: { title: { text: "Distance r (Å)" }, range: [0, rmax * U.sigma] },
+        yaxis: { title: { text: "g(r)" }, rangemode: "tozero" },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: "ink-3", dash: "dash", width: 1 } }],
+        legend: { y: 1.12 }, margin: { t: 64 },
+      });
+      const tps = (since * DT_FS) / 1000;
+      lab.readouts("ro", [
+        { k: "Reduced state", v: `T* = ${U.toTstar(p.T).toFixed(2)}, ρ* = ${U.rhoStar(p.rho).toFixed(2)}` },
+        { k: "Starting fcc lattice constant", v: `${(Math.cbrt(4 / p.rho)).toFixed(2)} Å` },
+        { k: "⟨T⟩ ± fluctuation (after burn-in)", v: Tlog.length ? `${P.mean(Tlog).toFixed(1)} ± ${P.std(Tlog).toFixed(1)} K` : "—" },
+        { k: "Epot/N", v: `${((sys.epot * U.eps) / sys.N).toFixed(4)} eV` },
+        { k: "MSD since last change", v: `${(tracker.msd() * U.sigma ** 2).toFixed(2)} Å² in ${tps.toFixed(1)} ps` },
+        { k: "g(r) average", v: meltLeft ? `melting at ${MELT_K} K… ${MELT_STEPS - meltLeft}/${MELT_STEPS} steps` : acc.frames ? `${acc.frames} frames` : `equilibrating… ${Math.min(since, BURN)}/${BURN} steps`, cls: acc.frames ? "good" : "" },
+        { k: "First peak · coordination number", v: an ? `${(an.rPeak * U.sigma).toFixed(2)} Å, g = ${an.gPeak.toFixed(2)} · ${an.cn.toFixed(1)}` : "—" },
+      ]);
+    }
+    const PRESETS = { solid: { T: 20, rho: 0.0255, melt: false }, liquid: { T: 90, rho: 0.0216, melt: true }, gas: { T: 300, rho: 0.003, melt: false } };
+    MD.lab("#lab-phase", {
+      title: "Phase explorer: temperature, density and g(r)",
+      intro: "<p>Pick a temperature and a density, and the box is rebuilt as an fcc lattice at that density (exactly what changing <code>lattice_constant</code> in the Python code does), given Maxwell–Boltzmann velocities, and thermostatted with the same friction (0.01 fs⁻¹). With <em>start from a melt</em> ticked, the lattice is first melted for 5 ps at 300 K and then cooled to your temperature, so you approach the state from the liquid side. After a 3 ps burn-in, $g(r)$ is averaged over one frame every 10 steps. Changing the temperature keeps the configuration and restarts the averages. <strong>Browser settings:</strong> this explorer uses 256 atoms by default (500 available) and a 10 fs time step, so states equilibrate in seconds; $g(r)$ therefore reaches only half of the smaller box.</p>",
+      controls: [
+        { type: "range", id: "T", label: "Temperature", min: 10, max: 400, step: 5, value: 90, fmt: (v) => `${v} K (T* = ${U.toTstar(v).toFixed(2)})` },
+        { type: "range", id: "rho", label: "Number density", min: 0.002, max: 0.028, step: 0.0001, value: 0.0216, fmt: (v) => `${v.toFixed(4)} Å⁻³ (ρσ³ = ${U.rhoStar(v).toFixed(2)})` },
+        { type: "check", id: "melt", label: "Start from a melt (5 ps at 300 K, then cool to T)", value: true },
+        { type: "select", id: "N", label: "Number of atoms", value: 256, options: [{ value: 256, label: "256 (4×4×4 fcc cells)" }, { value: 500, label: "500 (5×5×5, as above)" }] },
+        { type: "range", id: "spf", label: "MD steps per animation frame", min: 1, max: 20, step: 1, value: 8 },
+        { type: "buttons", items: [{ id: "solid", label: "Solid · 20 K" }, { id: "liquid", label: "Liquid · 90 K" }, { id: "gas", label: "Gas · 300 K" }] },
+        { type: "buttons", items: [{ id: "play", label: "Run / pause" }, { id: "reset", label: "Restart from lattice", secondary: true }] },
+      ],
+      cols: 2,
+      panels: [{ id: "cv", kind: "canvas", aspect: 1.05 }, { id: "gr", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+      init(lab) {
+        view = makeViewer(lab, "cv", () => draw(lab));
+        build(lab.p); built = { N: lab.p.N, rho: lab.p.rho, T: lab.p.T, melt: lab.p.melt };
+        lab.anim = lab.loop(() => {
+          advance(lab.p); view.tick(); draw(lab);
+          if (++frame % 6 === 0) report(lab);
+        });
+        whenHidden(lab.root, () => lab.anim.stop());
+      },
+      run(p, lab) {
+        if (p.N !== built.N || p.rho !== built.rho || p.melt !== built.melt) build(p);
+        else if (p.T !== built.T && !meltLeft) restartStats();
+        built = { N: p.N, rho: p.rho, T: p.T, melt: p.melt };
+        draw(lab); report(lab);
+      },
+      onButton(id, p, lab) {
+        if (PRESETS[id]) {
+          lab.set("T", PRESETS[id].T); lab.set("rho", PRESETS[id].rho); lab.set("melt", PRESETS[id].melt);
+          build(lab.p); built = { N: lab.p.N, rho: lab.p.rho, T: lab.p.T, melt: lab.p.melt };
+          draw(lab); report(lab); lab.anim.start();
+        }
+        if (id === "play") lab.anim.running ? lab.anim.stop() : lab.anim.start();
+        if (id === "reset") { build(p); draw(lab); report(lab); }
+      },
+      foot: "<p><strong>What to try.</strong> Click the three presets and let each run until the average has a few hundred frames. <em>Solid</em> (20 K, 0.0255 Å⁻³): sharp, separated peaks at the fcc shell distances that persist to the edge of the box, and an MSD that stays below ~0.1 Å² — atoms only vibrate. <em>Liquid</em> (90 K, 0.0216 Å⁻³): this module's state, prepared by melting at 300 K first — peaks are broad, $g(r)$ decays to 1 with only a weak third shell, and the MSD keeps growing. Untick <em>start from a melt</em> and press <em>Restart from lattice</em> to get the hot crystal of the NVT lab instead and compare. <em>Gas</em> (300 K, 0.003 Å⁻³): one low peak just beyond σ and almost no structure after it. Then explore in between: heat the solid (at this higher density it is still crystalline at 120 K), or keep 90 K and lower the density step by step and watch the second and third shells fade as the system becomes gas-like.</p>",
+    });
+  })();
+})();
+</script>
+</body>
+</html>

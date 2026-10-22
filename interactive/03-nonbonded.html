@@ -1,0 +1,1392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 3 — Non-Bonded Interactions and Electrostatics · MD Tutorial</title>
+<meta name="description" content="Lennard-Jones potentials and cutoffs, Coulomb interactions and why cutoffs fail for them, Ewald summation, and Particle Mesh Ewald — with interactive demos.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+</head>
+<body data-module="03">
+<main id="main">
+<article class="content">
+
+<!-- ================================================================== -->
+<header class="hero step">
+  <div class="eyebrow">Module 3 · Core track</div>
+  <h1>Non-Bonded Interactions and Electrostatics</h1>
+  <p class="lede">The “glue” between atoms that are not bonded to each other: Lennard-Jones forces and why we can cut them off, Coulomb forces and why we can't — and the Ewald and Particle Mesh Ewald methods that handle long-range electrostatics correctly.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Prerequisites</b> <a href="02-physics.html">Module 2 (Physics of MD)</a></span>
+    <span class="chip"><b>What you run</b> Plots and calculations showing LJ, Coulomb, and Ewald potentials</span>
+    <span class="chip"><b>Expected runtime</b> A few minutes</span>
+  </div>
+
+  <div class="objectives">
+    <h3>What you will learn</h3>
+    <ul>
+      <li>The Lennard-Jones potential and why cutoffs are used.</li>
+      <li>Coulomb interactions and the challenge of long-range electrostatics.</li>
+      <li>The Ewald summation method and Particle Mesh Ewald (PME).</li>
+    </ul>
+  </div>
+  <div class="callout tip">
+    <div class="callout-title">How to use this page</div>
+    <p>The Python code behind every figure is tucked into collapsible <strong>Python code</strong> cells you can expand and copy. The <strong>Interactive</strong> panels run live in your browser — drag sliders and watch the physics respond. Press <kbd>P</kbd> (or the <em>Present</em> button) to step through the module slide by slide.</p>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<section class="step">
+  <h2 data-toc="Introduction">Introduction</h2>
+  <p>Welcome to Module 3! In molecular dynamics (MD) simulations, <strong>non-bonded interactions</strong> are the forces between atoms that are not directly linked by chemical bonds (like covalent bonds). These interactions, primarily van der Waals forces and electrostatic forces, are the “glue” that holds molecules together in condensed phases and dictates their structural and dynamic behavior. While often weaker on an individual basis than bonded interactions, their sheer number in a typical simulation makes their accurate and efficient calculation paramount.</p>
+  <p>This interactive module will guide you through:</p>
+  <div class="cards">
+    <div class="card"><div class="card-num">1</div><h4>The Lennard-Jones (LJ) potential</h4><p>Understanding its mathematical form, physical meaning, and the practical necessity of using cutoffs.</p></div>
+    <div class="card"><div class="card-num">2</div><h4>The Coulomb potential</h4><p>Recognizing the challenges posed by its long-range nature and why simple cutoffs, effective for LJ, are insufficient here.</p></div>
+    <div class="card"><div class="card-num">3</div><h4>The Ewald summation method</h4><p>Introducing a foundational technique to correctly handle long-range electrostatic interactions in periodic systems.</p></div>
+    <div class="card"><div class="card-num">4</div><h4>The Particle Mesh Ewald (PME) method</h4><p>Discussing a highly efficient and widely used algorithm based on Ewald summation, enabling simulations of large biomolecular systems.</p></div>
+    <div class="card"><div class="card-num">5</div><h4>Visualizing functional forms</h4><p>Plotting key mathematical functions involved in these methods to build intuition.</p></div>
+  </div>
+  <p>Let's dive in!</p>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Lennard-Jones &amp; cutoffs"><span class="lesson-num">Lesson 1</span>Lennard-Jones Potential and Cutoffs</h2>
+  <p>The Lennard-Jones potential is a relatively simple yet powerful model used to describe the non-bonded interaction between two neutral atoms or non-polar molecules. It elegantly captures two fundamental forces:</p>
+  <div class="cards">
+    <div class="card"><h4>Short-range repulsion</h4><p>Arising from the Pauli exclusion principle when electron clouds overlap.</p></div>
+    <div class="card"><h4>Long-range attraction</h4><p>Arising from induced dipole–induced dipole interactions (London dispersion forces).</p></div>
+  </div>
+  <p>The mathematical form of the LJ potential $V_{LJ}(r)$ between two particles separated by a distance $r$ is:</p>
+  <div class="eq-card">
+  $$V_{LJ}(r) = 4\epsilon \left[ \left(\frac{\sigma}{r}\right)^{12} - \left(\frac{\sigma}{r}\right)^{6} \right]$$
+  </div>
+  <p>Where:</p>
+  <ul>
+    <li>$\epsilon$ (epsilon): The depth of the potential well. This parameter represents the strength of the attraction. A larger $\epsilon$ means a stronger attraction.</li>
+    <li>$\sigma$ (sigma): The finite distance at which the inter-particle potential $V_{LJ}(r)$ is zero. It is often considered the effective “size” or diameter of the particle.</li>
+    <li>$r$: The distance between the centers of the two interacting particles.</li>
+  </ul>
+  <p>The $(1/r)^{12}$ term models the repulsion, and the $-(1/r)^6$ term models the attraction. The high power of 12 for repulsion makes it a very steep potential at short distances, effectively preventing atoms from overlapping too much.</p>
+</section>
+
+<section class="step">
+  <h3>Plotting the LJ potential</h3>
+  <p>The code below defines <code>lj_potential</code>, plots it for $\epsilon = \sigma = 1$, and marks the zero crossing at $r = \sigma$ and the minimum at $r_{min} = 2^{1/6}\sigma$. The figure it draws is reproduced live in the lab underneath.</p>
+<details class="code-cell"><summary>Define <code>lj_potential</code> and plot it with σ and the minimum marked</summary><pre><code class="language-python">import numpy as np
+import matplotlib.pyplot as plt
+
+# Define the Lennard-Jones potential function
+def lj_potential(r, epsilon, sigma):
+    """Calculates the Lennard-Jones potential."""
+    # Ensure r is not zero or too small to avoid division by zero/overflow
+    # For r values very close to 0, the potential should be very large (repulsive)
+    # We'll handle this by clipping r or returning a large value for r &lt; some_threshold * sigma
+    # For plotting, it is often fine to start r from a small positive value.
+    # For actual simulation, very small r would lead to huge forces.
+
+    # Create a safe version of r to avoid division by zero or very small numbers
+    # For r values smaller than a fraction of sigma (e.g., 0.5*sigma), the potential is extremely repulsive.
+    # We can cap the potential or filter r for plotting.
+    r_safe = np.maximum(r, 0.001) # Prevent r=0, use a small floor
+
+    term12 = (sigma / r_safe)**12
+    term6 = (sigma / r_safe)**6
+    potential = 4 * epsilon * (term12 - term6)
+    return potential
+
+# Parameters for the LJ potential (using generic epsilon=1, sigma=1 for easy interpretation)
+epsilon_lj = 1.0  # Arbitrary energy unit
+sigma_lj = 1.0    # Arbitrary length unit
+
+# Generate a range of distances for plotting
+# Start r slightly above 0 to avoid extreme repulsive values at r=0 if not handled by lj_potential
+r_values = np.linspace(0.8 * sigma_lj, 3.5 * sigma_lj, 200)
+
+# Calculate the LJ potential
+potential_lj_values = lj_potential(r_values, epsilon_lj, sigma_lj)
+
+# Find the minimum of the potential
+r_min = sigma_lj * (2**(1/6))  # Distance at which V_LJ is minimum
+V_min = lj_potential(r_min, epsilon_lj, sigma_lj) # Should be -epsilon_lj
+
+# Plotting the LJ potential
+plt.figure(figsize=(6,4))
+plt.plot(r_values / sigma_lj, potential_lj_values / epsilon_lj, label=r'$V_{LJ}(r) / \epsilon$', color='dodgerblue', linewidth=2)
+
+# Add a horizontal line at V=0
+plt.axhline(0, color='black', linestyle='--', linewidth=0.8, label=r'$V_{LJ}(r) = 0$')
+
+# Mark sigma on the x-axis (where V_LJ = 0)
+plt.axvline(1.0, color='grey', linestyle=':', linewidth=1, label=r'$r = \sigma$')
+plt.plot(1.0, 0, 'ko', markersize=5) # Mark the point (sigma, 0)
+
+# Mark the minimum of the potential well
+plt.axvline(r_min / sigma_lj, color='red', linestyle=':', linewidth=1, label=r'$r = r_{min} \approx 1.122\sigma$')
+plt.plot(r_min / sigma_lj, V_min / epsilon_lj, 'ro', markersize=5) # Mark the minimum point
+plt.text(r_min / sigma_lj + 0.05, V_min / epsilon_lj -0.1, f'Minimum ({r_min/sigma_lj:.2f}$\sigma$, {-epsilon_lj:.1f}$\epsilon$)', color='red')
+
+plt.title('Lennard-Jones Potential ($V_{LJ}$)', fontsize=16)
+plt.xlabel(r'Distance ($r / \sigma$)', fontsize=14)
+plt.ylabel(r'Potential Energy ($V_{LJ} / \epsilon$)', fontsize=14)
+plt.ylim(-1.5, 2.0) # Adjust y-limits for better visualization of the well
+plt.xlim(0.75, 3.5) # Adjust x-limits to focus on the relevant part
+plt.legend(fontsize=12)
+plt.grid(True, linestyle=':', alpha=0.7)
+plt.show()
+
+print(f"The potential is zero at r = {sigma_lj:.1f} sigma.")
+print(f"The potential minimum occurs at r_min = {r_min/sigma_lj:.3f} sigma, where V_LJ = {V_min/epsilon_lj:.1f} epsilon.")</code></pre><pre class="output">The potential is zero at r = 1.0 sigma.
+The potential minimum occurs at r_min = 1.122 sigma, where V_LJ = -1.0 epsilon.</pre></details>
+
+  <div id="lab-lj"></div>
+
+  <div class="quiz" data-answer="3">
+    <p class="q">For a Lennard-Jones pair with parameters $\epsilon$ and $\sigma$, where is the potential energy lowest, and how low is it?</p>
+    <ol class="choices">
+      <li>At $r = \sigma$, where $V_{LJ} = -\epsilon$</li>
+      <li>At $r = 2.5\sigma$, where $V_{LJ} \approx -0.016\epsilon$</li>
+      <li>At $r = 2^{1/6}\sigma \approx 1.122\sigma$, where $V_{LJ} = -\epsilon$</li>
+      <li>At $r = 2^{1/6}\sigma$, where $V_{LJ} = 0$</li>
+    </ol>
+    <div class="explain">At $r = \sigma$ the potential is <em>zero</em> (repulsion and attraction cancel). Setting $dV/dr = 0$ gives $r_{min} = 2^{1/6}\sigma$, and substituting back gives $V_{LJ}(r_{min}) = 4\epsilon(\tfrac14 - \tfrac12) = -\epsilon$ — so $\epsilon$ is exactly the well depth.</div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Why cutoffs matter</h3>
+  <p>In a simulation with $N$ particles, calculating all pairwise interactions involves $N(N-1)/2$ pairs, which scales as $O(N^2)$. For large $N$ (e.g., thousands to millions of atoms), this becomes computationally prohibitive.</p>
+  <p>Fortunately, the attractive part of the LJ potential decays as $r^{-6}$. This is relatively fast, meaning that beyond a certain distance, the interaction energy and force become negligible. We can exploit this by introducing a <strong>cutoff radius ($r_c$)</strong>.</p>
+  <p>If the distance $r$ between two particles is greater than $r_c$, their LJ interaction is assumed to be zero:</p>
+  <div class="eq-card">
+  $$ V_{LJ,cutoff}(r) = \begin{cases} V_{LJ}(r) &amp; \text{if } r \le r_c \\ 0 &amp; \text{if } r > r_c \end{cases} $$
+  </div>
+  <p>A common choice for $r_c$ is around $2.5\sigma$ to $3.5\sigma$. At $r = 2.5\sigma$, $V_{LJ}(r) \approx -0.016\epsilon$, which is only about 1.6% of the well depth.</p>
+
+  <div class="cards">
+    <div class="card">
+      <h4>⚠️ Issues with simple truncation</h4>
+      <p>Simply setting the potential to zero beyond $r_c$ (a “truncated potential”) creates a discontinuity in the potential energy if $V_{LJ}(r_c) \neq 0$. This, in turn, leads to an infinite force ($F = -dV/dr$) at $r_c$, which is unphysical and can cause problems in simulations, such as poor energy conservation.</p>
+    </div>
+    <div class="card">
+      <h4>✅ Correction: shifted potential</h4>
+      <p>To address the discontinuity in energy, the potential can be shifted so that it becomes zero at the cutoff:</p>
+      $$V_{LJ,shifted}(r) = \begin{cases} V_{LJ}(r) - V_{LJ}(r_c) &amp; \text{if } r \le r_c \\ 0 &amp; \text{if } r > r_c \end{cases}$$
+    </div>
+  </div>
+  <p>This ensures $V_{LJ,shifted}(r_c) = 0$, making the potential energy continuous. However, the <em>force</em> (the derivative of the potential) might still be discontinuous at $r_c$ unless $dV_{LJ}/dr|_{r=r_c} = 0$, which is generally not true. More sophisticated switching functions can make both the potential and force go smoothly to zero, but a shifted potential is a common and simpler improvement over simple truncation.</p>
+</section>
+
+<section class="step">
+  <h3>Truncated vs. shifted, side by side</h3>
+<details class="code-cell"><summary>Compare the truncated and shifted LJ potentials at r<sub>c</sub> = 2.5σ</summary><pre><code class="language-python"># Define a cutoff radius
+rc_lj = 2.5 * sigma_lj  # A common cutoff value
+
+# Calculate potential at the cutoff for shifting
+V_at_rc = lj_potential(rc_lj, epsilon_lj, sigma_lj)
+
+# Calculate LJ potential with simple truncation and with shifting
+potential_truncated_values = np.array([lj_potential(r, epsilon_lj, sigma_lj) if r &lt;= rc_lj else 0 for r in r_values])
+potential_shifted_values = np.array([(lj_potential(r, epsilon_lj, sigma_lj) - V_at_rc) if r &lt;= rc_lj else 0 for r in r_values])
+
+# Plotting to compare
+plt.figure(figsize=(6,4))
+plt.plot(r_values / sigma_lj, potential_lj_values / epsilon_lj, label=r'Full $V_{LJ}(r)$', color='lightgrey', linestyle='--', linewidth=2, alpha=0.8)
+plt.plot(r_values / sigma_lj, potential_truncated_values / epsilon_lj, label=r'Truncated $V_{LJ}(r)$ at $r_c=2.5\sigma$', color='coral', linestyle='-', linewidth=2)
+plt.plot(r_values / sigma_lj, potential_shifted_values / epsilon_lj, label=r'Shifted $V_{LJ}(r)$ at $r_c=2.5\sigma$', color='forestgreen', linestyle='-', linewidth=2)
+
+# Add a horizontal line at V=0
+plt.axhline(0, color='black', linestyle='--', linewidth=0.8)
+
+# Mark the cutoff radius on the x-axis
+plt.axvline(rc_lj / sigma_lj, color='purple', linestyle='-.', linewidth=1.5, label=f'$r_c = {rc_lj/sigma_lj:.1f}\sigma$')
+
+plt.title('LJ Potential: Truncated vs. Shifted at Cutoff', fontsize=16)
+plt.xlabel(r'Distance ($r / \sigma$)', fontsize=14)
+plt.ylabel(r'Potential Energy ($V_{LJ} / \epsilon$)', fontsize=14)
+plt.ylim(-1.2 * epsilon_lj, 1.0 * epsilon_lj) # Adjusted ylim
+plt.xlim(0.75, 3.5) # Adjusted xlim
+plt.legend(fontsize=12)
+plt.grid(True, linestyle=':', alpha=0.7)
+plt.show()
+
+print(f"Value of original LJ potential at cutoff r_c={rc_lj/sigma_lj:.1f} sigma: V_LJ(r_c) = {V_at_rc/epsilon_lj:.4f} epsilon")
+print(f"Value of shifted LJ potential at cutoff r_c={rc_lj/sigma_lj:.1f} sigma: V_LJ_shifted(r_c) = {(V_at_rc - V_at_rc)/epsilon_lj:.1f} epsilon")</code></pre><pre class="output">Value of original LJ potential at cutoff r_c=2.5 sigma: V_LJ(r_c) = -0.0163 epsilon
+Value of shifted LJ potential at cutoff r_c=2.5 sigma: V_LJ_shifted(r_c) = 0.0 epsilon</pre></details>
+
+  <div id="lab-cutoff"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">Compared with simple truncation, what does the <em>shifted</em> LJ potential fix at the cutoff $r_c$?</p>
+    <ol class="choices">
+      <li>Both the energy and the force become continuous at $r_c$</li>
+      <li>The energy becomes continuous, but the force still jumps from $F_{LJ}(r_c)$ to zero</li>
+      <li>Nothing — shifting only changes the energy far from $r_c$</li>
+    </ol>
+    <div class="explain">Subtracting the constant $V_{LJ}(r_c)$ removes the energy step, but a constant does not change the slope, so the force inside $r_c$ is unchanged and still drops abruptly to zero at the cutoff. Making the force continuous too needs a force-shifted potential or a switching function.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Coulomb &amp; long-range forces"><span class="lesson-num">Lesson 2</span>Coulomb Interactions and Long-Range Forces</h2>
+  <p>Electrostatic interactions are fundamental in many, if not most, molecular systems, especially those involving ions, polar molecules (like water), or biomolecules (proteins, DNA have many charged groups).</p>
+  <p>The Coulomb potential $V_C(r)$ between two point charges $q_i$ and $q_j$ separated by a distance $r_{ij}$ in a vacuum is given by:</p>
+  <div class="eq-card">
+  $$V_C(r_{ij}) = \frac{1}{4\pi\epsilon_0} \frac{q_i q_j}{r_{ij}}$$
+  </div>
+  <p>Where:</p>
+  <ul>
+    <li>$q_i, q_j$ are the magnitudes of the charges.</li>
+    <li>$\epsilon_0$ is the permittivity of free space (a fundamental physical constant).</li>
+    <li>$r_{ij}$ is the distance between the charges.</li>
+  </ul>
+  <p>In simulation units, the constant term $1/(4\pi\epsilon_0)$ is often absorbed into a single constant, let's call it $k_e$ (Coulomb's constant), or units are chosen such that it is 1.</p>
+  <div class="eq-card">
+  $$V_C(r_{ij}) = k_e \frac{q_i q_j}{r_{ij}}$$
+  </div>
+  <div class="callout key">
+    <div class="callout-title">The key property</div>
+    <p>The most critical characteristic of the Coulomb potential is its <strong>long-range nature</strong>: it decays as $1/r$. This decay is much, much slower than the $1/r^6$ decay of the attractive part of the LJ potential.</p>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Comparing decay rates</h3>
+<details class="code-cell"><summary>Compare 1/r (Coulomb) and 1/r⁶ (LJ attraction) decay on a log scale</summary><pre><code class="language-python"># Define the Coulomb potential function (simplified k_e*q_i*q_j = 1 for plotting shape)
+def coulomb_potential(r, strength=1.0):
+    """Calculates a simplified Coulomb-like potential (1/r)."""
+    # Avoid division by zero for r=0
+    r_safe = np.maximum(r, 0.001)
+    return strength / r_safe
+
+# Generate distances for plotting
+r_coul_values = np.linspace(0.2, 10.0, 200) # Start further from 0 for 1/r
+
+# Calculate potentials for comparison
+potential_coulomb = coulomb_potential(r_coul_values)
+potential_lj_attraction_part = -lj_potential(r_coul_values, epsilon_lj, sigma_lj) # Focus on attractive part of LJ for decay comparison
+# Or more simply, just plot 1/r^6 vs 1/r
+lj_decay_comparison = (sigma_lj / r_coul_values)**6
+
+plt.figure(figsize=(6,4))
+plt.plot(r_coul_values / sigma_lj, potential_coulomb / np.max(potential_coulomb[r_coul_values/sigma_lj &gt; 0.5]), label=r'$1/r$ (Coulomb-like decay)', color='crimson', linewidth=2)
+plt.plot(r_coul_values / sigma_lj, lj_decay_comparison / np.max(lj_decay_comparison[r_coul_values/sigma_lj &gt; 0.5]), label=r'$1/r^6$ (LJ-like attraction decay)', color='mediumblue', linewidth=2)
+
+plt.title('Comparison of Potential Decay Rates', fontsize=16)
+plt.xlabel(r'Distance ($r / \sigma$)', fontsize=14)
+plt.ylabel('Normalized Potential Magnitude', fontsize=14)
+plt.yscale('log') # Log scale is essential to see the difference at larger r
+plt.ylim(1e-4, 2) # Adjust y limits for log scale
+plt.xlim(0.5, 10) # Show a wider range for decay
+plt.legend(fontsize=12)
+plt.grid(True, which="both", linestyle=':', alpha=0.7) # Grid for both major and minor ticks on log scale
+plt.show()
+
+print("Note how much slower the 1/r decay is compared to 1/r^6, especially at larger distances.")</code></pre><pre class="output">Note how much slower the 1/r decay is compared to 1/r^6, especially at larger distances.</pre></details>
+
+  <div id="lab-decay"></div>
+</section>
+
+<section class="step">
+  <h3>Why cutoffs fail for Coulomb forces</h3>
+  <p>The slow $1/r$ decay of the Coulomb potential means that interactions from distant charges can still be significant. Applying a simple spherical cutoff (like we did for LJ interactions) to Coulomb interactions in a periodic system leads to severe problems:</p>
+  <div class="cards">
+    <div class="card"><div class="card-num">1</div><h4>Significant neglected interactions</h4><p>The sum of $q_i q_j / r_{ij}$ over all pairs in a truly infinite system (or one with periodic boundary conditions, PBC) converges very slowly, and its value is <em>conditionally convergent</em>. This means the sum depends on the order of summation or, equivalently, the shape of the boundary assumed for the summation. Truncating it at a typical molecular cutoff (e.g., 10–15 Å) means you are ignoring a substantial, non-negligible portion of the total electrostatic energy and forces. This isn't just a small error; it can fundamentally change the physics.</p></div>
+    <div class="card"><div class="card-num">2</div><h4>Artificial structuring and anisotropy</h4><p>In a system with PBC, if you use a spherical cutoff for Coulomb forces, a charge $q_i$ interacts with charges $q_j$ within its cutoff sphere. However, it does <em>not</em> see the periodic images of $q_j$ that lie outside this sphere, nor does it see charges beyond the sphere that are part of the bulk periodic system. This creates an artificial boundary and can lead to:</p>
+      <ul>
+        <li><strong>Distortion of solvent structure:</strong> polar molecules like water might artificially orient themselves with respect to the cutoff sphere rather than the true long-range field of the system.</li>
+        <li><strong>Incorrect dielectric properties:</strong> the system's response to electric fields will be wrong.</li>
+        <li><strong>Spurious effects on charged species:</strong> ions might experience artificial forces or accumulate near these imaginary boundaries.</li>
+        <li><strong>System-size dependent artifacts:</strong> properties can change unphysically if you change the box size but keep the cutoff the same.</li>
+      </ul></div>
+    <div class="card"><div class="card-num">3</div><h4>No net charge neutrality within the cutoff sphere</h4><p>Even if the overall simulation box is charge neutral, the region within an arbitrary cutoff sphere around a given particle is generally <em>not</em> charge neutral. This means each particle effectively sees a net charged environment if only interactions within the cutoff are considered, which is unphysical for a bulk, neutral system.</p></div>
+    <div class="card"><div class="card-num">4</div><h4>Severe energy drift</h4><p>A sharp cutoff in the Coulomb potential creates very large discontinuities in the forces at $r_c$. This leads to extremely poor energy conservation in MD simulations, making the simulation unreliable.</p></div>
+  </div>
+</section>
+
+<section class="step">
+  <div class="callout deep">
+    <div class="callout-title">🤔 Consider this</div>
+    <p>The number of particles in a shell of thickness $dr$ at distance $r$ grows as $4\pi r^2 dr$. The interaction energy with these particles would be proportional to $(r^2 dr) \times (1/r) = r\,dr$. Integrating this, $\int r\,dr = r^2/2$, suggests that distant shells contribute <em>more</em> to the potential, not less! This simple argument is for a uniform distribution and needs refinement for specific lattices, but it highlights the danger of truncation. (The right-hand panel of the decay lab above plots exactly this shell sum.)</p>
+  </div>
+  <p>The lab below makes problems 1 and 3 concrete for a real lattice — rock salt (NaCl), where every ion sits in a perfectly neutral crystal.</p>
+  <div id="lab-madelung"></div>
+
+  <div class="callout warn">
+    <div class="callout-title">Conclusion for Coulomb</div>
+    <p>Using a simple spherical cutoff (even with shifting) for Coulomb interactions is <strong>fundamentally flawed</strong> for most simulations, especially those involving charged or polar species in periodic boundary conditions. It can lead to qualitatively incorrect results. Specialized methods are absolutely essential.</p>
+  </div>
+
+  <div class="quiz" data-answer="1">
+    <p class="q">Why can't we simply cut off Coulomb interactions at $r_c$ the way we do for Lennard-Jones?</p>
+    <ol class="choices">
+      <li>Because $1/r$ decays so slowly that the number of distant charges ($\propto r^2$) outweighs the decay — the lattice sum is only conditionally convergent, and a cutoff sphere is generally not charge neutral</li>
+      <li>Because the Coulomb potential is repulsive at short range, like the $r^{-12}$ term</li>
+      <li>Because Coulomb interactions are too weak to matter beyond a few Å</li>
+    </ol>
+    <div class="explain">Shells at distance $r$ contain $\propto r^2$ charges, each weighted by $1/r$, so far-away shells do not fade out the way they do for $r^{-6}$. The truncated sum depends on the cutoff shape (as the NaCl lab shows), and the charge inside a sphere is not neutral.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Ewald summation"><span class="lesson-num">Lesson 3</span>The Ewald Summation Method</h2>
+  <p>The Ewald summation method, developed by Paul Peter Ewald in the early 20th century (initially for calculating electrostatic energies of ionic crystals), provides a mathematically sound way to calculate the electrostatic energy (and forces) of an infinite, periodic system of charges. It elegantly sidesteps the conditional convergence problem of the direct $1/r$ sum.</p>
+
+  <h3>The core idea: splitting the sum</h3>
+  <p>The Ewald method cleverly splits the problematic $1/r_{ij}$ sum into two parts, each of which converges much more rapidly:</p>
+  <ol>
+    <li>A <strong>short-ranged real-space sum</strong>.</li>
+    <li>A <strong>smooth, long-ranged reciprocal-space (Fourier space) sum</strong>.</li>
+  </ol>
+  <div class="cards">
+    <div class="card"><h4>➖ Screening Gaussians (real space)</h4><p>This is achieved by a mathematical trick: imagine each point charge $q_j$ is surrounded by a diffuse Gaussian charge distribution of the <em>opposite</em> sign ($-q_j$). This Gaussian cloud effectively screens the point charge, making its interaction with other charges decay much faster. The interaction between these screened charges and the original point charges is calculated directly in real space (this is the real-space sum) and can now be truncated with a cutoff.</p></div>
+    <div class="card"><h4>➕ Compensating Gaussians (reciprocal space)</h4><p>However, we've artificially added these screening Gaussians. To compensate, we must subtract their effect. This is done by adding a <em>second</em> set of Gaussian charge distributions, this time with the <em>same</em> sign ($+q_j$) as the original charges. This sum of diffuse, identical Gaussians creates a smooth, periodic potential throughout the simulation cell. Because this potential is smooth and periodic, it can be efficiently represented by a rapidly converging Fourier series, which is calculated in reciprocal space (this is the reciprocal-space sum).</p></div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>Ewald's trick, pictured</h3>
+  <div id="lab-ewald-picture"></div>
+</section>
+
+<section class="step">
+  <h3>The Ewald sum components</h3>
+  <p>The total electrostatic energy $U_{total}$ in an Ewald summation is typically expressed as the sum of several terms:</p>
+  <div class="eq-card">
+  $$ U_{total} = U_{real} + U_{reciprocal} + U_{self} + U_{dipole} \text{ (if applicable)} $$
+  </div>
+  <div class="tabset">
+    <div class="tab-panel" data-label="U_real · real space">
+      <p><strong>Real-space term.</strong> This is the sum of interactions between charges, where each charge is screened by its neutralizing Gaussian. The interaction potential takes the form $q_i q_j \frac{\text{erfc}(\alpha r_{ij})}{r_{ij}}$, where $\text{erfc}$ is the complementary error function and $\alpha$ is the Ewald splitting parameter. This sum is short-ranged and can be truncated at a cutoff $r_c$.</p>
+      $$V_{real}(r_{ij}) = k_e \frac{q_i q_j}{r_{ij}} \text{erfc}(\alpha r_{ij})$$
+    </div>
+    <div class="tab-panel" data-label="U_recip · reciprocal space">
+      <p><strong>Reciprocal-space term.</strong> This term accounts for the interaction of the smooth, compensating Gaussian charge distributions. It is calculated as a sum over reciprocal lattice vectors $\mathbf{k}$.</p>
+      $$ U_{recip} = \frac{k_e}{2V} \sum_{ \mathbf{k} \neq 0} \frac{4\pi}{k^2} |S(\mathbf{k})|^2 \exp(-k^2 / 4\alpha^2) $$
+      <p>where $V$ is the cell volume, $S(\mathbf{k}) = \sum_j q_j \exp(i \mathbf{k} \cdot \mathbf{r}_j)$ is the structure factor, and $k = |\mathbf{k}|$. This sum converges quickly if $\alpha$ is chosen appropriately.</p>
+    </div>
+    <div class="tab-panel" data-label="U_self · self-interaction">
+      <p><strong>Self-interaction correction.</strong> An artifact of the method is that each charge interacts with its own screening Gaussian. This unphysical self-interaction must be subtracted.</p>
+      $$ U_{self} = -k_e \frac{\alpha}{\sqrt{\pi}} \sum_j q_j^2 $$
+    </div>
+    <div class="tab-panel" data-label="U_dipole · surface term">
+      <p><strong>Surface/dipole term (optional).</strong> If the simulation cell has a net dipole moment, an additional term might be needed depending on the assumed boundary conditions at infinity (e.g., vacuum, or surrounded by a perfect conductor). For systems with no net dipole, or when using “tin-foil” (conducting) boundary conditions, this term is often zero or handled implicitly.</p>
+    </div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>The Ewald splitting parameter ($\alpha$ or $\kappa$)</h3>
+  <p>This crucial parameter (often denoted $\alpha$, sometimes $\kappa$ or $\beta$) controls the width of the Gaussian charge distributions. It dictates the balance of computational effort between the real-space and reciprocal-space sums:</p>
+  <div class="cards">
+    <div class="card"><h4>Large $\alpha$</h4><p>Narrow Gaussians, meaning the real-space interaction $q_i q_j\, \text{erfc}(\alpha r_{ij})/r_{ij}$ decays very quickly (fewer terms needed in the real-space sum, smaller $r_c$). However, the compensating charge distribution in reciprocal space becomes broader, so the reciprocal sum converges more slowly (more $\mathbf{k}$-vectors needed).</p></div>
+    <div class="card"><h4>Small $\alpha$</h4><p>Wide Gaussians. The real-space sum converges slowly (larger $r_c$ needed). The reciprocal-space sum converges quickly (fewer $\mathbf{k}$-vectors needed).</p></div>
+  </div>
+  <p>The optimal choice of $\alpha$ (along with $r_c$ and the $k$-space cutoff $k_{max}$) is one that minimizes the total computational cost for a desired accuracy.</p>
+  <div class="cards">
+    <div class="card"><h4>👍 Advantages of Ewald summation</h4>
+      <ul>
+        <li>Provides a mathematically rigorous and accurate way to calculate long-range electrostatic interactions in periodic systems.</li>
+        <li>Converges much faster than attempting a direct, brute-force summation.</li>
+      </ul></div>
+    <div class="card"><h4>👎 Disadvantages</h4>
+      <ul>
+        <li>Significantly more complex to understand and implement than simple cutoffs.</li>
+        <li>The computational cost of traditional Ewald scales roughly as $O(N^{3/2})$ or $O(N^2)$ depending on implementation choices (where $N$ is the number of particles), which can still be a bottleneck for very large systems.</li>
+      </ul></div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>The reciprocal space contribution</h3>
+  <p>The reciprocal-space term involves a sum over reciprocal lattice vectors $\mathbf{k}$. The key component related to damping in k-space (Fourier space) is $\exp(-k^2 / 4\alpha^2)/k^2$.</p>
+  <ul>
+    <li>If $\alpha$ is <strong>large</strong> (fast real-space decay), then $1/(4\alpha^2)$ is small. This means $\exp(-k^2 / 4\alpha^2)$ decays slowly with $k$, so more $\mathbf{k}$-vectors are needed in the reciprocal sum.</li>
+    <li>If $\alpha$ is <strong>small</strong> (slow real-space decay), then $1/(4\alpha^2)$ is large. This means $\exp(-k^2 / 4\alpha^2)$ decays quickly with $k$, so fewer $\mathbf{k}$-vectors are needed.</li>
+  </ul>
+  <p>This illustrates the trade-off controlled by $\alpha$.</p>
+<details class="code-cell"><summary>Plot the Ewald real-space term erfc(αr)/r for two values of α</summary><pre><code class="language-python">from scipy.special import erfc # Complementary error function
+
+# Define the Ewald real-space damped Coulomb potential part
+def ewald_real_space_term(r, alpha, strength=1.0):
+    """Calculates the erfc(alpha*r)/r part of Ewald real-space sum."""
+    r_safe = np.maximum(r, 0.0001) # Avoid r=0
+    return strength * erfc(alpha * r_safe) / r_safe
+
+# Parameters for plotting
+r_ewald = np.linspace(0.1, 10.0, 500) # Distances
+alpha_small = 0.1  # Smaller alpha: wider screening Gaussian, slower real-space decay
+alpha_large = 0.5  # Larger alpha: narrower screening Gaussian, faster real-space decay
+
+# Calculate potentials
+potential_coulomb_ref = coulomb_potential(r_ewald) # Undamped 1/r for reference
+damped_potential_small_alpha = ewald_real_space_term(r_ewald, alpha_small)
+damped_potential_large_alpha = ewald_real_space_term(r_ewald, alpha_large)
+
+plt.figure(figsize=(6,4))
+plt.plot(r_ewald, potential_coulomb_ref, label=r'Undamped $1/r$', color='black', linestyle='--', linewidth=1.5) # Fixed: Added closing $ to the label
+plt.plot(r_ewald, damped_potential_small_alpha, label=r'Ewald Real-Space: $\operatorname{{erfc}}(\alpha r)/r$, $\alpha={}$'.format(alpha_small), color='darkorange', linewidth=2)
+plt.plot(r_ewald, damped_potential_large_alpha, label=r'Ewald Real-Space: $\operatorname{{erfc}}(\alpha r)/r$, $\alpha={}$'.format(alpha_large), color='purple', linewidth=2)
+
+plt.title('Ewald Real-Space Damped Coulomb Potential', fontsize=16)
+plt.xlabel(r'Distance ($r$)', fontsize=14)
+plt.ylabel('Potential Magnitude', fontsize=14)
+plt.ylim(-0.5, np.max(potential_coulomb_ref[r_ewald &gt; 0.5])+1) # Adjust y-limit based on 1/r values
+plt.xlim(0, 10)
+plt.axhline(0, color='grey', linestyle='-', linewidth=0.5)
+plt.legend(fontsize=12)
+plt.grid(True, linestyle=':', alpha=0.7)
+plt.show()
+
+print(f"With larger alpha ({alpha_large}), the real-space potential decays much faster.")
+print(f"With smaller alpha ({alpha_small}), the real-space potential decays slower, resembling 1/r more closely at short distances but still eventually decaying faster.")</code></pre><pre class="output">With larger alpha (0.5), the real-space potential decays much faster.
+With smaller alpha (0.1), the real-space potential decays slower, resembling 1/r more closely at short distances but still eventually decaying faster.</pre></details>
+  <p>In the browser, <code>scipy.special.erfc</code> is replaced by a JavaScript port of the complementary error function from the course toolkit.</p>
+
+  <div id="lab-split"></div>
+</section>
+
+<section class="step">
+  <h3>Ewald in action: the NaCl crystal</h3>
+  <div id="lab-ewald-nacl"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">You increase the Ewald splitting parameter $\alpha$. What happens to the two sums?</p>
+    <ol class="choices">
+      <li>Both the real-space and reciprocal-space sums converge faster</li>
+      <li>The real-space term $\text{erfc}(\alpha r)/r$ decays faster (a smaller $r_c$ suffices), but more $\mathbf{k}$-vectors are needed in reciprocal space</li>
+      <li>The real-space sum needs a larger $r_c$, but fewer $\mathbf{k}$-vectors are needed</li>
+      <li>The total energy changes, because $\alpha$ is a physical parameter</li>
+    </ol>
+    <div class="explain">A larger $\alpha$ means narrower Gaussians: the screened real-space interaction dies off quickly, but the damping factor $\exp(-k^2/4\alpha^2)$ decays slowly in $k$, so the reciprocal sum needs more terms. $\alpha$ is a purely numerical choice — with converged sums the total does not depend on it (as the NaCl lab shows).</div>
+  </div>
+
+  <div class="callout deep">
+    <div class="callout-title">🧠 Intuition: how Ewald summation works</div>
+    <p>Electrostatic interactions are extremely long-ranged because the Coulomb potential decays slowly as $1/r$. In periodic boundary conditions, summing these interactions over all images diverges.</p>
+    <p><strong>Ewald summation</strong> solves this by splitting the $1/r$ potential into two parts:</p>
+    <ol>
+      <li><strong>Short-range (real-space) part:</strong> decays very quickly. We compute this directly in real space, up to a cutoff distance.</li>
+      <li><strong>Long-range (reciprocal-space) part:</strong> a smooth, slowly varying function. Because it is smooth, we can compute it very efficiently in <strong>Fourier (reciprocal) space</strong> using periodic wave vectors.</li>
+    </ol>
+    <p>By mathematically splitting the calculation this way, we achieve an overall scaling of $O(N^{3/2})$ instead of $O(N^2)$. Modern methods like <strong>Particle Mesh Ewald (PME)</strong> interpolate charges onto a 3D grid and use Fast Fourier Transforms (FFT) to achieve $O(N \log N)$ scaling, making large-scale biological simulations possible!</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Particle Mesh Ewald"><span class="lesson-num">Lesson 4</span>Particle Mesh Ewald (PME)</h2>
+  <p>While traditional Ewald summation is accurate, its $O(N^{3/2})$ to $O(N^2)$ scaling makes it computationally intensive for systems with many thousands of atoms. The <strong>Particle Mesh Ewald (PME)</strong> method, developed by Darden, York, and Pedersen, and similar Particle-Particle Particle-Mesh (PPPM) methods, offer a more efficient way to calculate the reciprocal-space part of the Ewald sum. PME has become the de facto standard for treating long-range electrostatics in large-scale biomolecular simulations, reducing the scaling to approximately $O(N \log N)$.</p>
+
+  <h3>The core idea of PME: using FFTs for the reciprocal sum</h3>
+  <p>PME retains the real-space sum and self-interaction correction from the standard Ewald method. The innovation lies in how it computes the reciprocal-space sum. Instead of a direct summation over $\mathbf{k}$-vectors, PME uses a grid and Fast Fourier Transforms (FFTs):</p>
+  <div class="tabset">
+    <div class="tab-panel" data-label="1 · Charge assignment">
+      <p><strong>Charge assignment (gridding).</strong></p>
+      <ul>
+        <li>A regular 3D grid (mesh) is superimposed on the simulation box.</li>
+        <li>The point charges of the particles are assigned (interpolated) onto the nearby grid points. This is not a simple nearest-grid-point assignment; instead, smooth interpolation functions (e.g., B-splines of various orders) are used to distribute each charge onto a small stencil of surrounding grid points. This process creates a gridded charge density, $\rho(\mathbf{r}_{grid})$. The smoothness of the interpolation is crucial for accuracy.</li>
+      </ul>
+    </div>
+    <div class="tab-panel" data-label="2 · FFT reciprocal sum">
+      <p><strong>Reciprocal sum calculation (via FFTs).</strong> The electrostatic potential on the grid, $\Phi(\mathbf{r}_{grid})$, due to the gridded charge density $\rho(\mathbf{r}_{grid})$ is calculated by solving Poisson's equation in Fourier space. This involves several steps:</p>
+      <ol type="a">
+        <li><strong>FFT of charge density:</strong> compute the Fourier transform of the gridded charge density: $\hat{\rho}(\mathbf{k}) = \text{FFT}(\rho(\mathbf{r}_{grid}))$.</li>
+        <li><strong>Multiplication by influence function:</strong> multiply $\hat{\rho}(\mathbf{k})$ by the (discretized) Ewald Green's function or influence function in Fourier space, $\hat{G}(\mathbf{k})$. This $\hat{G}(\mathbf{k})$ is essentially the $\exp(-k^2 / 4\alpha^2)/k^2$ term from the Ewald reciprocal sum, adapted for the grid and the interpolation scheme.</li>
+        <li><strong>Inverse FFT for potential:</strong> compute the inverse FFT of the product to get the electrostatic potential on the grid: $\Phi(\mathbf{r}_{grid}) = \text{IFFT}(\hat{G}(\mathbf{k}) \hat{\rho}(\mathbf{k}))$.</li>
+      </ol>
+      <p>The reciprocal space energy can then be calculated from the gridded charge density and potential.</p>
+    </div>
+    <div class="tab-panel" data-label="3 · Interpolate back">
+      <p><strong>Force/potential interpolation.</strong> The electrostatic potential (and its derivatives, which give the forces) are interpolated from the grid points <em>back</em> to the actual particle positions. The same (or a related) interpolation scheme used in the charge assignment step is typically employed here to maintain consistency and accuracy (e.g., using the derivatives of the B-spline functions).</p>
+    </div>
+    <div class="tab-panel" data-label="4 · Real space &amp; self">
+      <p><strong>Real-space and self-interaction terms.</strong></p>
+      <ul>
+        <li>The direct, short-range part of the Ewald sum (screened Coulomb interactions $q_i q_j\, \text{erfc}(\alpha r_{ij})/r_{ij}$) is calculated exactly as in the standard Ewald method, typically within a cutoff radius $r_c$. This corrects for the approximations made by the grid-based calculation at short distances where the grid might be too coarse to represent interactions accurately.</li>
+        <li>The self-interaction correction is also applied as in standard Ewald.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="step">
+  <h3>PME, step by step on a grid</h3>
+  <div id="lab-pme"></div>
+</section>
+
+<section class="step">
+  <h3>Advantages of PME</h3>
+  <div class="cards">
+    <div class="card"><h4>⚡ Outstanding efficiency</h4><p>The use of FFTs for the reciprocal sum is the key. FFTs scale as $O(M \log M)$, where $M$ is the number of grid points. If $M$ is chosen to be proportional to $N$ (the number of particles), the overall scaling of PME becomes approximately $O(N \log N)$. This is a dramatic improvement over $O(N^{3/2})$ or $O(N^2)$ and makes simulations of systems with hundreds of thousands or even millions of atoms feasible.</p></div>
+    <div class="card"><h4>🎯 High accuracy</h4><p>PME can achieve high accuracy, comparable to standard Ewald, by appropriately choosing the Ewald splitting parameter $\alpha$, the real-space cutoff $r_c$, the grid spacing (number of FFT grid points), and the order of the interpolation scheme (e.g., cubic or quartic B-splines are common).</p></div>
+  </div>
+  <div id="lab-scaling"></div>
+</section>
+
+<section class="step">
+  <h3>Implementation complexity and usage</h3>
+  <p>PME is algorithmically sophisticated. Its robust and efficient implementation involves careful handling of FFTs, spline interpolation, differentiation of splines for forces, and managing communication in parallel environments. Fortunately, users of modern MD simulation packages (like GROMACS, AMBER, NAMD, CHARMM, LAMMPS, OpenMM) do not need to implement PME themselves. It is a standard, highly optimized feature. However, users <em>do</em> need to understand the key parameters that control its accuracy and performance to make sensible choices for their simulations:</p>
+  <table>
+    <thead><tr><th>Parameter</th><th>What it controls</th></tr></thead>
+    <tbody>
+      <tr><td><code>ewald_rtol</code> (or similar)</td><td>Desired relative accuracy for Ewald, which helps determine $\alpha$, $r_c$, and $k_{max}$ (or FFT grid density).</td></tr>
+      <tr><td><code>fourierspacing</code> (or <code>fft_spacing</code>)</td><td>The approximate spacing between FFT grid points. Finer grids give more accuracy but cost more.</td></tr>
+      <tr><td><code>pme_order</code> (or <code>interpolation_order</code>)</td><td>The order of the B-spline interpolation (e.g., 4 for cubic, 6 for quintic). Higher orders are more accurate but computationally more intensive.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout key">
+    <div class="callout-title">In essence</div>
+    <p><strong>PME revolutionized the simulation of large biomolecular systems by providing an accurate and computationally tractable method for handling the all-important long-range electrostatic interactions.</strong></p>
+  </div>
+
+  <div class="quiz" data-answer="3">
+    <p class="q">Which part of the Ewald sum does PME compute with a grid and FFTs?</p>
+    <ol class="choices">
+      <li>The real-space $\text{erfc}(\alpha r)/r$ sum — the grid replaces the cutoff</li>
+      <li>The self-interaction correction</li>
+      <li>The reciprocal-space sum — charges are spread onto a mesh, transformed, multiplied by $\hat G(\mathbf{k})$, transformed back, and interpolated to the particles</li>
+      <li>All of the terms, so no cutoff is needed at all</li>
+    </ol>
+    <div class="explain">PME keeps the short-range real-space sum (with a cutoff) and the self term exactly as in standard Ewald; only the smooth reciprocal-space part goes onto the grid, where FFTs make it $O(M \log M)$.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Summary"><span class="lesson-num">Lesson 5</span>Key Takeaways</h2>
+  <p>This module has explored the critical aspects of handling non-bonded interactions in molecular dynamics simulations.</p>
+  <div class="cards">
+    <div class="card"><div class="card-num">1</div><h4>Lennard-Jones (LJ) potential</h4><p>Models van der Waals forces (short-range repulsion, longer-range attraction). Its relatively fast $r^{-6}$ attractive decay allows for the use of a <strong>cutoff radius ($r_c$)</strong> to improve computational efficiency. Simple truncation can cause energy discontinuities; <strong>shifted potentials</strong> (or more advanced switching functions) are preferred to ensure $V(r_c)=0$.</p></div>
+    <div class="card"><div class="card-num">2</div><h4>Coulomb potential</h4><p>Describes electrostatic interactions between charged particles. Its very slow $1/r$ decay makes <strong>simple truncation schemes fundamentally unsuitable</strong> for periodic systems. Doing so leads to significant inaccuracies, artificial structuring, and poor energy conservation, rendering simulation results unreliable for most systems where electrostatics are important.</p></div>
+    <div class="card"><div class="card-num">3</div><h4>Ewald summation</h4><p>A rigorous mathematical technique to accurately calculate electrostatic interactions in periodic systems. It cleverly splits the slowly converging $1/r$ sum into a <strong>short-range real-space sum</strong> (using a damped Coulomb interaction, $\text{erfc}(\alpha r)/r$) and a <strong>rapidly converging reciprocal-space (Fourier) sum</strong>. An Ewald splitting parameter, $\alpha$, balances the computational load between these two sums. While accurate, traditional Ewald typically scales as $O(N^{3/2})$ to $O(N^2)$.</p></div>
+    <div class="card"><div class="card-num">4</div><h4>Particle Mesh Ewald (PME)</h4><p>A highly efficient algorithm for computing the Ewald sum, particularly its reciprocal-space component. PME uses a <strong>grid (mesh)</strong> to assign charges, then employs <strong>Fast Fourier Transforms (FFTs)</strong> to solve for the electrostatic potential on the grid. Forces are then interpolated back to the particles. This reduces the computational scaling for long-range electrostatics to approximately $O(N \log N)$, making it the method of choice for large-scale simulations.</p></div>
+  </div>
+  <div class="callout key">
+    <div class="callout-title">Overall importance</div>
+    <p>Understanding how non-bonded interactions are defined and calculated is crucial for any MD practitioner. The choice of how to treat long-range forces, in particular, can dramatically impact the accuracy and validity of simulation results. While LJ cutoffs are standard, the necessity of methods like PME for electrostatics cannot be overstated for realistic simulations of biomolecules, ionic solutions, or any system where charges play a significant role.</p>
+  </div>
+</section>
+
+<section class="step">
+  <h2 data-toc="Exercises">Exercises and Further Reading</h2>
+  <p>Each exercise links to a lab on this page you can use to test your reasoning. Open the discussion only after you have written down your own answer.</p>
+
+  <details class="exercise">
+    <summary>Exercise 1 — LJ cutoff artifacts</summary>
+    <p>In the plot showing “Truncated vs. Shifted” LJ potentials, imagine calculating the force ($F = -dV/dr$) at the cutoff $r_c$. Describe qualitatively what the force would look like for the truncated potential versus the shifted potential right at $r_c$. Why is a discontinuity in force problematic for MD simulations?</p>
+    <p><em>Lab:</em> the force panel of <a href="#lab-cutoff">Truncated vs. shifted at the cutoff</a>.</p>
+    <details class="reveal">
+      <summary>Discussion</summary>
+      <p><strong>Truncated:</strong> the energy steps from $V_{LJ}(r_c)$ to $0$, so the derivative contains a delta-function spike at $r_c$ — formally an infinite, impulsive force (on top of the force itself dropping from $F_{LJ}(r_c)$ to $0$). In practice MD codes simply never apply that spike, so each time a pair crosses $r_c$ the energy jumps by $|V_{LJ}(r_c)|$ with no corresponding work done.</p>
+      <p><strong>Shifted:</strong> no energy step and no spike, but the force inside $r_c$ is unchanged, so it still jumps by a finite amount, from $F_{LJ}(r_c)$ (small and attractive) to zero.</p>
+      <p><strong>Why it matters:</strong> integrators like Velocity Verlet assume forces vary smoothly over a time step. Each cutoff crossing injects a small error, and with many pairs crossing every step these errors accumulate as energy drift (heating or cooling) and poor energy conservation. Force-shifted potentials or switching functions remove the force jump as well.</p>
+    </details>
+  </details>
+
+  <details class="exercise">
+    <summary>Exercise 2 — Ewald parameter α</summary>
+    <p>If you were forced to use a very small real-space cutoff $r_c$ for the Ewald sum (due to memory constraints, for example), would you prefer a larger or smaller value of $\alpha$? Explain your reasoning in terms of the convergence of the real and reciprocal sums.</p>
+    <p><em>Lab:</em> set a small $r_c$ in <a href="#lab-ewald-nacl">Ewald in action: the NaCl crystal</a> and look for the α that minimizes the error.</p>
+    <details class="reveal">
+      <summary>Discussion</summary>
+      <p>A <strong>larger</strong> $\alpha$. The real-space term $\text{erfc}(\alpha r)/r$ must have died away by $r_c$, or the truncation error is large; since $\text{erfc}$ is controlled by the product $\alpha r_c$, a small $r_c$ needs a large $\alpha$. The price is in reciprocal space: $\exp(-k^2/4\alpha^2)$ then decays slowly, so you need more $\mathbf{k}$-vectors (a larger $k_{max}$ or a finer PME grid) to keep the reciprocal sum converged.</p>
+    </details>
+  </details>
+
+  <details class="exercise">
+    <summary>Exercise 3 — PME grid spacing</summary>
+    <p>What do you think are the consequences of choosing a very coarse FFT grid (large <code>fourierspacing</code>) in a PME calculation? Conversely, what about a very fine grid (small <code>fourierspacing</code>)?</p>
+    <p><em>Lab:</em> change the grid size and interpolation order in <a href="#lab-pme">PME, step by step on a grid</a> and watch the force error.</p>
+    <details class="reveal">
+      <summary>Discussion</summary>
+      <p><strong>Coarse grid:</strong> the gridded density cannot represent the charge distribution and the high-$k$ part of the reciprocal sum (only wave vectors up to the grid's Nyquist limit exist), so reciprocal-space forces carry interpolation and aliasing errors. Forces become inaccurate and slightly position-dependent relative to the grid, which shows up as noise, energy drift and artifacts. You can partly compensate with a higher interpolation order or a smaller $\alpha$ (with a larger $r_c$).</p>
+      <p><strong>Very fine grid:</strong> more accurate, but memory and FFT cost grow ($O(M \log M)$ with $M$ grid points, and $M$ grows as the cube of 1/spacing in 3D), with diminishing returns once the error is below the real-space and other errors.</p>
+    </details>
+  </details>
+
+  <details class="exercise">
+    <summary>Exercise 4 — Why not Ewald for LJ?</summary>
+    <p>The attractive part of the LJ potential is $-(1/r)^6$. Could one, in principle, develop an Ewald-like summation method for this $r^{-6}$ term if it were the dominant long-range interaction and simple cutoffs were insufficient (e.g., for extremely high accuracy studies)? What might be some practical reasons why this is generally not done for standard LJ interactions?</p>
+    <details class="reveal">
+      <summary>Discussion</summary>
+      <p>Yes — the same splitting trick works for any $r^{-n}$ interaction, and dispersion Ewald / “LJ-PME” methods exist in some MD packages. It is generally not done because the $r^{-6}$ sum converges absolutely: the neglected tail beyond $r_c$ is small and, for homogeneous fluids, can be added back with a simple analytic long-range dispersion correction to energy and pressure. A full $r^{-6}$ Ewald sum adds cost for little gain, and mixed LJ parameters (e.g., Lorentz–Berthelot combination rules) do not factorize neatly into per-atom terms on a grid, which complicates efficient implementations. It matters mainly for strongly inhomogeneous systems such as interfaces and membranes.</p>
+    </details>
+  </details>
+
+  <details class="exercise">
+    <summary>Exercise 5 — Real-world impact</summary>
+    <p>Consider a simulation of DNA (highly charged) in a water solution with salt ions. Why would using a simple 1 nm cutoff for <em>all</em> non-bonded interactions (both LJ and Coulomb) likely lead to completely incorrect simulation results regarding DNA structure or ion binding?</p>
+    <details class="reveal">
+      <summary>Discussion</summary>
+      <p>For the LJ part a 1 nm cutoff is usually acceptable, but the Coulomb part is dominated by long-range effects. The DNA backbone carries a large, extended negative charge; truncating at 1 nm ignores much of its electrostatic field and that of the surrounding ion cloud. Cutoff spheres around each ion are not charge neutral, ions see artificial forces at the cutoff boundary (and can pile up there), water orients relative to the cutoff sphere rather than the true field, and force discontinuities cause energy drift. Ion condensation around DNA, phosphate–phosphate repulsion and therefore the helix structure itself all depend on getting the long-range electrostatics right — which is why PME is used for such systems.</p>
+    </details>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section class="step">
+  <hr>
+  <div class="takeaways">
+    <h2 data-toc="Key takeaways">📝 Key Takeaways</h2>
+    <ul>
+      <li>The <strong>Lennard-Jones (LJ)</strong> potential models dispersion (attraction, $r^{-6}$) and Pauli exclusion (repulsion, $r^{-12}$).</li>
+      <li>Because LJ forces decay quickly, we use a <strong>cutoff radius ($r_c$)</strong> to avoid calculating distant interactions, using a shifted potential to prevent energy discontinuity.</li>
+      <li><strong>Coulomb's Law</strong> decays slowly ($r^{-1}$), meaning simple cutoffs cause severe artifacts and non-conservation of energy.</li>
+      <li><strong>Ewald Summation and PME</strong> divide electrostatics into real-space (short-range) and Fourier/reciprocal-space (long-range, smooth) components to calculate exact long-range electrostatics efficiently.</li>
+    </ul>
+  </div>
+  <h3>➡️ What's next?</h3>
+  <p>In <a href="04-1d-simulations.html">Module 4 — Simulating One-Dimensional Systems</a>, we will put our integrators and potentials to work. We will simulate realistic 1D models using Langevin thermostats to observe how a system transitions between energy states!</p>
+</section>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script>
+(function () {
+  const P = MD.phys;
+  const SQRTPI = Math.sqrt(Math.PI);
+
+  // ---------------------------------------------------------------- shared helpers
+  /** A straight reference line as a trace (so it can appear in the legend). */
+  function seg(x0, x1, y0, y1, name, color, dash, extra) {
+    return Object.assign({ x: [x0, x1], y: [y0, y1], mode: "lines", name, color, line: { dash, width: 1.5 }, hoverinfo: "skip" }, extra || {});
+  }
+  /** Legend inside the plot area: side "left" | "right" (top corners) or "br" (bottom-right). */
+  const insideLegend = (side) => ({
+    orientation: "v", bgcolor: "rgba(0,0,0,0)",
+    y: side === "br" ? 0.03 : 0.98, yanchor: side === "br" ? "bottom" : "top",
+    x: side === "left" ? 0.02 : 0.98, xanchor: side === "left" ? "left" : "right",
+  });
+  /** Solve erfc(x) = tol for x (bisection; erfc is monotonic). */
+  function erfcInv(tol) {
+    let lo = 0, hi = 10;
+    for (let i = 0; i < 80; i++) { const mid = 0.5 * (lo + hi); if (P.erfc(mid) > tol) lo = mid; else hi = mid; }
+    return 0.5 * (lo + hi);
+  }
+  const RMIN = Math.pow(2, 1 / 6);          // LJ minimum in units of σ
+  const RSTAR = Math.pow(26 / 7, 1 / 6);    // strongest attraction in units of σ
+  const MADELUNG = 1.747564594633;          // NaCl, nearest-neighbour distance = 1
+
+  // ---------------------------------------------------------------- LJ explorer
+  MD.lab("#lab-lj", {
+    title: "Lennard-Jones explorer",
+    intro: "<p>The potential plotted by the code above, live. With the default $\\epsilon = \\sigma = 1$ it reproduces the printed result: $V_{LJ} = 0$ at $r = \\sigma$, and the minimum $V_{LJ} = -\\epsilon$ at $r_{min} = 2^{1/6}\\sigma \\approx 1.122\\sigma$. The right panel shows the force $F(r) = -\\frac{dV_{LJ}}{dr} = \\frac{24\\epsilon}{r}\\left[2\\left(\\frac{\\sigma}{r}\\right)^{12} - \\left(\\frac{\\sigma}{r}\\right)^{6}\\right]$, which vanishes exactly at the minimum (positive = repulsive).</p>",
+    controls: [
+      { type: "range", id: "eps", label: "ε — well depth", min: 0.2, max: 2, step: 0.05, value: 1 },
+      { type: "range", id: "sig", label: "σ — particle size", min: 0.6, max: 1.6, step: 0.02, value: 1 },
+      { type: "check", id: "red", label: "Plot in reduced units (r/σ, V/ε)", value: false },
+    ],
+    cols: 2,
+    panels: [{ id: "pot", kind: "plot" }, { id: "frc", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    run(p, lab) {
+      const { eps, sig, red } = p;
+      const xs = red ? P.linspace(0.75, 3.5, 400) : P.linspace(0.5, 4.5, 500);
+      const rOf = (x) => (red ? x * sig : x);
+      const eU = red ? eps : 1, rU = red ? sig : 1, fU = red ? eps / sig : 1; // units for the axes
+      const V = xs.map((x) => P.lj(rOf(x), eps, sig) / eU);
+      const F = xs.map((x) => P.ljForce(rOf(x), eps, sig) / fU);
+      const rmin = RMIN * sig, rstar = RSTAR * sig, Fstar = P.ljForce(rstar, eps, sig);
+      const xr = red ? [0.75, 3.5] : [0.5, 4.5];
+      const yr = red ? [-1.5, 2.0] : [-2.5, 3.0];
+      const su = red ? "σ" : "", eu = red ? "ε" : "";
+
+      const tr = [];
+      if (!red) tr.push({ x: xs, y: xs.map((x) => P.lj(x, 1, 1)), name: "reference ε = σ = 1", color: "axis", line: { dash: "dot", width: 1.5 }, hoverinfo: "skip" });
+      tr.push({ x: xs, y: V, name: red ? "V_LJ(r) / ε" : "V_LJ(r)", color: "s1", hovertemplate: "r = %{x:.3f}<br>V = %{y:.3f}<extra></extra>" });
+      tr.push(seg(xr[0], xr[1], 0, 0, "V_LJ(r) = 0", "ink-3", "dash"));
+      tr.push(seg(sig / rU, sig / rU, yr[0], yr[1], "r = σ", "ink-3", "dot"));
+      tr.push(seg(rmin / rU, rmin / rU, yr[0], yr[1], `r = r_min ≈ ${(rmin / rU).toFixed(3)}${su}`, "s8", "dot"));
+      tr.push({ x: [sig / rU], y: [0], mode: "markers", color: "ink", marker: { size: 8 }, showlegend: false, hovertemplate: "V = 0 at r = %{x:.3f}<extra></extra>" });
+      tr.push({ x: [rmin / rU], y: [-eps / eU], mode: "markers", color: "s8", marker: { size: 9 }, showlegend: false, hovertemplate: "minimum<br>r = %{x:.3f}<br>V = %{y:.3f}<extra></extra>" });
+      lab.plot("pot", tr, {
+        title: { text: "Lennard-Jones Potential (V_LJ)" },
+        legend: insideLegend("br"),
+        xaxis: { title: { text: red ? "Distance (r / σ)" : "Distance r" }, range: xr },
+        yaxis: { title: { text: red ? "Potential Energy (V_LJ / ε)" : "Potential Energy V_LJ" }, range: yr },
+        annotations: [{ x: rmin / rU, y: -eps / eU, text: `Minimum (${(rmin / rU).toFixed(2)}${su}, ${(-eps / eU).toFixed(1)}${eu})`, showarrow: false, xanchor: "left", yanchor: "top", xshift: 8, yshift: -4, font: { color: "s8" } }],
+      });
+
+      const A = Math.abs(Fstar) / fU;
+      const fr = [-1.5 * A, 2.2 * A];
+      lab.plot("frc", [
+        { x: xs, y: F, name: "F(r)", color: "s2", hovertemplate: "r = %{x:.3f}<br>F = %{y:.3f}<extra></extra>" },
+        seg(xr[0], xr[1], 0, 0, "F = 0", "ink-3", "dash", { showlegend: false }),
+        seg(rmin / rU, rmin / rU, fr[0], fr[1], "r_min (F = 0)", "s8", "dot", { showlegend: false }),
+        { x: [rstar / rU], y: [Fstar / fU], mode: "markers", color: "s2", marker: { size: 9 }, showlegend: false, hovertemplate: "strongest attraction<br>r = %{x:.3f}<br>F = %{y:.3f}<extra></extra>" },
+      ], {
+        title: { text: "Force F = −dV/dr" },
+        xaxis: { title: { text: red ? "Distance (r / σ)" : "Distance r" }, range: xr },
+        yaxis: { title: { text: red ? "Force (F σ / ε)" : "Force F" }, range: fr },
+        annotations: [
+          { x: rstar / rU, y: Fstar / fU, text: "strongest attraction", showarrow: false, xanchor: "left", yanchor: "top", xshift: 8, font: { color: "s2" } },
+          { x: xr[1], y: fr[1] * 0.9, text: "repulsive ↑", showarrow: false, xanchor: "right" },
+          { x: xr[1], y: fr[0] * 0.85, text: "attractive ↓", showarrow: false, xanchor: "right" },
+        ],
+      });
+
+      lab.readouts("ro", [
+        { k: "$V_{LJ} = 0$ at $r = \\sigma$", v: sig.toFixed(3) },
+        { k: "$r_{min} = 2^{1/6}\\sigma$", v: rmin.toFixed(3) },
+        { k: "$r_{min}/\\sigma$ (for any $\\sigma$)", v: (rmin / sig).toFixed(3), cls: "good" },
+        { k: "$V_{min} = V_{LJ}(r_{min})$", v: P.lj(rmin, eps, sig).toFixed(3) },
+        { k: "Strongest attraction", v: `F = ${Fstar.toFixed(3)} at r = ${rstar.toFixed(3)}` },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> (1) Raise ε — the well deepens but its position does not move. (2) Change σ — the whole curve slides, but $r_{min}/\\sigma$ stays at 1.122. (3) Tick <em>reduced units</em>: every LJ curve collapses onto a single universal curve, which is why we can work with $\\epsilon = \\sigma = 1$. (4) Compare the steep $r^{-12}$ wall on the left with the gentle attractive tail on the right.</p>",
+  });
+
+  // ---------------------------------------------------------------- cutoff comparison
+  MD.lab("#lab-cutoff", {
+    title: "Truncated vs. shifted at the cutoff",
+    intro: "<p>The truncated-vs-shifted comparison from the code above (default $r_c = 2.5\\sigma$, $\\epsilon = \\sigma = 1$), plus the matching <strong>forces</strong> on the right. The truncated potential jumps from $V_{LJ}(r_c)$ to zero, which corresponds to a delta-function spike in the force (drawn as an arrow). The shifted potential is continuous, but its force still drops abruptly from $F_{LJ}(r_c)$ to zero. The optional <em>force-shifted</em> curve, $V_{LJ}(r) - V_{LJ}(r_c) - (r - r_c)\\,V_{LJ}'(r_c)$, is one simple way to make the force continuous as well.</p>",
+    controls: [
+      { type: "range", id: "rc", label: "Cutoff r<sub>c</sub> (in σ)", min: 1.2, max: 3.5, step: 0.05, value: 2.5 },
+      { type: "check", id: "zoom", label: "Zoom in around r<sub>c</sub>", value: false },
+      { type: "check", id: "fs", label: "Also show a force-shifted potential", value: false },
+    ],
+    cols: 2,
+    panels: [{ id: "pot", kind: "plot" }, { id: "frc", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    run(p, lab) {
+      const rc = p.rc;
+      const rs = P.linspace(0.75, 4.2, 700);
+      const inR = rs.filter((r) => r < rc).concat([rc]);
+      const outR = [rc].concat(rs.filter((r) => r > rc));
+      const Vc = P.lj(rc), Fc = P.ljForce(rc); // Fc < 0: attractive
+      const zero = (a) => a.map(() => 0);
+      const rcs = rc.toFixed(2);
+
+      const xr = p.zoom ? [rc - 0.6, rc + 0.4] : [0.75, Math.max(3.5, rc + 0.3)];
+      const yr = p.zoom ? [Math.min(-0.02, 1.8 * Vc), Math.max(0.012, -0.7 * Vc)] : [-1.2, 1.0];
+      const pot = [
+        { x: rs, y: rs.map((r) => P.lj(r)), name: "Full V_LJ(r)", color: "axis", line: { dash: "dash", width: 2 }, hoverinfo: "skip" },
+        { x: [...inR, null, ...outR], y: [...inR.map((r) => P.lj(r)), null, ...zero(outR)], name: `Truncated at r_c = ${rcs}σ`, color: "s2", hovertemplate: "r = %{x:.3f}<br>V = %{y:.4f}<extra>truncated</extra>" },
+        { x: [rc, rc], y: [Vc, 0], mode: "markers", color: "s2", marker: { size: 8, symbol: ["circle", "circle-open"] }, showlegend: false, hoverinfo: "skip" },
+        { x: [...inR, ...outR.slice(1)], y: [...inR.map((r) => P.lj(r) - Vc), ...zero(outR.slice(1))], name: `Shifted at r_c = ${rcs}σ`, color: "s6", hovertemplate: "r = %{x:.3f}<br>V = %{y:.4f}<extra>shifted</extra>" },
+      ];
+      if (p.fs) pot.push({ x: [...inR, ...outR.slice(1)], y: [...inR.map((r) => P.lj(r) - Vc + (r - rc) * Fc), ...zero(outR.slice(1))], name: "Force-shifted", color: "s3", line: { dash: "dot", width: 2.5 }, hovertemplate: "r = %{x:.3f}<br>V = %{y:.4f}<extra>force-shifted</extra>" });
+      pot.push(seg(xr[0] - 1, xr[1] + 1, 0, 0, "V = 0", "ink-3", "dash", { showlegend: false }));
+      pot.push(seg(rc, rc, -10, 10, `r_c = ${rc.toFixed(1)}σ`, "s7", "dashdot"));
+      lab.plot("pot", pot, {
+        title: { text: "LJ Potential: Truncated vs. Shifted at Cutoff" },
+        legend: insideLegend("br"),
+        xaxis: { title: { text: "Distance (r / σ)" }, range: xr },
+        yaxis: { title: { text: "Potential Energy (V_LJ / ε)" }, range: yr },
+      });
+
+      const fyr = p.zoom ? [Math.min(-0.02, 1.8 * Fc), Math.max(0.02, -1.4 * Fc)] : [-2.6, 1.2];
+      const frc = [
+        { x: rs, y: rs.map((r) => P.ljForce(r)), name: "Full F_LJ(r)", color: "axis", line: { dash: "dash", width: 2 }, hoverinfo: "skip" },
+        { x: [...inR, null, ...outR], y: [...inR.map((r) => P.ljForce(r)), null, ...zero(outR)], name: "Shifted (= truncated away from r_c)", color: "s6", hovertemplate: "r = %{x:.3f}<br>F = %{y:.4f}<extra></extra>" },
+        { x: [rc, rc], y: [0, fyr[1] * 0.9], mode: "lines+markers", name: "Truncated: δ-spike at r_c (infinite force)", color: "s2", line: { width: 2.5 }, marker: { size: [1, 12], symbol: ["circle", "triangle-up"] }, hoverinfo: "skip" },
+      ];
+      if (p.fs) frc.push({ x: [...inR, ...outR.slice(1)], y: [...inR.map((r) => P.ljForce(r) - Fc), ...zero(outR.slice(1))], name: "Force-shifted (continuous)", color: "s3", line: { dash: "dot", width: 2.5 }, hovertemplate: "r = %{x:.3f}<br>F = %{y:.4f}<extra></extra>" });
+      frc.push(seg(xr[0] - 1, xr[1] + 1, 0, 0, "F = 0", "ink-3", "dash", { showlegend: false }));
+      frc.push(seg(rc, rc, -10, 10, "r_c", "s7", "dashdot", { showlegend: false }));
+      lab.plot("frc", frc, {
+        title: { text: "Force F = −dV/dr near the cutoff" },
+        legend: insideLegend("br"),
+        xaxis: { title: { text: "Distance (r / σ)" }, range: xr },
+        yaxis: { title: { text: "Force (F σ / ε)" }, range: fyr },
+      });
+
+      const ro = [
+        { k: "$V_{LJ}(r_c)$ — original potential at the cutoff", v: `${Vc.toFixed(4)} ε` },
+        { k: "$V_{LJ,shifted}(r_c)$", v: "0.0 ε", cls: "good" },
+        { k: "Energy jump of the truncated potential", v: `${Math.abs(Vc).toFixed(4)} ε (${(100 * Math.abs(Vc)).toFixed(1)}% of well depth)`, cls: "bad" },
+        { k: "Force jump at $r_c$ (truncated and shifted)", v: `${Math.abs(Fc).toFixed(4)} ε/σ`, cls: "bad" },
+      ];
+      if (p.fs) ro.push({ k: "Force-shifted: $V(r_c)$ and $F(r_c)$", v: "both 0", cls: "good" });
+      lab.readouts("ro", ro);
+    },
+    foot: "<p><strong>What to try:</strong> (1) At the default $r_c = 2.5\\sigma$, read off $V_{LJ}(r_c) = -0.0163\\epsilon$, about 1.6% of the well depth — the value printed by the code. (2) Tick <em>Zoom</em> to see the step in the truncated curve and the kink in the shifted one. (3) Drag $r_c$ down towards $1.2\\sigma$: the energy and force jumps grow dramatically, which is why cutoffs below about $2.5\\sigma$ are avoided. (4) Turn on the force-shifted curve and compare how far it deviates from the full potential inside $r_c$ — the price of a perfectly smooth cutoff.</p>",
+  });
+
+  // ---------------------------------------------------------------- decay comparison
+  MD.lab("#lab-decay", {
+    title: "How fast do 1/r and 1/r⁶ fade?",
+    intro: "<p>Left: the decay comparison from the code above — both curves are normalized to about 1 at $r \\approx 0.5\\sigma$ (each is divided by its largest value for $r/\\sigma > 0.5$). Right: the shell argument from the “Consider this” box below — for a uniform density of partners, the total interaction out to radius $R$ is $\\int_{0.5}^{R} 4\\pi r^2 \\, r^{-n}\\, dr$. For $n = 6$ it levels off; for $n = 1$ it grows like $R^2$.</p>",
+    controls: [
+      { type: "check", id: "log", label: "Logarithmic y-axis", value: true },
+      { type: "range", id: "R", label: "Probe distance r (σ)", min: 0.5, max: 10, step: 0.1, value: 3 },
+    ],
+    cols: 2,
+    panels: [{ id: "decay", kind: "plot" }, { id: "shell", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    init(lab) {
+      const r = P.linspace(0.2, 10.0, 200);
+      const r1 = r.find((x) => x > 0.5); // first grid point with r/σ > 0.5 (where both maxima occur)
+      lab.d = { r, r1, c: r.map((x) => r1 / x), l: r.map((x) => (r1 / x) ** 6) };
+    },
+    run(p, lab) {
+      const { r, r1, c, l } = lab.d;
+      const R = p.R;
+      const yTop = p.log ? undefined : [0, 1.05];
+      lab.plot("decay", [
+        { x: r, y: c, name: "1/r (Coulomb-like decay)", color: "s8", hovertemplate: "r = %{x:.2f}<br>%{y:.3g}<extra>1/r</extra>" },
+        { x: r, y: l, name: "1/r⁶ (LJ-like attraction decay)", color: "s1", hovertemplate: "r = %{x:.2f}<br>%{y:.3g}<extra>1/r⁶</extra>" },
+        seg(R, R, 1e-12, 10, "probe r", "ink-3", "dot", { showlegend: false }),
+      ], {
+        title: { text: "Comparison of Potential Decay Rates" },
+        legend: insideLegend("right"),
+        xaxis: { title: { text: "Distance (r / σ)" }, range: [0.5, 10] },
+        yaxis: p.log ? { title: { text: "Normalized Potential Magnitude" }, type: "log", range: [-4, Math.log10(2)] } : { title: { text: "Normalized Potential Magnitude" }, type: "linear", range: yTop },
+      });
+      const Rs = P.linspace(0.5, 10, 200);
+      const sC = (x) => 2 * Math.PI * (x * x - 0.25);
+      const sL = (x) => (4 * Math.PI / 3) * (8 - x ** -3);
+      lab.plot("shell", [
+        { x: Rs, y: Rs.map(sC), name: "n = 1 (Coulomb): grows ∝ R²", color: "s8" },
+        { x: Rs, y: Rs.map(sL), name: "n = 6 (LJ): converges", color: "s1" },
+        seg(R, R, 1e-3, 1e4, "probe", "ink-3", "dot", { showlegend: false }),
+      ], {
+        title: { text: "Accumulated shell sum ∫ 4πr² r⁻ⁿ dr up to R" },
+        legend: insideLegend("left"),
+        xaxis: { title: { text: "Outer radius R (σ)" }, range: [0.5, 10] },
+        yaxis: p.log ? { title: { text: "Total interaction (arb. units)" }, type: "log", range: [-1, 3] } : { title: { text: "Total interaction (arb. units)" }, type: "linear", range: [0, 650] },
+      });
+      const vc = r1 / R, vl = (r1 / R) ** 6;
+      lab.readouts("ro", [
+        { k: `1/r at r = ${R.toFixed(1)}σ (normalized)`, v: MD.fmt(vc, 3) },
+        { k: `1/r⁶ at r = ${R.toFixed(1)}σ (normalized)`, v: MD.fmt(vl, 3) },
+        { k: "Ratio (1/r) ÷ (1/r⁶)", v: MD.fmt(vc / vl, 3) },
+        { k: `Shell sum to R = ${R.toFixed(1)}σ: Coulomb vs LJ`, v: `${MD.fmt(sC(R), 3)} vs ${MD.fmt(sL(R), 3)}` },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> (1) Move the probe to $r = 2.5\\sigma$ (a typical LJ cutoff): the $1/r^6$ curve has fallen to about $10^{-3}$ of its starting value, while $1/r$ is still around 0.2. (2) Untick the log axis — on a linear scale the $1/r^6$ curve looks like zero almost immediately, which is why the log scale is essential. (3) On the right, push $R$ outwards: the LJ total stops changing (a cutoff loses almost nothing), while the Coulomb total keeps climbing.</p>",
+  });
+
+  // ---------------------------------------------------------------- Madelung / conditional convergence
+  (function () {
+    const NMAX = 14;
+    let data = null;
+    function build() {
+      const sites = [];
+      for (let i = -NMAX; i <= NMAX; i++) for (let j = -NMAX; j <= NMAX; j++) for (let k = -NMAX; k <= NMAX; k++) {
+        if (!i && !j && !k) continue;
+        sites.push({ r: Math.hypot(i, j, k), q: (i + j + k) & 1 ? -1 : 1, i, j, k });
+      }
+      sites.sort((a, b) => a.r - b.r);
+      // spherical partial sums, one point per shell of equal distance
+      const shellR = [1], shellM = [0], shellQ = [1];
+      let M = 0, Q = 1, idx = 0;
+      while (idx < sites.length && sites[idx].r <= NMAX + 1e-9) {
+        const r0 = sites[idx].r;
+        while (idx < sites.length && Math.abs(sites[idx].r - r0) < 1e-9) { M -= sites[idx].q / sites[idx].r; Q += sites[idx].q; idx++; }
+        shellR.push(r0); shellM.push(M); shellQ.push(Q);
+      }
+      // Evjen: neutral cubes with face/edge/corner charges weighted 1/2, 1/4, 1/8
+      const evN = [], evM = [];
+      for (let n = 1; n <= NMAX; n++) {
+        let s = 0;
+        for (const st of sites) {
+          const m = Math.max(Math.abs(st.i), Math.abs(st.j), Math.abs(st.k));
+          if (m > n) continue;
+          let w = 1;
+          if (Math.abs(st.i) === n) w *= 0.5;
+          if (Math.abs(st.j) === n) w *= 0.5;
+          if (Math.abs(st.k) === n) w *= 0.5;
+          s -= (w * st.q) / st.r;
+        }
+        evN.push(n); evM.push(s);
+      }
+      return { shellR, shellM, shellQ, evN, evM };
+    }
+    const at = (arrR, arr, R) => { let k = 0; while (k + 1 < arrR.length && arrR[k + 1] <= R + 1e-9) k++; return arr[k]; };
+
+    MD.lab("#lab-madelung", {
+      title: "Conditional convergence in a real crystal: the NaCl Madelung constant",
+      intro: "<p>Put a $+1$ ion at the origin of a rock-salt lattice (nearest-neighbour distance 1, alternating $\\pm 1$ charges). Its electrostatic energy is $-M$ in these units, where the <em>Madelung constant</em> $M = -\\sum_{j \\neq 0} q_j / r_j = 1.747565\\ldots$ The crystal is perfectly neutral, yet summing the $1/r$ terms inside a growing <strong>cutoff sphere</strong> never settles down: the partial sum swings wildly because each sphere holds a different net charge. Summing over <strong>neutral cubes</strong> instead (Evjen's method, with face, edge and corner ions counted as $\\tfrac12$, $\\tfrac14$, $\\tfrac18$) converges quickly. Same terms, different order, different answer — that is conditional convergence.</p>",
+      controls: [
+        { type: "range", id: "R", label: "Cutoff radius R (nearest-neighbour units)", min: 1, max: 14, step: 0.05, value: 6 },
+      ],
+      cols: 2,
+      panels: [{ id: "sum", kind: "plot" }, { id: "q", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+      init() { data = build(); },
+      run(p, lab) {
+        const { shellR, shellM, shellQ, evN, evM } = data;
+        const R = p.R;
+        const Ms = at(shellR, shellM, R), Qs = at(shellR, shellQ, R);
+        const n = Math.max(1, Math.floor(R)), Me = evM[n - 1];
+        lab.plot("sum", [
+          { x: shellR, y: shellM, name: "Spherical cutoff", color: "s8", line: { shape: "hv", width: 1.5 }, hovertemplate: "R = %{x:.3f}<br>sum = %{y:.3f}<extra>sphere</extra>" },
+          { x: evN, y: evM, mode: "lines+markers", name: "Neutral cubes (Evjen)", color: "s1", marker: { size: 7 }, hovertemplate: "half-width %{x}<br>sum = %{y:.5f}<extra>cube</extra>" },
+          seg(0, 15, MADELUNG, MADELUNG, "Exact (Ewald) 1.747565", "s6", "dash"),
+          seg(R, R, -100, 100, "R", "ink-3", "dot", { showlegend: false }),
+        ], {
+          title: { text: "Partial sums of the Madelung constant" },
+          margin: { t: 64 },
+          xaxis: { title: { text: "Cutoff radius R / cube half-width" }, range: [0.8, 14.2] },
+          yaxis: { title: { text: "Partial sum of −Σ q_j / r_j" }, range: [-11, 16] },
+        });
+        lab.plot("q", [
+          { x: shellR, y: shellQ, name: "Net charge inside the sphere", color: "s7", line: { shape: "hv", width: 1.5 }, hovertemplate: "R = %{x:.3f}<br>Q = %{y}<extra></extra>" },
+          seg(0, 15, 0, 0, "neutral", "ink-3", "dash", { showlegend: false }),
+          seg(R, R, -1000, 1000, "R", "ink-3", "dot", { showlegend: false }),
+        ], {
+          title: { text: "Net charge inside the cutoff sphere (incl. central ion)" },
+          xaxis: { title: { text: "Cutoff radius R" }, range: [0.8, 14.2] },
+          yaxis: { title: { text: "Net charge Q (e)" }, range: [-190, 160] },
+        });
+        lab.readouts("ro", [
+          { k: `Spherical cutoff sum at R = ${R.toFixed(2)}`, v: Ms.toFixed(4), cls: Math.abs(Ms - MADELUNG) > 0.05 ? "bad" : "" },
+          { k: "Net charge inside the sphere", v: (Qs > 0 ? "+" : "") + Qs, cls: Qs !== 0 ? "bad" : "good" },
+          { k: `Neutral-cube sum, half-width ${n}`, v: Me.toFixed(5), cls: "good" },
+          { k: "Exact Madelung constant (Ewald)", v: MADELUNG.toFixed(6) },
+        ]);
+      },
+      foot: "<p><strong>What to try:</strong> (1) Sweep $R$ slowly: the spherical sum jumps by several units every time a new shell enters, and its sign follows the net charge on the right. (2) Find a radius where the sphere happens to be nearly neutral — the sum is briefly closer to 1.75, but not stably. (3) Compare with the blue cube sums, which agree with the exact value to four digits by half-width 5. A cutoff sphere in an MD simulation suffers exactly this problem (points 1 and 3 above); Ewald summation, next, gets the right answer without guessing a good summation order.</p>",
+    });
+  })();
+
+  // ---------------------------------------------------------------- Ewald's trick in 1D
+  (function () {
+    const L = 4, xs = [0.6, 1.45, 2.7, 3.3], qs = [1, -1, 1, -1];
+    const X = P.linspace(0, 2 * L, 801);
+    const gauss = (d, a) => (a / SQRTPI) * Math.exp(-a * a * d * d);
+    // periodic sum of Gaussians (images n = -3..3 are plenty here)
+    const smooth = (x, a) => { let s = 0; for (let j = 0; j < xs.length; j++) for (let n = -3; n <= 3; n++) s += qs[j] * gauss(x - xs[j] - n * L, a); return s; };
+    const fourier = (x, a, mmax) => {
+      let s = 0;
+      for (let m = 1; m <= mmax; m++) {
+        const k = (2 * Math.PI * m) / L, damp = Math.exp(-(k * k) / (4 * a * a));
+        for (let j = 0; j < xs.length; j++) s += qs[j] * 2 * damp * Math.cos(k * (x - xs[j]));
+      }
+      return s / L; // the m = 0 term vanishes because the cell is neutral
+    };
+    MD.lab("#lab-ewald-picture", {
+      title: "Ewald's split, drawn along a periodic line of charges",
+      intro: "<p>Four alternating charges sit in a periodic cell (two copies shown). <strong>Top:</strong> each point charge (spike) gets a screening Gaussian of the opposite sign, $-q_j\\,\\frac{\\alpha}{\\sqrt\\pi}e^{-\\alpha^2 x^2}$. Seen from outside its cloud, a screened charge looks neutral, so its interactions die off quickly — this is the real-space part. <strong>Bottom:</strong> the compensating same-sign Gaussians add up to a smooth periodic density. Being smooth, it is captured by a handful of Fourier terms (dashed curve) — this is the reciprocal-space part. Top + bottom = the original point charges.</p>",
+      controls: [
+        { type: "range", id: "a", label: "Splitting parameter α", min: 0.8, max: 6, step: 0.1, value: 2 },
+        { type: "range", id: "m", label: "Fourier terms kept (m<sub>max</sub>)", min: 1, max: 30, step: 1, value: 5 },
+        { type: "check", id: "fs", label: "Show Fourier reconstruction", value: true },
+      ],
+      panels: [{ id: "real", kind: "plot", cls: "short" }, { id: "recip", kind: "plot", cls: "short" }, { id: "ro", kind: "readouts" }],
+      run(p, lab) {
+        const a = p.a;
+        const peak = a / SQRTPI, H = Math.max(1.2, peak * 1.25);
+        const spikes = { x: [], y: [] };
+        for (let c = 0; c < 2; c++) xs.forEach((x0, j) => { spikes.x.push(x0 + c * L, x0 + c * L, null); spikes.y.push(0, qs[j] * H, null); });
+        const scr = X.map((x) => -smooth(x, a));
+        const sm = X.map((x) => smooth(x, a));
+        const box = seg(L, L, -100, 100, "cell boundary", "ink-3", "dot", { showlegend: false });
+        lab.plot("real", [
+          { x: spikes.x, y: spikes.y, mode: "lines", name: "point charges q_j (δ spikes)", color: "ink", line: { width: 3 }, hoverinfo: "skip" },
+          { x: X, y: scr, name: "screening Gaussians (−q_j)", color: "s2", fill: "tozeroy", hovertemplate: "x = %{x:.2f}<br>ρ = %{y:.3f}<extra></extra>" },
+          box,
+        ], { title: { text: "Real-space part: point charge + opposite Gaussian (short-ranged)" }, xaxis: { title: { text: "position x" }, range: [0, 2 * L] }, yaxis: { title: { text: "charge density" }, range: [-H * 1.15, H * 1.15] }, margin: { t: 64 } });
+        const tr = [{ x: X, y: sm, name: "compensating Gaussians (+q_j), summed", color: "s1", fill: "tozeroy", hovertemplate: "x = %{x:.2f}<br>ρ = %{y:.3f}<extra></extra>" }, box];
+        let err = 0;
+        if (p.fs) {
+          const fr = X.map((x) => fourier(x, a, p.m));
+          for (let i = 0; i < X.length; i++) err = Math.max(err, Math.abs(fr[i] - sm[i]));
+          tr.push({ x: X, y: fr, name: `Fourier series, ${p.m} term${p.m > 1 ? "s" : ""}`, color: "s5", line: { dash: "dash", width: 2 }, hovertemplate: "x = %{x:.2f}<br>ρ = %{y:.3f}<extra>Fourier</extra>" });
+        }
+        lab.plot("recip", tr, { title: { text: "Reciprocal-space part: smooth, periodic, long-ranged" }, xaxis: { title: { text: "position x" }, range: [0, 2 * L] }, yaxis: { title: { text: "charge density" }, range: [-H * 1.15, H * 1.15] }, margin: { t: 64 } });
+        const kNeed = 2 * a * Math.sqrt(Math.log(1e3)), mNeed = Math.ceil((kNeed * L) / (2 * Math.PI));
+        const ro = [
+          { k: "Gaussian width 1/α", v: (1 / a).toFixed(3) },
+          { k: "Fourier terms needed for 10⁻³ accuracy", v: String(mNeed) },
+        ];
+        if (p.fs) ro.push({ k: `Max error with ${p.m} Fourier terms`, v: err.toExponential(1), cls: err < 0.01 * peak ? "good" : "bad" });
+        lab.readouts("ro", ro);
+      },
+      foot: "<p><strong>What to try:</strong> (1) Increase α: the screening clouds hug their charges (real-space part becomes very short-ranged), but the bottom density gets spiky and needs many more Fourier terms. (2) Decrease α: the clouds spread out and overlap (the real-space part reaches further), while the bottom density becomes so smooth that 2–3 Fourier terms suffice. (3) Fix $m_{max} = 5$ and find the largest α that still reproduces the smooth density — that is the α trade-off in one picture.</p>",
+    });
+  })();
+
+  // ---------------------------------------------------------------- real-space / reciprocal split
+  MD.lab("#lab-split", {
+    title: "Ewald real-space damping and its reciprocal-space price",
+    intro: "<p>Left: the figure from the code above — undamped $1/r$ against the screened real-space interaction $\\text{erfc}(\\alpha r)/r$ for $\\alpha = 0.1$ and $\\alpha = 0.5$. Tick <em>long-range part</em> to add the complementary piece $\\text{erf}(\\alpha r)/r$; since $\\text{erf} + \\text{erfc} = 1$, the two pieces always add back to exactly $1/r$. Right: the reciprocal-space damping factor $\\exp(-k^2/4\\alpha^2)/k^2$ for the same two α values. The readouts use the same rule as MD codes' <code>ewald_rtol</code>: choose $r_c$ so that $\\text{erfc}(\\alpha r_c)$ equals the tolerance.</p>",
+    controls: [
+      { type: "range", id: "a1", label: "α₁ (orange)", min: 0.05, max: 1.5, step: 0.01, value: 0.1 },
+      { type: "range", id: "a2", label: "α₂ (purple)", min: 0.05, max: 1.5, step: 0.01, value: 0.5 },
+      { type: "check", id: "lr", label: "Show long-range part erf(αr)/r", value: false },
+      { type: "check", id: "log", label: "Logarithmic y-axis (real space)", value: false },
+      { type: "select", id: "tol", label: "Tolerance (ewald_rtol)", value: "1e-5", options: [{ value: "1e-3", label: "10⁻³" }, { value: "1e-5", label: "10⁻⁵ (typical)" }, { value: "1e-7", label: "10⁻⁷" }] },
+    ],
+    cols: 2,
+    panels: [{ id: "real", kind: "plot", cls: "tall" }, { id: "recip", kind: "plot", cls: "tall" }, { id: "ro", kind: "readouts", span: true }],
+    run(p, lab) {
+      const r = P.linspace(0.1, 10.0, 500);
+      const coul = r.map((x) => 1 / x);
+      const ymax = Math.max(...coul.filter((_, i) => r[i] > 0.5)) + 1;
+      const tol = Number(p.tol);
+      const x0 = erfcInv(tol);
+      const A = [[p.a1, "s2"], [p.a2, "s7"]];
+      const tr = [{ x: r, y: coul, name: "Undamped 1/r", color: "ink", line: { dash: "dash", width: 1.5 }, hovertemplate: "r = %{x:.2f}<br>%{y:.4g}<extra>1/r</extra>" }];
+      A.forEach(([a, c]) => {
+        const lbl = a.toFixed(2);
+        tr.push({ x: r, y: r.map((x) => P.erfc(a * x) / x), name: `Real-space erfc(αr)/r, α=${lbl}`, color: c, hovertemplate: "r = %{x:.2f}<br>%{y:.4g}<extra>erfc, α=" + lbl + "</extra>" });
+        if (p.lr) tr.push({ x: r, y: r.map((x) => P.erf(a * x) / x), name: `Long-range erf(αr)/r, α=${lbl}`, color: c, line: { dash: "dot", width: 2 }, hovertemplate: "r = %{x:.2f}<br>%{y:.4g}<extra>erf, α=" + lbl + "</extra>" });
+      });
+      A.forEach(([a, c]) => { const rc = x0 / a; if (rc <= 10) tr.push(seg(rc, rc, p.log ? 1e-9 : -1, 100, `r_c(α=${a.toFixed(2)})`, c, "dashdot", { showlegend: false, line: { dash: "dashdot", width: 1 } })); });
+      lab.plot("real", tr, {
+        title: { text: "Ewald Real-Space Damped Coulomb Potential" },
+        legend: insideLegend("right"),
+        xaxis: { title: { text: "Distance (r)" }, range: [0, 10] },
+        yaxis: p.log ? { title: { text: "Potential Magnitude" }, type: "log", range: [-6, 1] } : { title: { text: "Potential Magnitude" }, type: "linear", range: [-0.5, ymax] },
+      });
+      const k = P.linspace(0.05, 8, 400);
+      const ktr = A.map(([a, c]) => ({ x: k, y: k.map((q) => Math.exp(-(q * q) / (4 * a * a)) / (q * q)), name: `exp(−k²/4α²)/k², α=${a.toFixed(2)}`, color: c, hovertemplate: "k = %{x:.2f}<br>%{y:.3g}<extra></extra>" }));
+      A.forEach(([a, c]) => { const km = 2 * a * Math.sqrt(Math.log(1 / tol)); if (km <= 8) ktr.push(seg(km, km, 1e-12, 1e4, "k_max", c, "dashdot", { showlegend: false, line: { dash: "dashdot", width: 1 } })); });
+      lab.plot("recip", ktr, {
+        title: { text: "Reciprocal-space damping" },
+        legend: insideLegend("right"),
+        xaxis: { title: { text: "Wave vector magnitude k" }, range: [0, 8] },
+        yaxis: { title: { text: "exp(−k²/4α²) / k²" }, type: "log", range: [-8, 3] },
+      });
+      const ro = [];
+      A.forEach(([a]) => {
+        ro.push({ k: `α = ${a.toFixed(2)}: real-space cutoff with $\\text{erfc}(\\alpha r_c)$ = ${p.tol}`, v: `r_c ≈ ${(x0 / a).toFixed(2)}` });
+        ro.push({ k: `α = ${a.toFixed(2)}: reciprocal cutoff with $e^{-k^2/4\\alpha^2}$ = ${p.tol}`, v: `k_max ≈ ${(2 * a * Math.sqrt(Math.log(1 / tol))).toFixed(2)}` });
+      });
+      lab.readouts("ro", ro);
+    },
+    foot: "<p><strong>What to try:</strong> (1) With the defaults, confirm the printed conclusion: α = 0.5 decays much faster than α = 0.1, which hugs $1/r$ at short range. (2) Read the cutoffs: going from α = 0.1 to 0.5 shrinks the real-space $r_c$ five-fold but raises the needed $k_{max}$ five-fold — the product $r_c \\cdot k_{max}$ stays fixed for a given tolerance. (3) Tick the long-range part: $\\text{erf}(\\alpha r)/r$ is finite at $r = 0$ and smooth everywhere, which is exactly why it can be handled with a short Fourier series. (4) Tighten the tolerance to $10^{-7}$ and see both cutoffs grow.</p>",
+  });
+
+  // ---------------------------------------------------------------- Ewald for NaCl
+  (function () {
+    const RMAX = 6;
+    let sites = null;
+    function build() {
+      sites = [];
+      for (let i = -RMAX; i <= RMAX; i++) for (let j = -RMAX; j <= RMAX; j++) for (let k = -RMAX; k <= RMAX; k++) {
+        if (!i && !j && !k) continue;
+        const r = Math.hypot(i, j, k);
+        if (r <= RMAX + 1e-9) sites.push({ r, q: (i + j + k) & 1 ? -1 : 1 });
+      }
+    }
+    // Potential at the +1 ion at the origin; cubic cell of side 2 (8 ions), so k = π n and
+    // the structure factor is nonzero (= 8) only when every component of n is odd.
+    function parts(alpha, rc, nmax) {
+      let real = 0, nReal = 0;
+      for (const s of sites) if (s.r <= rc + 1e-9) { real += (s.q * P.erfc(alpha * s.r)) / s.r; nReal++; }
+      let rec = 0, nK = 0;
+      for (let a = -nmax; a <= nmax; a += 2) for (let b = -nmax; b <= nmax; b += 2) for (let c = -nmax; c <= nmax; c += 2) {
+        const k2 = Math.PI * Math.PI * (a * a + b * b + c * c);
+        rec += (4 * Math.PI * Math.exp(-k2 / (4 * alpha * alpha))) / k2;
+        nK++;
+      }
+      const self = (-2 * alpha) / SQRTPI;
+      return { real, rec, self, M: -(real + rec + self), nReal, nK };
+    }
+    MD.lab("#lab-ewald-nacl", {
+      title: "Ewald summation for NaCl: one answer, any α",
+      intro: "<p>The same rock-salt crystal as the Madelung lab, now done the Ewald way. The potential at the central $+1$ ion is $\\phi = \\underbrace{\\sum_{j} q_j\\frac{\\text{erfc}(\\alpha r_j)}{r_j}}_{\\text{real, } r_j \\le r_c} + \\underbrace{\\frac{4\\pi}{V}\\sum_{\\mathbf{k}\\neq 0}\\frac{e^{-k^2/4\\alpha^2}}{k^2}\\,S(\\mathbf{k})}_{\\text{reciprocal}} \\; \\underbrace{-\\; \\frac{2\\alpha}{\\sqrt{\\pi}}}_{\\text{self}}$ and $M = -\\phi$. (The self term is twice the per-charge energy term $\\alpha/\\sqrt\\pi$ because here we evaluate a potential, not the energy with its factor ½.) Each $\\mathbf{k}$ component runs over odd multiples of $\\pi$ up to $n_{max}\\pi$.</p>",
+      controls: [
+        { type: "range", id: "alpha", label: "Splitting parameter α", min: 0.3, max: 4, step: 0.05, value: 1.5 },
+        { type: "range", id: "rc", label: "Real-space cutoff r<sub>c</sub>", min: 1, max: 6, step: 0.25, value: 3 },
+        { type: "select", id: "nmax", label: "Reciprocal cutoff n<sub>max</sub> (k<sub>max</sub> ≈ n<sub>max</sub>·π)", value: 5, options: [1, 3, 5, 7, 9, 11, 13] },
+      ],
+      cols: 2,
+      panels: [{ id: "comp", kind: "plot" }, { id: "err", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+      init() { build(); },
+      run(p, lab) {
+        const as = P.linspace(0.3, 4, 75);
+        const rows = as.map((a) => parts(a, p.rc, p.nmax));
+        const cur = parts(p.alpha, p.rc, p.nmax);
+        lab.plot("comp", [
+          { x: as, y: rows.map((o) => -o.real), name: "real-space part", color: "s2" },
+          { x: as, y: rows.map((o) => -o.rec), name: "reciprocal part", color: "s1" },
+          { x: as, y: rows.map((o) => -o.self), name: "self part", color: "s7" },
+          { x: as, y: rows.map((o) => o.M), name: "total M", color: "s6", line: { width: 3 } },
+          seg(0, 5, MADELUNG, MADELUNG, "exact", "ink-3", "dash", { showlegend: false }),
+          seg(p.alpha, p.alpha, -10, 10, "α", "ink-3", "dot", { showlegend: false }),
+        ], {
+          title: { text: "Contributions to M = −φ vs α" },
+          margin: { t: 64 },
+          xaxis: { title: { text: "α" }, range: [0.3, 4] },
+          yaxis: { title: { text: "contribution to M" }, range: [-3.2, 4.8] },
+        });
+        lab.plot("err", [
+          { x: as, y: rows.map((o) => Math.max(1e-10, Math.abs(o.M - MADELUNG))), name: "|M − exact|", color: "s8", hovertemplate: "α = %{x:.2f}<br>error = %{y:.2e}<extra></extra>" },
+          { x: [p.alpha], y: [Math.max(1e-10, Math.abs(cur.M - MADELUNG))], mode: "markers", color: "s8", marker: { size: 10 }, showlegend: false, hoverinfo: "skip" },
+        ], {
+          title: { text: "Error of the Ewald result vs α" },
+          xaxis: { title: { text: "α" }, range: [0.3, 4] },
+          yaxis: { title: { text: "|M − 1.747565|" }, type: "log", range: [-10, 1] },
+          annotations: [
+            { x: 0.02, xref: "paper", y: 0.04, yref: "paper", text: "← real-space sum truncated", showarrow: false, xanchor: "left" },
+            { x: 0.98, xref: "paper", y: 0.04, yref: "paper", text: "too few k-vectors →", showarrow: false, xanchor: "right" },
+          ],
+        });
+        const err = Math.abs(cur.M - MADELUNG);
+        lab.readouts("ro", [
+          { k: "Real-space part", v: (-cur.real).toFixed(6) },
+          { k: "Reciprocal part", v: (-cur.rec).toFixed(6) },
+          { k: "Self part", v: (-cur.self).toFixed(6) },
+          { k: "Total M", v: cur.M.toFixed(6), cls: err < 1e-4 ? "good" : "bad" },
+          { k: "Error vs 1.747565", v: MD.fmt(err, 2), cls: err < 1e-4 ? "good" : "bad" },
+          { k: "Terms used (real / k-vectors)", v: `${cur.nReal} / ${cur.nK}` },
+        ]);
+      },
+      foot: "<p><strong>What to try:</strong> (1) With $r_c = 3$ and $n_{max} = 5$, slide α from 1 to 2.5: the three parts change a lot, but their total stays at 1.747565 — α is a numerical knob, not physics. (2) In the error plot, the valley is the usable α window: too small and the truncated real-space sum fails (left), too large and the reciprocal sum runs out of k-vectors (right). (3) Exercise 2: drop $r_c$ to 1.5 — the valley moves to larger α and you need a larger $n_{max}$ to stay accurate. (4) Compare the term counts with the hundreds of ions the spherical-cutoff sum used without converging.</p>",
+    });
+  })();
+
+  // ---------------------------------------------------------------- PME on a 2D grid
+  (function () {
+    const N = 10;
+    let charges, rng, cache = null;
+    function reset(seed) {
+      rng = P.rng(seed);
+      charges = Array.from({ length: N }, (_, i) => ({ x: rng(), y: rng(), q: i % 2 ? -1 : 1 }));
+    }
+    reset(5);
+    // Cardinal B-spline M_n(t) on [0, n]; centred version B_p(t) = M_p(t + p/2)
+    function bsM(t, n) {
+      if (n === 1) return t >= 0 && t < 1 ? 1 : 0;
+      return (t * bsM(t, n - 1) + (n - t) * bsM(t - 1, n - 1)) / (n - 1);
+    }
+    function weights(u, p, M) {
+      const out = [];
+      for (let g = Math.floor(u - p / 2); g <= Math.ceil(u + p / 2); g++) {
+        const w = bsM(u - g + p / 2, p);
+        if (w > 1e-12) out.push([((g % M) + M) % M, w]);
+      }
+      return out;
+    }
+    // Separable 2D DFT (sign = -1 forward, +1 inverse, unnormalized). O(M³) — fine for M ≤ 32.
+    function dft2(re, im, M, sign) {
+      const c = new Float64Array(M), s = new Float64Array(M);
+      for (let t = 0; t < M; t++) { c[t] = Math.cos((2 * Math.PI * t) / M); s[t] = sign * Math.sin((2 * Math.PI * t) / M); }
+      const R2 = new Float64Array(M * M), I2 = new Float64Array(M * M);
+      for (let y = 0; y < M; y++) for (let m = 0; m < M; m++) {
+        let a = 0, b = 0;
+        for (let g = 0; g < M; g++) { const t = (m * g) % M, xr = re[g + M * y], xi = im[g + M * y]; a += xr * c[t] - xi * s[t]; b += xr * s[t] + xi * c[t]; }
+        R2[m + M * y] = a; I2[m + M * y] = b;
+      }
+      const R3 = new Float64Array(M * M), I3 = new Float64Array(M * M);
+      for (let x = 0; x < M; x++) for (let m = 0; m < M; m++) {
+        let a = 0, b = 0;
+        for (let g = 0; g < M; g++) { const t = (m * g) % M, xr = R2[x + M * g], xi = I2[x + M * g]; a += xr * c[t] - xi * s[t]; b += xr * s[t] + xi * c[t]; }
+        R3[x + M * m] = a; I3[x + M * m] = b;
+      }
+      return [R3, I3];
+    }
+    const Gk = (k2, a) => (4 * Math.PI * Math.exp(-k2 / (4 * a * a))) / k2;
+    const sinc = (x) => (x === 0 ? 1 : Math.sin(x) / x);
+    function compute(p) {
+      const M = p.M, ord = p.ord, a = p.alpha;
+      const W = charges.map((c) => [weights(c.x * M, ord, M), weights(c.y * M, ord, M)]);
+      // 1. spread charges onto the grid
+      const rho = new Float64Array(M * M);
+      charges.forEach((c, i) => { for (const [gx, wx] of W[i][0]) for (const [gy, wy] of W[i][1]) rho[gx + M * gy] += c.q * wx * wy; });
+      // 2. FFT, multiply by the influence function, inverse FFT (potential and ik-differentiated field)
+      const [R, I] = dft2(rho, new Float64Array(M * M), M, -1);
+      const pR = new Float64Array(M * M), pI = new Float64Array(M * M);
+      const xR = new Float64Array(M * M), xI = new Float64Array(M * M), yR = new Float64Array(M * M), yI = new Float64Array(M * M);
+      for (let my = 0; my < M; my++) for (let mx = 0; mx < M; mx++) {
+        const fx = mx < M / 2 ? mx : mx - M, fy = my < M / 2 ? my : my - M;
+        if (!fx && !fy) continue;
+        const kx = 2 * Math.PI * fx, ky = 2 * Math.PI * fy;
+        let g = Gk(kx * kx + ky * ky, a);
+        if (p.corr) g /= Math.pow(sinc((Math.PI * fx) / M) * sinc((Math.PI * fy) / M), 2 * ord);
+        const i = mx + M * my;
+        pR[i] = g * R[i]; pI[i] = g * I[i];
+        const kxe = 2 * fx === -M ? 0 : kx, kye = 2 * fy === -M ? 0 : ky; // no derivative at Nyquist
+        xR[i] = kxe * g * I[i]; xI[i] = -kxe * g * R[i]; // E = −ik·G·ρ̂
+        yR[i] = kye * g * I[i]; yI[i] = -kye * g * R[i];
+      }
+      const [phi] = dft2(pR, pI, M, 1), [Ex] = dft2(xR, xI, M, 1), [Ey] = dft2(yR, yI, M, 1);
+      // 3. interpolate the field back to the charges with the same weights
+      const Fp = charges.map((c, i) => {
+        let ex = 0, ey = 0;
+        for (const [gx, wx] of W[i][0]) for (const [gy, wy] of W[i][1]) { ex += wx * wy * Ex[gx + M * gy]; ey += wx * wy * Ey[gx + M * gy]; }
+        return [c.q * ex, c.q * ey];
+      });
+      // reference: direct Ewald reciprocal-space sum over k-vectors
+      const mmax = Math.ceil((2 * a * Math.sqrt(Math.log(1e12))) / (2 * Math.PI));
+      let nK = 0;
+      const Fd = charges.map((ci) => {
+        let ex = 0, ey = 0;
+        for (let mx = -mmax; mx <= mmax; mx++) for (let my = -mmax; my <= mmax; my++) {
+          if (!mx && !my) continue;
+          const kx = 2 * Math.PI * mx, ky = 2 * Math.PI * my, g = Gk(kx * kx + ky * ky, a);
+          let s = 0;
+          for (const cj of charges) s += cj.q * Math.sin(kx * (ci.x - cj.x) + ky * (ci.y - cj.y));
+          ex += g * kx * s; ey += g * ky * s;
+        }
+        return [ci.q * ex, ci.q * ey];
+      });
+      nK = (2 * mmax + 1) ** 2 - 1;
+      let e2 = 0, n2 = 0;
+      Fp.forEach((f, i) => { e2 += (f[0] - Fd[i][0]) ** 2 + (f[1] - Fd[i][1]) ** 2; n2 += Fd[i][0] ** 2 + Fd[i][1] ** 2; });
+      let Qgrid = 0; for (let i = 0; i < M * M; i++) Qgrid += rho[i];
+      const w0 = W[0][0].reduce((s, q) => s + q[1], 0) * W[0][1].reduce((s, q) => s + q[1], 0);
+      cache = { M, rho, phi, W, Fp, Fd, err: Math.sqrt(e2 / n2), nK, Qgrid, w0 };
+    }
+    function draw(lab) {
+      const p = lab.p, c = cache, M = c.M;
+      const { ctx, w, h } = lab.canvas("cv");
+      ctx.clearRect(0, 0, w, h);
+      const legend = w >= 560;
+      const S = legend ? Math.min(h - 24, w * 0.58) : Math.min(h - 16, w - 16), ox = legend ? 12 : (w - S) / 2, oy = (h - S) / 2, cell = S / M;
+      const X = (x) => ox + x * S, Y = (y) => oy + (1 - y) * S;
+      const field = p.view === "rho" ? c.rho : c.phi;
+      let mx = 1e-12; for (let i = 0; i < field.length; i++) mx = Math.max(mx, Math.abs(field[i]));
+      ctx.save();
+      ctx.beginPath(); ctx.rect(ox, oy, S, S); ctx.clip();
+      for (let gy = 0; gy < M; gy++) for (let gx = 0; gx < M; gx++) {
+        const v = field[gx + M * gy] / mx;
+        if (Math.abs(v) < 0.01) continue;
+        ctx.fillStyle = MD.alpha(v > 0 ? "s8" : "s1", Math.min(0.85, Math.abs(v) * 0.85));
+        for (const dx of [0, M]) for (const dy of [0, M]) ctx.fillRect(X((gx + dx) / M) - cell / 2, Y((gy + dy) / M) - cell / 2, cell, cell);
+      }
+      // grid points
+      ctx.fillStyle = MD.css("--ink-3");
+      for (let gy = 0; gy < M; gy++) for (let gx = 0; gx < M; gx++) { ctx.beginPath(); ctx.arc(X(gx / M), Y(gy / M), M > 20 ? 0.9 : 1.4, 0, 2 * Math.PI); ctx.fill(); }
+      // stencil of the highlighted charge
+      ctx.strokeStyle = MD.color("s4"); ctx.lineWidth = 2;
+      for (const [gx] of c.W[0][0]) for (const [gy] of c.W[0][1]) for (const dx of [0, M]) for (const dy of [0, M]) ctx.strokeRect(X((gx + dx) / M) - cell / 2 + 1, Y((gy + dy) / M) - cell / 2 + 1, cell - 2, cell - 2);
+      // forces
+      if (p.view === "phi") {
+        let fm = 1e-12; c.Fd.forEach((f) => (fm = Math.max(fm, Math.hypot(f[0], f[1]))));
+        const L = 0.14 * S / fm;
+        const arrow = (x0, y0, fx, fy, col, dash) => {
+          const x1 = x0 + fx * L, y1 = y0 - fy * L, ang = Math.atan2(y1 - y0, x1 - x0);
+          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2; ctx.setLineDash(dash);
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.setLineDash([]);
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - 8 * Math.cos(ang - 0.4), y1 - 8 * Math.sin(ang - 0.4)); ctx.lineTo(x1 - 8 * Math.cos(ang + 0.4), y1 - 8 * Math.sin(ang + 0.4)); ctx.closePath(); ctx.fill();
+        };
+        charges.forEach((q, i) => {
+          arrow(X(q.x), Y(q.y), c.Fd[i][0], c.Fd[i][1], MD.css("--ink-3"), [4, 3]);
+          arrow(X(q.x), Y(q.y), c.Fp[i][0], c.Fp[i][1], MD.css("--ink"), []);
+        });
+      }
+      ctx.restore();
+      ctx.strokeStyle = MD.css("--ink-2"); ctx.lineWidth = 2; ctx.strokeRect(ox, oy, S, S);
+      // charges
+      charges.forEach((q, i) => {
+        ctx.fillStyle = MD.color(q.q > 0 ? "s8" : "s1");
+        ctx.beginPath(); ctx.arc(X(q.x), Y(q.y), 8, 0, 2 * Math.PI); ctx.fill();
+        if (i === 0) { ctx.strokeStyle = MD.color("s4"); ctx.lineWidth = 3; ctx.stroke(); }
+        ctx.fillStyle = "#fff"; ctx.font = "700 13px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(q.q > 0 ? "+" : "−", X(q.x), Y(q.y) + 0.5);
+      });
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      if (!legend) return;
+      // pipeline legend
+      const tx = ox + S + 22, steps = [
+        ["1", "Spread charges onto grid", "B-spline order " + p.ord + " → " + p.ord + "×" + p.ord + " stencil", "rho"],
+        ["2", "FFT → ×Ĝ(k) → inverse FFT", "potential Φ on the grid", "phi"],
+        ["3", "Interpolate back to charges", "forces: PME solid, exact dashed", "phi"],
+        ["4", "Add real-space + self terms", "exactly as in standard Ewald", ""],
+      ];
+      let ty = oy + 18;
+      ctx.font = "600 13px system-ui, sans-serif"; ctx.fillStyle = MD.css("--ink");
+      ctx.fillText(p.view === "rho" ? "Showing: gridded charge ρ" : "Showing: reciprocal potential Φ", tx, ty);
+      ty += 26;
+      steps.forEach(([n, a, b, v]) => {
+        const on = v === p.view || (p.view === "phi" && n === "2");
+        ctx.fillStyle = on ? MD.color("accent") : MD.css("--ink-3");
+        ctx.font = "700 13px system-ui, sans-serif"; ctx.fillText(n, tx, ty);
+        ctx.fillStyle = on ? MD.css("--ink") : MD.css("--ink-3"); ctx.font = (on ? "600 " : "") + "12.5px system-ui, sans-serif";
+        ctx.fillText(a, tx + 16, ty);
+        ctx.fillStyle = MD.css("--ink-3"); ctx.font = "12px system-ui, sans-serif";
+        ctx.fillText(b, tx + 16, ty + 16);
+        ty += 44;
+      });
+      ctx.font = "12px system-ui, sans-serif"; ctx.fillStyle = MD.css("--ink-3");
+      ctx.fillText("red = positive, blue = negative", tx, ty + 4);
+      ctx.fillText("yellow = stencil of one charge", tx, ty + 20);
+    }
+    function refresh(lab, withReadouts = true) {
+      compute(lab.p); draw(lab);
+      if (!withReadouts) return;
+      const c = cache;
+      lab.readouts("ro", [
+        { k: "Grid points M × M", v: `${c.M} × ${c.M} = ${c.M * c.M}` },
+        { k: "Grid points per charge (stencil)", v: `${lab.p.ord}² = ${lab.p.ord * lab.p.ord}` },
+        { k: "Σ weights of highlighted charge", v: c.w0.toFixed(4), cls: "good" },
+        { k: "Total charge on the grid", v: (Math.abs(c.Qgrid) < 5e-13 ? 0 : c.Qgrid).toFixed(4) },
+        { k: "Reciprocal-force error vs direct k-sum", v: (100 * c.err).toFixed(c.err < 0.01 ? 3 : 1) + "%", cls: c.err < 0.01 ? "good" : "bad" },
+        { k: "k-vectors in the direct reference sum", v: String(c.nK) },
+      ]);
+    }
+    MD.lab("#lab-pme", {
+      title: "Particle Mesh Ewald on a 2D grid",
+      intro: "<p>Ten charges in a periodic box, shown in 2D (real PME uses a 3D grid, but the steps are identical). Step 1 spreads every charge onto its $p \\times p$ stencil of nearby grid points with B-spline weights; step 2 Fourier-transforms the grid, multiplies by the influence function $\\hat G(\\mathbf{k}) = 4\\pi e^{-k^2/4\\alpha^2}/k^2$ (the Ewald reciprocal kernel; optionally divided by the B-spline smoothing factor, as real PME codes do) and transforms back; step 3 interpolates the field back to each charge. The force error compares the grid result with a direct sum over all $\\mathbf{k}$-vectors.</p>",
+      controls: [
+        { type: "select", id: "view", label: "Show", value: "rho", options: [{ value: "rho", label: "Step 1 · gridded charge ρ" }, { value: "phi", label: "Steps 2–3 · potential Φ and forces" }] },
+        { type: "select", id: "M", label: "Grid size M (finer = smaller fourierspacing)", value: 16, options: [8, 12, 16, 24, 32] },
+        { type: "select", id: "ord", label: "Interpolation order (pme_order)", value: 4, options: [{ value: 1, label: "1 — nearest grid point" }, { value: 2, label: "2 — linear" }, { value: 4, label: "4 — cubic B-spline" }, { value: 6, label: "6 — quintic B-spline" }] },
+        { type: "range", id: "alpha", label: "Ewald α (box length = 1)", min: 4, max: 16, step: 0.5, value: 8 },
+        { type: "check", id: "corr", label: "Divide out the B-spline smoothing factor", value: true },
+        { type: "buttons", items: [{ id: "play", label: "Jiggle charges" }, { id: "new", label: "New charges", secondary: true }] },
+      ],
+      panels: [{ id: "cv", kind: "canvas", aspect: 1.6 }, { id: "ro", kind: "readouts" }],
+      init(lab) {
+        let seed = 5;
+        lab.seed = () => ++seed;
+        // Charges move every frame; the grid/canvas is recomputed every 2nd frame and the
+        // readouts (force error etc.) every 4th, so everything stays live while jiggling.
+        let frame = 0;
+        lab.anim = lab.loop(() => {
+          for (const q of charges) { q.x = (q.x + rng.normal(0, 0.003) + 1) % 1; q.y = (q.y + rng.normal(0, 0.003) + 1) % 1; }
+          frame++;
+          if (frame % 2 === 0) refresh(lab, frame % 4 === 0);
+        });
+      },
+      run(p, lab) { refresh(lab); },
+      onButton(id, p, lab) {
+        if (id === "play") lab.anim.running ? lab.anim.stop() : lab.anim.start();
+        if (id === "new") { reset(lab.seed()); refresh(lab); }
+      },
+      foot: "<p><strong>What to try:</strong> (1) Step 1: switch the order from 1 (nearest grid point, all charge on one point) to 4 and 6 and watch each charge smear over more points — the weights always sum to 1, so the total grid charge stays zero. (2) Steps 2–3: compare the solid PME forces with the dashed exact ones. With M = 8 and order 1 they disagree badly; M = 16 with order 4 gets below 1%; M = 32 with order 6 is essentially exact (Exercise 3). (3) Raise α: the kernel reaches higher $k$, so a coarse grid fails sooner. (4) Untick the smoothing correction to see why real codes include it. (5) Press <em>Jiggle</em>: as charges cross between grid points, coarse grids make the forces wobble.</p>",
+    });
+  })();
+
+  // ---------------------------------------------------------------- cost scaling
+  MD.lab("#lab-scaling", {
+    title: "How the cost grows with system size",
+    intro: "<p>Operation counts (all prefactors set to 1, so only the <em>shape</em> matters) for all pairs, $O(N^2)$; traditional Ewald, $O(N^{3/2})$; and PME with $M \\propto N$ grid points, $O(N \\log N)$.</p>",
+    controls: [
+      { type: "range", id: "lg", label: "System size N (atoms)", min: 2, max: 7, step: 0.1, value: 5, fmt: (v) => Math.round(10 ** v).toLocaleString("en-US") },
+    ],
+    panels: [{ id: "plot", kind: "plot" }, { id: "ro", kind: "readouts" }],
+    run(p, lab) {
+      const Ns = P.linspace(2, 7, 101).map((v) => 10 ** v);
+      const N = 10 ** p.lg;
+      const big = (v) => (v >= 1e6 ? v.toExponential(2) : v >= 100 ? Math.round(v).toLocaleString("en-US") : v.toPrecision(3));
+      const f2 = (n) => n * n, f15 = (n) => n ** 1.5, fl = (n) => n * Math.log2(n);
+      lab.plot("plot", [
+        { x: Ns, y: Ns.map(f2), name: "N² (all pairs)", color: "s8" },
+        { x: Ns, y: Ns.map(f15), name: "N^1.5 (Ewald)", color: "s2" },
+        { x: Ns, y: Ns.map(fl), name: "N log N (PME)", color: "s1" },
+        seg(N, N, 1, 1e15, "N", "ink-3", "dot", { showlegend: false }),
+      ], {
+        legend: insideLegend("left"),
+        xaxis: { title: { text: "Number of atoms N" }, type: "log" },
+        yaxis: { title: { text: "Relative cost (operations)" }, type: "log", range: [2, 14.5] },
+        margin: { t: 20 },
+      });
+      lab.readouts("ro", [
+        { k: "Pairs N(N−1)/2", v: big((N * (N - 1)) / 2) },
+        { k: "N² ÷ N log N", v: big(f2(N) / fl(N)) + "×" },
+        { k: "N^1.5 ÷ N log N", v: big(f15(N) / fl(N)) + "×" },
+      ]);
+    },
+    foot: "<p><strong>What to try:</strong> slide to $N = 100{,}000$ (a solvated protein) and then to $10^6$ (a large membrane or virus system). The advantage of PME over all-pairs grows roughly in proportion to $N$, which is what makes simulations with hundreds of thousands to millions of atoms feasible.</p>",
+  });
+})();
+</script>
+</body>
+</html>
