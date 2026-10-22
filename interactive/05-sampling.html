@@ -569,6 +569,183 @@ print("DW PMF calculation and plotting complete.")</code></pre><pre class="outpu
   }
   const stepOptions = (list, unit) => list.map((n) => ({ value: n, label: n.toLocaleString("en-US") + (unit || " steps") }));
 
+  // ---------------------------------------------------------------- live (animated) simulation labs
+  // Each of these labs integrates the equations of motion in your browser, one animation frame at a time:
+  // the particle moves in the well on the canvas while the plots below are redrawn from the data so far.
+  const PLOT_EVERY = 4;   // redraw plots + readouts every N animation frames
+  const SPEEDS = [0.25, 0.5, 1, 2, 4, 10].map((s) => ({ value: s, label: s + "×" }));
+
+  /**
+   * A stepwise 1D trajectory (m = 1). method "vv" = Velocity Verlet (NVE), "langevin" = BAOAB (NVT).
+   * advance(k) integrates k more steps and records x (and KE/PE when o.energy) every `stride` steps.
+   * Tracks well-to-well crossings (hysteresis at ±xm/2) and the number of samples with x > 0 as it goes.
+   */
+  function makeSim(o) {
+    const m = 1, dt = o.dt, stride = o.stride || 1, total = o.steps;
+    const nRec = Math.floor(total / stride) + 1;
+    const xs = new Float64Array(nRec);
+    const ke = o.energy ? new Float64Array(nRec) : null, pe = o.energy ? new Float64Array(nRec) : null;
+    const rng = P.rng(o.seed || 1);
+    const bath = o.method === "langevin";
+    const c1 = bath ? Math.exp(-o.gamma * dt) : 1;
+    const c2 = bath ? Math.sqrt((kB * Math.max(0, o.T) * (1 - c1 * c1)) / m) : 0;
+    let x = o.x0, v = o.v0, f = o.force(x), i = 0, side = o.x0 < 0 ? -1 : 1;
+    const sim = { xs, ke, pe, n: 0, step: 0, total, dt, stride, done: false, cross: 0, nRight: 0 };
+    const rec = () => {
+      xs[sim.n] = x;
+      if (ke) { ke[sim.n] = 0.5 * m * v * v; pe[sim.n] = o.V(x); }
+      sim.n++;
+      if (x > 0) sim.nRight++;
+      if (o.xm) {
+        if (side < 0 && x > 0.5 * o.xm) { side = 1; sim.cross++; } else if (side > 0 && x < -0.5 * o.xm) { side = -1; sim.cross++; }
+      }
+    };
+    rec();
+    sim.advance = (k) => {
+      const end = Math.min(total, i + k);
+      for (; i < end; i++) {
+        if (bath) {
+          v += (f / m) * (dt / 2);          // B
+          x += v * (dt / 2);                // A
+          v = c1 * v + c2 * rng.normal();   // O
+          x += v * (dt / 2);                // A
+          f = o.force(x);
+          v += (f / m) * (dt / 2);          // B
+        } else {
+          v += (f / m) * (dt / 2);          // Velocity Verlet: half kick, drift, half kick
+          x += v * dt;
+          f = o.force(x);
+          v += (f / m) * (dt / 2);
+        }
+        if ((i + 1) % stride === 0) rec();
+      }
+      sim.step = i;
+      sim.done = i >= total;
+    };
+    Object.defineProperties(sim, { x: { get: () => x }, v: { get: () => v } });
+    return sim;
+  }
+
+  /** Indices (≤ max, always including the newest sample) for plotting the first n samples. */
+  function plotIdx(n, max) {
+    const idx = thinIdx(n, max);
+    if (idx[idx.length - 1] !== n - 1) idx.push(n - 1);
+    return idx;
+  }
+
+  /** Draw the potential well, level lines, a fading trail and the particle riding on the curve. */
+  function drawWell(lab, sim, g, caption) {
+    const { ctx, w: W, h: H } = lab.canvas("cv");
+    ctx.clearRect(0, 0, W, H);
+    const padL = 16, padR = 16, padT = 36, padB = 14;
+    const sx = (x) => padL + ((x - g.xlim[0]) / (g.xlim[1] - g.xlim[0])) * (W - padL - padR);
+    const sy = (y) => H - padB - ((y - g.ylim[0]) / (g.ylim[1] - g.ylim[0])) * (H - padT - padB);
+    ctx.font = "12px system-ui, sans-serif";
+    (g.bands || []).forEach((b) => {
+      ctx.fillStyle = MD.alpha(b.color, b.alpha || 0.14);
+      ctx.fillRect(sx(b.x0), padT - 8, sx(b.x1) - sx(b.x0), H - padT - padB + 8);
+      if (b.label) { ctx.fillStyle = MD.css("--ink-3"); ctx.textAlign = "center"; ctx.fillText(b.label, (sx(b.x0) + sx(b.x1)) / 2, padT + 6); }
+    });
+    ctx.textAlign = "left";
+    ctx.save();
+    ctx.beginPath(); ctx.rect(padL, padT - 8, W - padL - padR, H - padT - padB + 8); ctx.clip();
+    ctx.strokeStyle = MD.css("--ink-2"); ctx.lineWidth = 2.5; ctx.beginPath();
+    P.linspace(g.xlim[0], g.xlim[1], 260).forEach((x, i) => { const px = sx(x), py = sy(g.V(x)); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+    ctx.stroke();
+    ctx.restore();
+    let prevY = -1e9;
+    (g.levels || []).forEach((lv) => {
+      const y = sy(lv.y);
+      ctx.strokeStyle = MD.color(lv.color); ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke(); ctx.setLineDash([]);
+      // put the label under its line when it would collide with the previous one
+      ctx.fillStyle = MD.css("--ink-2"); ctx.textAlign = "right"; ctx.fillText(lv.label, W - padR - 4, Math.abs(y - prevY) < 16 ? y + 14 : y - 5); ctx.textAlign = "left";
+      prevY = y;
+    });
+    const trail = g.trail || 30, n0 = Math.max(0, sim.n - trail);
+    ctx.fillStyle = MD.color("s1");
+    for (let j = n0; j < sim.n; j++) {
+      ctx.globalAlpha = 0.12 + 0.5 * ((j - n0 + 1) / (sim.n - n0));
+      ctx.beginPath(); ctx.arc(sx(sim.xs[j]), sy(Math.min(g.V(sim.xs[j]), g.ylim[1])) - 4, 3, 0, 2 * Math.PI); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    const px = Math.max(g.xlim[0], Math.min(g.xlim[1], sim.x));
+    ctx.fillStyle = MD.color("s2"); ctx.strokeStyle = MD.css("--surface"); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx(px), sy(Math.min(g.V(px), g.ylim[1])) - 9, 8, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = MD.css("--ink"); ctx.font = "600 13px system-ui, sans-serif"; ctx.fillText(caption, padL, 20);
+    ctx.fillStyle = MD.css("--ink-3"); ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "right";
+    ctx.fillText(`step ${sim.step.toLocaleString("en-US")} / ${sim.total.toLocaleString("en-US")}`, W - padR, 20);
+    ctx.textAlign = "left";
+  }
+
+  /**
+   * An animated simulation lab. cfg:
+   *   sim(p) -> makeSim options;  spf(p) -> integration steps per animation frame (at 1× speed)
+   *   well(p) -> { V, xlim, ylim, levels, bands, trail };  caption(sim, p) -> string for the canvas
+   *   draw(lab, sim, p) -> redraw the plots and readouts from the data recorded so far
+   *   keep: ids of controls that redraw without restarting the run (default: none)
+   *   onRestart(lab, p), buttons, onButton(id, p, lab, sim): optional extras
+   * Any change to a control that is not in `keep` restarts the run from t = 0 and plays it again.
+   */
+  function liveLab(sel, cfg) {
+    let sim = null, labRef = null, key = null, frame = 0, manualPause = false, autoPaused = false, visible = true;
+    const keep = ["speed"].concat(cfg.keep || []);
+    const spf = (p) => Math.max(1, Math.round(cfg.spf(p) * p.speed));
+    const label = (text) => { const b = labRef.button("play"); if (b) b.textContent = text; };
+    const paint = () => { if (sim && labRef) drawWell(labRef, sim, cfg.well(labRef.p), cfg.caption(sim, labRef.p)); };
+    function restart() {
+      const lab = labRef, p = lab.p;
+      sim = makeSim(cfg.sim(p));
+      frame = 0; manualPause = false; autoPaused = false;
+      paint(); cfg.draw(lab, sim, p);
+      if (cfg.onRestart) cfg.onRestart(lab, p);
+      if (visible) { lab.anim.start(); label("Pause"); } else { autoPaused = true; label("Play"); }
+    }
+    return makeLab(sel, {
+      title: cfg.title, badge: "Live simulation", intro: cfg.intro, foot: cfg.foot, cols: cfg.cols, live: true,
+      controls: cfg.controls.concat([
+        { type: "select", id: "speed", label: "Playback speed", options: SPEEDS, value: 1 },
+        { type: "buttons", items: [{ id: "play", label: "Pause" }, { id: "restart", label: "Restart", secondary: true }, { id: "skip", label: "Skip to end", secondary: true }].concat(cfg.buttons || []) },
+      ]),
+      panels: [{ id: "cv", kind: "canvas", aspect: cfg.aspect || 3.6, span: true }].concat(cfg.panels),
+      init(lab) {
+        labRef = lab;
+        lab.anim = lab.loop(() => {
+          sim.advance(spf(lab.p));
+          frame++;
+          paint();
+          if (frame % PLOT_EVERY === 0 || sim.done) cfg.draw(lab, sim, lab.p);
+          if (sim.done) label("Replay");
+          return !sim.done;
+        });
+        document.addEventListener("md:theme", paint);
+        if ("IntersectionObserver" in window) {
+          new IntersectionObserver((es) => {
+            visible = es.some((e) => e.isIntersecting);
+            if (!visible && lab.anim.running) { lab.anim.stop(); autoPaused = true; label("Play"); }
+            else if (visible && autoPaused && !manualPause && sim && !sim.done) { autoPaused = false; lab.anim.start(); label("Pause"); }
+          }).observe(lab.root);
+        }
+      },
+      run(p, lab) {
+        const k = JSON.stringify(Object.assign({}, p, ...keep.map((id) => ({ [id]: 0 }))));
+        if (k !== key) { key = k; restart(); } else if (sim) { paint(); cfg.draw(lab, sim, p); }
+      },
+      onButton(id, p, lab) {
+        if (id === "play") {
+          if (sim.done) restart();
+          else if (lab.anim.running) { lab.anim.stop(); manualPause = true; label("Play"); }
+          else { manualPause = false; autoPaused = false; lab.anim.start(); label("Pause"); }
+        } else if (id === "restart") restart();
+        else if (id === "skip") {
+          lab.anim.stop(); sim.advance(sim.total - sim.step); paint(); cfg.draw(lab, sim, p); label("Replay");
+        } else if (cfg.onButton) cfg.onButton(id, p, lab, sim);
+      },
+    });
+  }
+  const fmtPct = (v) => (100 * v).toFixed(1) + "%";
+  const clock = (sim) => (sim.step * sim.dt).toFixed(1);
+
   // ---------------------------------------------------------------- setup: the double well
   makeLab("#lab-dw-setup", {
     title: "potential_dw(x, a, b) and its barrier",
@@ -605,40 +782,49 @@ print("DW PMF calculation and plotting complete.")</code></pre><pre class="outpu
   });
 
   // ---------------------------------------------------------------- Lesson 1: NVE energy cases
-  makeLab("#lab-nve-cases", {
+  liveLab("#lab-nve-cases", {
     title: "NVE in the double well: trapped, rare or frequent crossings",
-    intro: "<p>Velocity Verlet (no thermostat) in $V = x^4 - 4x^2$ ($\\Delta V = 4$), starting at the left minimum with the kinetic energy needed to give total energy $E$ (measured from the well bottom). Without a heat bath, $E$ never changes — so whether the particle ever crosses is decided at $t = 0$.</p>",
+    intro: "<p>Velocity Verlet (no thermostat) in $V = x^4 - 4x^2$ ($\\Delta V = 4$), starting at the left minimum with the kinetic energy needed to give total energy $E$ (measured from the well bottom). Press play and watch the particle roll in the well while the trajectory and energy plots fill in. Without a heat bath, $E$ never changes — so whether the particle ever crosses is decided at $t = 0$.</p>",
     controls: [
       { type: "range", id: "ratio", label: "Total energy E / ΔV", min: 0.2, max: 3, step: 0.01, value: 0.9, hint: "Below 1: trapped. Just above 1: few crossings. Well above: frequent." },
       { type: "range", id: "tmax", label: "Simulation time", min: 20, max: 200, step: 10, value: 100 },
     ],
     cols: 2,
-    panels: [{ id: "traj", kind: "plot" }, { id: "pot", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
-    run(p, lab) {
-      const a = 1, b = 4, xm = Math.SQRT2, vmin = P.potential_dw(xm, a, b), dV = 4, dt = 0.01;
-      const E = p.ratio * dV;
-      const res = P.run1D({ x0: -xm, v0: Math.sqrt(2 * E), dt, steps: Math.round(p.tmax / dt), method: "vv", force: (x) => P.force_dw(x, a, b), potential: (x) => P.potential_dw(x, a, b) });
-      let cross = 0;
-      for (let i = 1; i < res.x.length; i++) if (Math.sign(res.x[i]) !== Math.sign(res.x[i - 1]) && res.x[i] !== 0) cross++;
-      const idx = thinIdx(res.t.length, 2000);
-      lab.plot("traj", [{ x: idx.map((i) => res.t[i]), y: idx.map((i) => res.x[i]), name: "x(t)", color: "s1", hovertemplate: "t = %{x:.1f}<br>x = %{y:.2f}<extra></extra>" }], {
-        title: { text: "Trajectory x(t)" }, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "Position x" }, range: [-2.4, 2.4] },
+    panels: [{ id: "traj", kind: "plot" }, { id: "en", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    spf: () => 20,
+    sim(p) {
+      const xm = Math.SQRT2, E = p.ratio * 4;
+      return { method: "vv", dt: 0.01, steps: Math.round(p.tmax / 0.01), x0: -xm, v0: Math.sqrt(2 * E), xm, energy: true,
+        force: (x) => P.force_dw(x, 1, 4), V: (x) => P.potential_dw(x, 1, 4) + 4 };
+    },
+    well(p) {
+      const E = p.ratio * 4;
+      return { V: (x) => P.potential_dw(x, 1, 4) + 4, xlim: [-2.3, 2.3], ylim: [-0.4, Math.max(7, 1.15 * E)], trail: 25,
+        levels: [{ y: E, label: "total energy E", color: "s2" }, { y: 4, label: "barrier top ΔV", color: "s8" }] };
+    },
+    caption: (sim) => `t = ${clock(sim)}   ·   barrier crossings: ${sim.cross}`,
+    draw(lab, sim, p) {
+      const n = sim.n, E = p.ratio * 4, dtRec = sim.dt * sim.stride, idx = plotIdx(n, 1500), t = idx.map((i) => i * dtRec);
+      lab.plot("traj", [{ x: t, y: idx.map((i) => sim.xs[i]), name: "x(t)", color: "s1", hovertemplate: "t = %{x:.1f}<br>x = %{y:.2f}<extra></extra>" }], {
+        title: { text: "Trajectory x(t)" }, xaxis: { title: { text: "Time" }, range: [0, p.tmax] }, yaxis: { title: { text: "Position x" }, range: [-2.4, 2.4] },
         shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, line: { color: "s8", width: 1, dash: "dot" } }],
       });
-      const xs = P.linspace(-2.3, 2.3, 301);
-      lab.plot("pot", [
-        { x: xs, y: xs.map((x) => P.potential_dw(x, a, b) - vmin), name: "V(x) − V<sub>min</sub>", color: "s1" },
-        { x: [-2.3, 2.3], y: [E, E], mode: "lines", name: "total energy E", color: "s2", line: { dash: "dash" } },
-      ], { margin: { t: 64 }, title: { text: "Energy vs. potential" }, xaxis: { title: { text: "Position x" } }, yaxis: { title: { text: "Energy (shifted)" }, range: [-0.5, Math.max(8, E + 1)] } });
-      const drift = P.max(res.te) - P.min(res.te);
+      const tot = idx.map((i) => sim.ke[i] + sim.pe[i]);
+      lab.plot("en", [
+        { x: t, y: idx.map((i) => sim.ke[i]), name: "kinetic", color: "s2" },
+        { x: t, y: idx.map((i) => sim.pe[i]), name: "potential (shifted)", color: "s1" },
+        { x: t, y: tot, name: "total", color: "ink", line: { dash: "dash", width: 1.5 } },
+      ], { margin: { t: 64 }, title: { text: "Energy exchange" }, xaxis: { title: { text: "Time" }, range: [0, p.tmax] }, yaxis: { title: { text: "Energy" }, range: [-0.3, 1.15 * E + 0.5] } });
+      let lo = Infinity, hi = -Infinity;
+      for (let i = 0; i < n; i++) { const e = sim.ke[i] + sim.pe[i]; if (e < lo) lo = e; if (e > hi) hi = e; }
       lab.readouts("ro", [
-        { k: "E − V<sub>min</sub> vs ΔV", v: `${E.toFixed(2)} vs ${dV.toFixed(2)}` },
-        { k: "Barrier crossings", v: String(cross), cls: cross ? "good" : "bad" },
-        { k: "Verdict", v: E < dV ? "trapped in the left well" : cross <= 6 ? "only a few crossings" : "crosses frequently" },
-        { k: "Energy drift (max − min)", v: MD.fmt(drift, 2) },
+        { k: "E − V<sub>min</sub> vs ΔV", v: `${E.toFixed(2)} vs 4.00` },
+        { k: "Barrier crossings so far", v: String(sim.cross), cls: sim.cross ? "good" : "bad" },
+        { k: sim.done ? "Verdict" : "Verdict so far", v: E < 4 ? "trapped in the left well" : sim.cross === 0 ? "no crossing yet" : sim.cross <= 6 ? "only a few crossings" : "crosses frequently" },
+        { k: "Energy drift (max − min)", v: MD.fmt(hi - lo, 2) },
       ]);
     },
-    foot: "<strong>What to try:</strong> set $E/\\Delta V = 0.99$, then $1.01$ — one hundredth of the barrier separates “never” from “sometimes”. Close to the barrier the particle crawls over the top, so the time between crossings grows without bound. Then try $E/\\Delta V = 2$.",
+    foot: "<strong>What to try:</strong> set $E/\\Delta V = 0.99$, then $1.01$ — one hundredth of the barrier separates “never” from “sometimes”. Close to the barrier the particle crawls over the top, so the time between crossings grows without bound. Then try $E/\\Delta V = 2$ and watch the kinetic and potential energy trade places while the total stays flat.",
   });
 
   // ---------------------------------------------------------------- Lesson 1: rare events with a thermostat
@@ -667,43 +853,54 @@ print("DW PMF calculation and plotting complete.")</code></pre><pre class="outpu
         annotations: zero.length ? [{ xref: "paper", yref: "paper", x: 0.98, y: 0.95, xanchor: "right", text: "no crossings at ΔV/k<sub>B</sub>T ≥ " + Math.min(...zero.map((s) => s.r)), showarrow: false }] : [],
       });
     }
-    makeLab("#lab-rare-events", {
+    const geom = (p) => { const b = 2 * Math.sqrt(p.dV), xm = Math.sqrt(b / 2); return { b, xm, vmin: -b * b / 4 }; };
+    liveLab("#lab-rare-events", {
       title: "Rare events: a thermostatted particle in the double well",
-      intro: "<p>Now the particle is coupled to a Langevin heat bath (BAOAB, $\\Delta t = 0.01$, $m = 1$), so it can borrow energy from thermal fluctuations. Whether it crosses depends on the ratio of the barrier $\\Delta V$ to the thermal energy $k_BT$. The counter registers a crossing when the particle gets halfway into the opposite well.</p>",
+      intro: "<p>Now the particle is coupled to a Langevin heat bath (BAOAB, $\\Delta t = 0.01$, $m = 1$), so it can borrow energy from thermal fluctuations. Press play: the particle jiggles in the left well, and every so often a fluctuation is big enough to carry it over. Whether that happens depends on the ratio of the barrier $\\Delta V$ to the thermal energy $k_BT$. The counter registers a crossing when the particle gets halfway into the opposite well; the histogram on the right fills in toward the exact Boltzmann curve.</p>",
       controls: [
         { type: "range", id: "dV", label: "Barrier height ΔV", min: 1, max: 8, step: 0.5, value: 4, hint: "a = 1, b = 2√ΔV (ΔV = 4 is a = 1, b = 4)." },
         { type: "range", id: "T", label: "Temperature k<sub>B</sub>T", min: 0.2, max: 3, step: 0.05, value: 0.8 },
         { type: "range", id: "gamma", label: "Friction γ", min: 0.1, max: 5, step: 0.1, value: 1 },
         { type: "select", id: "steps", label: "Run length", options: stepOptions([50000, 200000, 500000]), value: 200000 },
         { type: "range", id: "seed", label: "Random seed", min: 1, max: 30, step: 1, value: 1 },
-        { type: "buttons", items: [{ id: "scan", label: "Scan ΔV/k<sub>B</sub>T" }] },
       ],
+      buttons: [{ id: "scan", label: "Scan ΔV/k<sub>B</sub>T", secondary: true }],
       cols: 2,
-      live: "change",
-      panels: [{ id: "traj", kind: "plot" }, { id: "pot", kind: "plot" }, { id: "ro", kind: "readouts", span: true }, { id: "scan", kind: "plot", span: true, cls: "short" }],
+      panels: [{ id: "traj", kind: "plot" }, { id: "hist", kind: "plot" }, { id: "ro", kind: "readouts", span: true }, { id: "scan", kind: "plot", span: true, cls: "short" }],
       foot: "<strong>What to try:</strong> at the default $k_BT = 0.8$ ($\\Delta V/k_BT = 5$) you see a handful of crossings in 200,000 steps. Drop to $k_BT = 0.4$ — the double-well PMF setting below — and there are none. Then press <em>Scan</em>: on the log axis the counts fall roughly on a straight line, each extra $k_BT$ of barrier costing a factor of about $e \\approx 2.7$. Friction changes the prefactor (try $\\gamma = 0.1$ and 5) but not this exponential.",
-      run(p, lab) {
-        const { xs, xm, a, b } = sim(p, p.T, p.steps);
-        const n = countTransitions(xs, xm);
-        const dtRec = 0.1, tTot = p.steps * 0.01;
-        const idx = thinIdx(xs.length, 2000);
-        lab.plot("traj", [{ x: idx.map((i) => i * dtRec), y: idx.map((i) => xs[i]), name: "x(t)", color: "s1", hovertemplate: "t = %{x:.0f}<br>x = %{y:.2f}<extra></extra>" }], {
-          title: { text: `Trajectory at k<sub>B</sub>T = ${p.T.toFixed(2)}` }, xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "Position x" }, range: [-1.9 * xm, 1.9 * xm] },
-          shapes: [-0.5, 0.5].map((s) => ({ type: "line", xref: "paper", x0: 0, x1: 1, y0: s * xm, y1: s * xm, line: { color: "s8", width: 1, dash: "dot" } })),
+      spf: (p) => Math.round(p.steps / 400),
+      sim(p) {
+        const g = geom(p);
+        return { method: "langevin", dt: 0.01, gamma: p.gamma, T: p.T, steps: p.steps, stride: 10, x0: -g.xm, v0: 0, seed: p.seed, xm: g.xm,
+          force: (x) => P.force_dw(x, 1, g.b), V: (x) => P.potential_dw(x, 1, g.b) - g.vmin };
+      },
+      well(p) {
+        const g = geom(p);
+        return { V: (x) => P.potential_dw(x, 1, g.b) - g.vmin, xlim: [-1.8 * g.xm, 1.8 * g.xm], ylim: [-0.15 * p.dV, 1.6 * p.dV], trail: 30,
+          levels: [{ y: p.T, label: "k_BT above the well bottom", color: "s2" }],
+          bands: [{ x0: -1.8 * g.xm, x1: -0.5 * g.xm, color: "s1", alpha: 0.1, label: "left well" }, { x0: 0.5 * g.xm, x1: 1.8 * g.xm, color: "s2", alpha: 0.1, label: "right well" }] };
+      },
+      caption: (sim) => `t = ${clock(sim)}   ·   crossings: ${sim.cross}`,
+      onRestart: drawScan,
+      draw(lab, sim, p) {
+        const g = geom(p), n = sim.n, dtRec = sim.dt * sim.stride, tTot = p.steps * 0.01, idx = plotIdx(n, 1500);
+        lab.plot("traj", [{ x: idx.map((i) => i * dtRec), y: idx.map((i) => sim.xs[i]), name: "x(t)", color: "s1", hovertemplate: "t = %{x:.0f}<br>x = %{y:.2f}<extra></extra>" }], {
+          title: { text: `Trajectory at k<sub>B</sub>T = ${p.T.toFixed(2)}` }, xaxis: { title: { text: "Time" }, range: [0, tTot] }, yaxis: { title: { text: "Position x" }, range: [-1.9 * g.xm, 1.9 * g.xm] },
+          shapes: [-0.5, 0.5].map((s) => ({ type: "line", xref: "paper", x0: 0, x1: 1, y0: s * g.xm, y1: s * g.xm, line: { color: "s8", width: 1, dash: "dot" } })),
         });
-        const grid = P.linspace(-1.8 * xm, 1.8 * xm, 301), vmin = P.potential_dw(xm, a, b);
-        lab.plot("pot", [
-          { x: grid, y: grid.map((x) => P.potential_dw(x, a, b) - vmin), name: "V(x) − V<sub>min</sub>", color: "s1" },
-          { x: [-1.8 * xm, 1.8 * xm], y: [p.T, p.T], mode: "lines", name: "k<sub>B</sub>T above the well bottom", color: "s2", line: { dash: "dash" } },
-        ], { margin: { t: 64 }, title: { text: "Barrier vs. thermal energy" }, xaxis: { title: { text: "Position x" } }, yaxis: { title: { text: "Energy (shifted)" }, range: [-0.3 * p.dV, 1.6 * p.dV] } });
+        const lim = 1.8 * g.xm, H = P.histogram(sim.xs.subarray(0, n), 50, [-lim, lim]);
+        const grid = P.linspace(-lim, lim, 241), ex = boltzmann(grid, (x) => P.potential_dw(x, 1, g.b), p.T);
+        lab.plot("hist", [
+          { type: "bar", x: H.centers, y: H.density, width: H.width, name: "sampled so far", color: "s1", opacity: 0.7, hovertemplate: "x = %{x:.2f}<br>P = %{y:.3f}<extra></extra>" },
+          { x: grid, y: ex, name: "exact Boltzmann", color: "ink", line: { dash: "dash", width: 1.5 }, hoverinfo: "skip" },
+        ], { margin: { t: 64 }, title: { text: "Position histogram vs. Boltzmann" }, bargap: 0, xaxis: { title: { text: "Position x" }, range: [-lim, lim] }, yaxis: { title: { text: "Probability density" }, range: [0, 2.1 * P.max(ex)] } });
         lab.readouts("ro", [
           { k: "ΔV / k<sub>B</sub>T", v: (p.dV / p.T).toFixed(1) },
           { k: "Boltzmann factor e<sup>−ΔV/k<sub>B</sub>T</sup>", v: Math.exp(-p.dV / p.T).toExponential(2) },
-          { k: "Crossings observed", v: String(n), cls: n === 0 ? "bad" : n < 5 ? "" : "good" },
-          { k: "Mean time between crossings", v: n ? (tTot / n).toFixed(0) + " (of " + tTot.toFixed(0) + ")" : "> " + tTot.toFixed(0) },
-          { k: "Fraction of time in right well", v: (100 * fracWhere(xs, (x) => x > 0)).toFixed(1) + "%" },
+          { k: "Crossings so far", v: String(sim.cross), cls: sim.cross === 0 ? "bad" : sim.cross < 5 ? "" : "good" },
+          { k: "Mean time between crossings", v: sim.cross ? (sim.step * 0.01 / sim.cross).toFixed(0) + " (t = " + (sim.step * 0.01).toFixed(0) + ")" : "none yet (t = " + (sim.step * 0.01).toFixed(0) + ")" },
+          { k: "Fraction of time in right well", v: fmtPct(sim.nRight / sim.n) },
         ]);
-        drawScan(lab);
       },
       onButton(id, p, lab) {
         if (id !== "scan") return;
@@ -717,23 +914,33 @@ print("DW PMF calculation and plotting complete.")</code></pre><pre class="outpu
   })();
 
   // ---------------------------------------------------------------- Lesson 2: x as the CV
-  makeLab("#lab-cv-states", {
+  liveLab("#lab-cv-states", {
     title: "Reading a trajectory through the CV x",
-    intro: "<p>A 200,000-step Langevin run in the double well ($\\Delta V = 4$, $\\gamma = 1$). The CV $x$ sorts every frame into the left well, the transition region $|x| &lt; x^*$, or the right well. Notice how little time is spent in the transition region, even though every crossing must pass through it.</p>",
+    intro: "<p>A 200,000-step Langevin run in the double well ($\\Delta V = 4$, $\\gamma = 1$), played live. The CV $x$ sorts every frame into the left well, the transition region $|x| &lt; x^*$, or the right well, and the bars on the right keep a running tally. Notice how little time is spent in the transition region, even though every crossing must pass through it. You can move $x^*$ while the run is going.</p>",
     controls: [
       { type: "range", id: "T", label: "Temperature k<sub>B</sub>T", min: 0.4, max: 2, step: 0.05, value: 1 },
       { type: "range", id: "w", label: "Transition-region half-width x*", min: 0.1, max: 1.2, step: 0.05, value: 0.5 },
       { type: "range", id: "seed", label: "Random seed", min: 1, max: 30, step: 1, value: 2 },
     ],
-    live: "change",
-    panels: [{ id: "traj", kind: "plot" }, { id: "ro", kind: "readouts" }],
-    run(p, lab) {
-      const a = 1, b = 4, xm = Math.SQRT2;
-      const xs = langevin({ force: (x) => P.force_dw(x, a, b), dt: 0.01, gamma: 1, T: p.T, steps: 200000, stride: 10, x0: -xm, v0: 0, seed: p.seed });
-      const idx = thinIdx(xs.length, 2500);
+    keep: ["w"],
+    cols: 2,
+    panels: [{ id: "traj", kind: "plot" }, { id: "bars", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    spf: () => 500,
+    sim(p) {
+      return { method: "langevin", dt: 0.01, gamma: 1, T: p.T, steps: 200000, stride: 10, x0: -Math.SQRT2, v0: 0, seed: p.seed, xm: Math.SQRT2,
+        force: (x) => P.force_dw(x, 1, 4), V: (x) => P.potential_dw(x, 1, 4) + 4 };
+    },
+    well(p) {
+      return { V: (x) => P.potential_dw(x, 1, 4) + 4, xlim: [-2.3, 2.3], ylim: [-0.4, 6], trail: 30,
+        levels: [{ y: p.T, label: "k_BT above the well bottom", color: "s2" }],
+        bands: [{ x0: -2.3, x1: -p.w, color: "s1", alpha: 0.12, label: "left well" }, { x0: -p.w, x1: p.w, color: "s4", alpha: 0.25, label: "transition region" }, { x0: p.w, x1: 2.3, color: "s2", alpha: 0.12, label: "right well" }] };
+    },
+    caption: (sim) => `t = ${clock(sim)}   ·   crossings: ${sim.cross}`,
+    draw(lab, sim, p) {
+      const n = sim.n, xs = sim.xs.subarray(0, n), idx = plotIdx(n, 2000);
       const band = (y0, y1, c) => ({ type: "rect", xref: "paper", x0: 0, x1: 1, y0, y1, fillcolor: c, line: { width: 0 }, layer: "below" });
       lab.plot("traj", [{ x: idx.map((i) => i * 0.1), y: idx.map((i) => xs[i]), name: "x(t)", color: "ink-3", line: { width: 1 }, hovertemplate: "t = %{x:.0f}<br>x = %{y:.2f}<extra></extra>" }], {
-        xaxis: { title: { text: "Time" } }, yaxis: { title: { text: "CV: position x" }, range: [-2.4, 2.4] },
+        title: { text: "Trajectory x(t)" }, xaxis: { title: { text: "Time" }, range: [0, 2000] }, yaxis: { title: { text: "CV: position x" }, range: [-2.4, 2.4] },
         shapes: [band(-2.4, -p.w, "s1"), band(-p.w, p.w, MD.alpha("s4", 0.28)), band(p.w, 2.4, "s2"),
           ...[-p.w, p.w].map((y) => ({ type: "line", xref: "paper", x0: 0, x1: 1, y0: y, y1: y, line: { color: "s4", width: 1.5, dash: "dot" } }))],
         annotations: [
@@ -742,12 +949,15 @@ print("DW PMF calculation and plotting complete.")</code></pre><pre class="outpu
           { xref: "paper", x: 0.99, y: 1.9, xanchor: "right", text: "right well", showarrow: false },
         ],
       });
-      const fl = fracWhere(xs, (x) => x < -p.w), fr = fracWhere(xs, (x) => x > p.w);
+      const fl = fracWhere(xs, (x) => x < -p.w), fr = fracWhere(xs, (x) => x > p.w), ft = 1 - fl - fr;
+      lab.plot("bars", [{ type: "bar", x: ["left well", "transition region", "right well"], y: [100 * fl, 100 * ft, 100 * fr],
+        marker: { color: [MD.color("s1"), MD.color("s4"), MD.color("s2")] }, hovertemplate: "%{x}<br>%{y:.1f}% of frames<extra></extra>" }],
+        { margin: { t: 64 }, title: { text: "Share of frames so far" }, showlegend: false, yaxis: { title: { text: "% of frames" }, range: [0, 100] } });
       lab.readouts("ro", [
-        { k: "Time in left well", v: (100 * fl).toFixed(1) + "%" },
-        { k: "Time in transition region", v: (100 * (1 - fl - fr)).toFixed(1) + "%", cls: "bad" },
-        { k: "Time in right well", v: (100 * fr).toFixed(1) + "%" },
-        { k: "Crossings", v: String(countTransitions(xs, xm)) },
+        { k: "Time in left well", v: fmtPct(fl) },
+        { k: "Time in transition region", v: fmtPct(ft), cls: "bad" },
+        { k: "Time in right well", v: fmtPct(fr) },
+        { k: "Crossings", v: String(sim.cross) },
       ]);
     },
     foot: "<strong>What to try:</strong> lower $k_BT$ to 0.6 and watch the transition-region share collapse — exactly the region the PMF needs most. Widen $x^*$ until it reaches the minima at $\\pm 1.41$: the “transition” band then swallows the wells and $x$ no longer tells the states apart.",
@@ -790,9 +1000,9 @@ print("DW PMF calculation and plotting complete.")</code></pre><pre class="outpu
   });
 
   // ---------------------------------------------------------------- Example 1: SHO PMF
-  makeLab("#lab-sho-pmf", {
+  liveLab("#lab-sho-pmf", {
     title: "SHO: position histogram and PMF vs. analytical potential",
-    intro: "<p>The Python run above, live: 100,000 BAOAB steps ($\\Delta t = 0.01$, $\\gamma = 1$, $k_BT = 1$, $k = 1$), starting at $x = 0$ with $v = \\sqrt{k_BT/m}$, recording every 10th position. The histogram uses 50 bins over the sampled range (<code>np.histogram</code> default) and the PMF follows the recipe in the Python code.</p>",
+    intro: "<p>The Python run above, live: up to 100,000 BAOAB steps ($\\Delta t = 0.01$, $\\gamma = 1$, $k_BT = 1$, $k = 1$), starting at $x = 0$ with $v = \\sqrt{k_BT/m}$, recording every 10th position. Press play: as the particle oscillates and gets kicked around, the histogram builds up and the PMF — computed from it with the recipe in the Python code — settles onto the potential. Bins are laid over $\\pm 4.5$ standard deviations so they stay put while data arrive.</p>",
     controls: [
       { type: "range", id: "k", label: "Spring constant k_sh", min: 0.25, max: 4, step: 0.05, value: 1 },
       { type: "range", id: "T", label: "Temperature target_temp_sho", min: 0.2, max: 3, step: 0.05, value: 1 },
@@ -802,44 +1012,56 @@ print("DW PMF calculation and plotting complete.")</code></pre><pre class="outpu
       { type: "range", id: "seed", label: "Random seed", min: 1, max: 30, step: 1, value: 1 },
       { type: "check", id: "exact", label: "Overlay the exact Boltzmann density", value: true },
     ],
+    keep: ["bins", "exact"],
     cols: 2,
-    live: "change",
     panels: [{ id: "hist", kind: "plot" }, { id: "pmf", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
-    run(p, lab) {
-      const xs = langevin({ force: (x) => P.force_sh(x, p.k), dt: 0.01, gamma: p.gamma, T: p.T, steps: p.steps, stride: 10, x0: 0, v0: Math.sqrt((p.T * kB) / 1), seed: p.seed });
-      const H = P.histogram(xs, p.bins);
+    spf: (p) => Math.round(p.steps / 400),
+    sim(p) {
+      return { method: "langevin", dt: 0.01, gamma: p.gamma, T: p.T, steps: p.steps, stride: 10, x0: 0, v0: Math.sqrt((p.T * kB) / 1), seed: p.seed,
+        force: (x) => P.force_sh(x, p.k), V: (x) => P.potential_sh(x, p.k) };
+    },
+    well(p) {
+      const sig = Math.sqrt(p.T / p.k);
+      return { V: (x) => P.potential_sh(x, p.k), xlim: [-4 * sig, 4 * sig], ylim: [0, 8 * p.T], trail: 30,
+        levels: [{ y: p.T, label: "k_BT", color: "s2" }] };
+    },
+    caption: (sim, p) => `t = ${clock(sim)}   ·   recorded positions: ${sim.n.toLocaleString("en-US")}`,
+    draw(lab, sim, p) {
+      const n = sim.n, xs = sim.xs.subarray(0, n), sig = Math.sqrt(p.T / p.k), lim = 4.5 * sig;
+      const H = P.histogram(xs, p.bins, [-lim, lim]);
       const pmf = pmfFromHist(H.density, p.T);
-      const Vc = H.centers.map((x) => P.potential_sh(x, p.k));
-      const vmin = P.min(Vc);
+      const Vc = H.centers.map((x) => P.potential_sh(x, p.k)), vmin = P.min(Vc);
+      const peak = 1 / (sig * Math.sqrt(2 * Math.PI));
       const traces = [{ type: "bar", x: H.centers, y: H.density, width: H.width, name: "Position histogram", color: "s1", opacity: 0.7, hovertemplate: "x = %{x:.2f}<br>P = %{y:.3f}<extra></extra>" }];
       if (p.exact) {
-        const g = P.linspace(H.edges[0], H.edges[H.edges.length - 1], 200);
-        const sig = Math.sqrt(p.T / p.k);
+        const g = P.linspace(-lim, lim, 200);
         traces.push({ x: g, y: g.map((x) => Math.exp(-0.5 * (x / sig) ** 2) / (sig * Math.sqrt(2 * Math.PI))), name: "exact Boltzmann", color: "s8", line: { dash: "dash" } });
       }
-      lab.plot("hist", traces, { margin: { t: 64 }, title: { text: "SHO Position Distribution (NVT)" }, bargap: 0, showlegend: p.exact, xaxis: { title: { text: "Position (x)" } }, yaxis: { title: { text: "Probability Density P(x)" }, rangemode: "tozero" } });
+      lab.plot("hist", traces, { margin: { t: 64 }, title: { text: "SHO Position Distribution (NVT)" }, bargap: 0, showlegend: p.exact, xaxis: { title: { text: "Position (x)" }, range: [-lim, lim] }, yaxis: { title: { text: "Probability Density P(x)" }, range: [0, 1.3 * peak] } });
       lab.plot("pmf", [
         { x: H.centers, y: pmf, mode: "lines+markers", name: "PMF from Simulation", color: "s1", marker: { size: 6 }, connectgaps: false },
         { x: H.centers, y: Vc.map((v) => v - vmin), name: "Analytical Potential V(x)", color: "s8", line: { dash: "dash" } },
-      ], { margin: { t: 64 }, title: { text: "SHO: Calculated PMF vs Analytical Potential" }, xaxis: { title: { text: "Position (x)" } }, yaxis: { title: { text: "Free Energy / Potential (shifted)" }, range: [-1, 6] } });
+      ], { margin: { t: 64 }, title: { text: "SHO: Calculated PMF vs Analytical Potential" }, xaxis: { title: { text: "Position (x)" }, range: [-lim, lim] }, yaxis: { title: { text: "Free Energy / Potential (shifted)" }, range: [-1, 6] } });
       // agreement where the bins are well populated (V < 3 kT)
       let s2 = 0, nOk = 0;
       pmf.forEach((f, i) => { if (f !== null && Vc[i] - vmin < 3 * p.T) { s2 += (f - (Vc[i] - vmin)) ** 2; nOk++; } });
-      const x2 = P.mean(Array.from(xs, (x) => x * x));
+      let x2 = 0;
+      for (let i = 0; i < n; i++) x2 += xs[i] * xs[i];
+      x2 /= n;
       lab.readouts("ro", [
-        { k: "Recorded positions", v: xs.length.toLocaleString("en-US") },
+        { k: "Recorded positions", v: n.toLocaleString("en-US") },
         { k: "⟨x²⟩ simulated vs k<sub>B</sub>T/k", v: `${x2.toFixed(3)} vs ${(p.T / p.k).toFixed(3)}` },
         { k: "RMS(PMF − V) where V &lt; 3k<sub>B</sub>T", v: nOk ? Math.sqrt(s2 / nOk).toFixed(3) : "—" },
         { k: "Empty bins", v: String(pmf.filter((f) => f === null).length) },
       ]);
     },
-    foot: "<strong>What to try:</strong> cut the run to 10,000 steps and watch the PMF get ragged at the edges, where few samples land. Change $k$ or $k_BT$: the histogram widens or narrows ($\\langle x^2\\rangle = k_BT/k$), yet the PMF still lands on $\\tfrac12 kx^2$ — free energy does not depend on how hot it is for a single coordinate. (Expect $\\langle x^2\\rangle$ to miss $k_BT/k$ by ~10% at 100,000 steps: successive samples are correlated, so 10,000 recorded positions are worth far fewer independent ones.)",
+    foot: "<strong>What to try:</strong> watch the PMF early on — ragged and full of gaps — then smooth out as samples accumulate. Cut the run to 10,000 steps and the edges stay ragged, because few samples land there. Change $k$ or $k_BT$: the histogram widens or narrows ($\\langle x^2\\rangle = k_BT/k$), yet the PMF still lands on $\\tfrac12 kx^2$ — free energy does not depend on how hot it is for a single coordinate. (Expect $\\langle x^2\\rangle$ to miss $k_BT/k$ by ~10% at 100,000 steps: successive samples are correlated, so 10,000 recorded positions are worth far fewer independent ones.)",
   });
 
   // ---------------------------------------------------------------- Example 2: DW PMF
-  makeLab("#lab-dw-pmf", {
+  liveLab("#lab-dw-pmf", {
     title: "Double well: histogram and PMF at k<sub>B</sub>T = 0.4",
-    intro: "<p>The Python run above: 200,000 BAOAB steps ($\\Delta t = 0.01$, $\\gamma = 1$) at <code>target_temp_dw = 0.1 × barrier_height</code> $= 0.4$, starting at rest in the left minimum, 50 bins over $[-2.5, 2.5]$. Empty bins have no PMF value and are left as gaps.</p>",
+    intro: "<p>The Python run above, live: up to 200,000 BAOAB steps ($\\Delta t = 0.01$, $\\gamma = 1$) at <code>target_temp_dw = 0.1 × barrier_height</code> $= 0.4$, starting at rest in the left minimum, 50 bins over $[-2.5, 2.5]$. Press play and watch the particle stay in its well while the histogram and PMF fill in — only where the particle has actually been. Empty bins have no PMF value and are left as gaps.</p>",
     controls: [
       { type: "range", id: "T", label: "Temperature target_temp_dw", min: 0.2, max: 3, step: 0.05, value: 0.4 },
       { type: "range", id: "b", label: "b_dw (barrier = b²/4, a = 1)", min: 2, max: 6, step: 0.25, value: 4 },
@@ -849,40 +1071,51 @@ print("DW PMF calculation and plotting complete.")</code></pre><pre class="outpu
       { type: "range", id: "seed", label: "Random seed", min: 1, max: 30, step: 1, value: 1 },
     ],
     cols: 2,
-    live: "change",
     panels: [{ id: "hist", kind: "plot" }, { id: "pmf", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
-    run(p, lab) {
-      const a = 1, b = p.b, xm = Math.sqrt(b / (2 * a)), vmin = P.potential_dw(xm, a, b), dV = -vmin;
-      const x0 = p.start === "left" ? -xm : p.start === "right" ? xm : 0;
-      const xs = langevin({ force: (x) => P.force_dw(x, a, b), dt: 0.01, gamma: p.gamma, T: p.T, steps: p.steps, stride: 10, x0, v0: 0, seed: p.seed });
+    spf: (p) => Math.round(p.steps / 400),
+    sim(p) {
+      const xm = Math.sqrt(p.b / 2), vmin = P.potential_dw(xm, 1, p.b);
+      return { method: "langevin", dt: 0.01, gamma: p.gamma, T: p.T, steps: p.steps, stride: 10, seed: p.seed, xm,
+        x0: p.start === "left" ? -xm : p.start === "right" ? xm : 0, v0: 0,
+        force: (x) => P.force_dw(x, 1, p.b), V: (x) => P.potential_dw(x, 1, p.b) - vmin };
+    },
+    well(p) {
+      const xm = Math.sqrt(p.b / 2), vmin = P.potential_dw(xm, 1, p.b), dV = -vmin;
+      return { V: (x) => P.potential_dw(x, 1, p.b) - vmin, xlim: [-2.5, 2.5], ylim: [-0.15 * dV, 1.6 * dV], trail: 30,
+        levels: [{ y: p.T, label: "k_BT above the well bottom", color: "s2" }],
+        bands: [{ x0: -2.5, x1: 0, color: "s1", alpha: 0.08, label: "left well" }, { x0: 0, x1: 2.5, color: "s2", alpha: 0.08, label: "right well" }] };
+    },
+    caption: (sim) => `t = ${clock(sim)}   ·   crossings: ${sim.cross}`,
+    draw(lab, sim, p) {
+      const n = sim.n, xs = sim.xs.subarray(0, n), xm = Math.sqrt(p.b / 2), vmin = P.potential_dw(xm, 1, p.b), dV = -vmin;
       const H = P.histogram(xs, 50, [-2.5, 2.5]);
       const pmf = pmfFromHist(H.density, p.T);
-      const Va = H.centers.map((x) => P.potential_dw(x, a, b) - vmin);
+      const Va = H.centers.map((x) => P.potential_dw(x, 1, p.b) - vmin);
+      const ex = boltzmann(P.linspace(-2.5, 2.5, 241), (x) => P.potential_dw(x, 1, p.b), p.T);
       lab.plot("hist", [{ type: "bar", x: H.centers, y: H.density, width: H.width, name: "Position histogram", color: "s1", opacity: 0.7, hovertemplate: "x = %{x:.2f}<br>P = %{y:.3f}<extra></extra>" }],
-        { title: { text: `DW Position Distribution (NVT, T=${p.T.toFixed(1)})` }, bargap: 0, xaxis: { title: { text: "Position (x)" }, range: [-2.7, 2.7] }, yaxis: { title: { text: "Probability Density P(x)" }, rangemode: "tozero" } });
+        { title: { text: `DW Position Distribution (NVT, T=${p.T.toFixed(1)})` }, bargap: 0, xaxis: { title: { text: "Position (x)" }, range: [-2.7, 2.7] }, yaxis: { title: { text: "Probability Density P(x)" }, range: [0, 2.1 * P.max(ex)] } });
       lab.plot("pmf", [
         { x: H.centers, y: pmf, mode: "lines+markers", name: "PMF from Simulation", color: "s1", marker: { size: 6 }, connectgaps: false },
         { x: H.centers, y: Va, name: "Analytical Potential V(x)", color: "s8", line: { dash: "dash" } },
       ], { margin: { t: 64 }, title: { text: `DW: Calculated PMF vs Analytical Potential (T=${p.T.toFixed(1)})` }, xaxis: { title: { text: "Position (x)" }, range: [-2.7, 2.7] }, yaxis: { title: { text: "Free Energy / Potential (shifted)" }, range: [-1, dV > 0 ? dV * 1.5 : 5] } });
-      const n = countTransitions(xs, xm);
       const empty = pmf.filter((f) => f === null).length;
       const iTop = H.centers.reduce((best, c, i) => (Math.abs(c) < Math.abs(H.centers[best]) ? i : best), 0);
       const topF = pmf[iTop] === null && pmf[iTop + 1] !== null ? pmf[iTop + 1] : pmf[iTop];
       lab.readouts("ro", [
         { k: "Target temperature (barrier height) · ΔV/k<sub>B</sub>T", v: `${p.T.toFixed(2)} (${dV.toFixed(2)}) · ${(dV / p.T).toFixed(1)}` },
-        { k: "Crossings", v: String(n), cls: n === 0 ? "bad" : "good" },
-        { k: "Time in right well", v: (100 * fracWhere(xs, (x) => x > 0)).toFixed(1) + "%" },
+        { k: "Crossings so far", v: String(sim.cross), cls: sim.cross === 0 ? "bad" : "good" },
+        { k: "Time in right well", v: fmtPct(sim.nRight / sim.n) },
         { k: "Empty bins (no PMF)", v: `${empty} / 50`, cls: empty > 25 ? "bad" : "" },
         { k: "PMF near x = 0 vs true ΔV", v: topF === null || topF === undefined ? `missing vs ${dV.toFixed(2)}` : `${topF.toFixed(2)} vs ${dV.toFixed(2)}`, cls: topF === null || topF === undefined ? "bad" : "" },
       ]);
     },
-    foot: "<strong>What to try:</strong> at the default $k_BT = 0.4$ ($\\Delta V/k_BT = 10$) only the left well appears. Raise $k_BT$ to 0.8, then 1.0, and watch the right well and the barrier fill in. Start at the right minimum instead: the PMF flips sides — the result depends on where you started, a hallmark of non-ergodic sampling. Lower $b$ to 3 at $k_BT = 0.4$ to shrink the barrier rather than heat the system.",
+    foot: "<strong>What to try:</strong> at the default $k_BT = 0.4$ ($\\Delta V/k_BT = 10$) only the left well appears. Raise $k_BT$ to 0.8, then 1.0, and watch the right well and the barrier fill in as the particle starts hopping. Start at the right minimum instead: the PMF flips sides — the result depends on where you started, a hallmark of non-ergodic sampling. Lower $b$ to 3 at $k_BT = 0.4$ to shrink the barrier rather than heat the system.",
   });
 
   // ---------------------------------------------------------------- Ergodicity
-  makeLab("#lab-ergodicity", {
+  liveLab("#lab-ergodicity", {
     title: "Ergodicity: short run vs. long run vs. exact Boltzmann",
-    intro: "<p>One Langevin trajectory in the double well ($\\Delta V = 4$, $\\gamma = 1$, starting in the left minimum). The “short run” is just the first part of the same trajectory. By symmetry the ensemble average gives half the probability to each well and $\\langle x\\rangle = 0$; the question is how long the time average needs to agree.</p>",
+    intro: "<p>One Langevin trajectory in the double well ($\\Delta V = 4$, $\\gamma = 1$, starting in the left minimum), played live. The “short run” is just the first part of the same trajectory — its histogram freezes once the short run is over, while the long-run histogram keeps growing. By symmetry the ensemble average gives half the probability to each well and $\\langle x\\rangle = 0$; the question is how long the time average needs to agree.</p>",
     controls: [
       { type: "range", id: "T", label: "Temperature k<sub>B</sub>T", min: 0.4, max: 2, step: 0.05, value: 0.8 },
       { type: "select", id: "short", label: "Short run", options: stepOptions([5000, 20000, 50000]), value: 20000 },
@@ -890,37 +1123,45 @@ print("DW PMF calculation and plotting complete.")</code></pre><pre class="outpu
       { type: "range", id: "seed", label: "Random seed", min: 1, max: 30, step: 1, value: 15 },
     ],
     cols: 2,
-    live: "change",
     panels: [{ id: "dens", kind: "plot" }, { id: "run", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
-    run(p, lab) {
-      const a = 1, b = 4, xm = Math.SQRT2;
-      const xs = langevin({ force: (x) => P.force_dw(x, a, b), dt: 0.01, gamma: 1, T: p.T, steps: p.long, stride: 10, x0: -xm, v0: 0, seed: p.seed });
-      const nShort = Math.floor(p.short / 10);
-      const sh = xs.subarray(0, nShort);
+    spf: (p) => Math.round(p.long / 500),
+    sim(p) {
+      return { method: "langevin", dt: 0.01, gamma: 1, T: p.T, steps: p.long, stride: 10, x0: -Math.SQRT2, v0: 0, seed: p.seed, xm: Math.SQRT2,
+        force: (x) => P.force_dw(x, 1, 4), V: (x) => P.potential_dw(x, 1, 4) + 4 };
+    },
+    well(p) {
+      return { V: (x) => P.potential_dw(x, 1, 4) + 4, xlim: [-2.3, 2.3], ylim: [-0.4, 6], trail: 30,
+        levels: [{ y: p.T, label: "k_BT above the well bottom", color: "s2" }],
+        bands: [{ x0: -2.3, x1: 0, color: "s1", alpha: 0.08, label: "left well" }, { x0: 0, x1: 2.3, color: "s2", alpha: 0.08, label: "right well" }] };
+    },
+    caption: (sim) => `right-well fraction so far: ${(sim.nRight / sim.n).toFixed(2)}   ·   crossings: ${sim.cross}`,
+    draw(lab, sim, p) {
+      const n = sim.n, xs = sim.xs.subarray(0, n), nShort = Math.min(n, Math.floor(p.short / 10)), sh = xs.subarray(0, nShort);
       const rng = [-2.5, 2.5];
       const Hs = P.histogram(sh, 50, rng), Hl = P.histogram(xs, 50, rng);
-      const g = P.linspace(-2.5, 2.5, 301), ex = boltzmann(g, (x) => P.potential_dw(x, a, b), p.T);
+      const g = P.linspace(-2.5, 2.5, 301), ex = boltzmann(g, (x) => P.potential_dw(x, 1, 4), p.T);
       lab.plot("dens", [
         { x: Hs.centers, y: Hs.density, name: `short (${p.short.toLocaleString("en-US")} steps)`, color: "s2", line: { shape: "hvh" } },
-        { x: Hl.centers, y: Hl.density, name: `long (${p.long.toLocaleString("en-US")} steps)`, color: "s1", line: { shape: "hvh" } },
+        { x: Hl.centers, y: Hl.density, name: `long (${sim.step.toLocaleString("en-US")} of ${p.long.toLocaleString("en-US")} steps)`, color: "s1", line: { shape: "hvh" } },
         { x: g, y: ex, name: "exact Boltzmann", color: "ink", line: { dash: "dash", width: 1.5 } },
-      ], { title: { text: "Sampled density vs. ensemble" }, xaxis: { title: { text: "Position x" } }, yaxis: { title: { text: "Probability density" }, rangemode: "tozero" }, margin: { t: 64 } });
+      ], { title: { text: "Sampled density vs. ensemble" }, xaxis: { title: { text: "Position x" } }, yaxis: { title: { text: "Probability density" }, range: [0, 2.1 * P.max(ex)] }, margin: { t: 64 } });
       // running average of the right-well indicator
-      const ind = Array.from(xs, (x) => (x > 0 ? 1 : 0));
-      const rm = P.runningMean(ind);
-      const idx = thinIdx(rm.length, 1500);
+      const rm = new Array(n);
+      let right = 0;
+      for (let i = 0; i < n; i++) { if (xs[i] > 0) right++; rm[i] = right / (i + 1); }
+      const idx = plotIdx(n, 1500);
       lab.plot("run", [
         { x: idx.map((i) => (i + 1) * 10), y: idx.map((i) => rm[i]), name: "time average", color: "s1" },
         { x: [10, p.long], y: [0.5, 0.5], mode: "lines", name: "ensemble average", color: "ink", line: { dash: "dash", width: 1.5 } },
       ], {
-        title: { text: "Running fraction of time in the right well" }, xaxis: { title: { text: "Steps" }, type: "log" }, yaxis: { title: { text: "fraction with x > 0" }, range: [-0.05, 1.05] }, margin: { t: 64 },
+        title: { text: "Running fraction of time in the right well" }, xaxis: { title: { text: "Steps" }, type: "log", range: [1, Math.log10(p.long)] }, yaxis: { title: { text: "fraction with x > 0" }, range: [-0.05, 1.05] }, margin: { t: 64 },
         shapes: [{ type: "line", x0: p.short, x1: p.short, yref: "paper", y0: 0, y1: 1, line: { color: "s2", width: 1.5, dash: "dot" } }],
       });
-      const frS = fracWhere(sh, (x) => x > 0), frL = fracWhere(xs, (x) => x > 0);
+      const frS = fracWhere(sh, (x) => x > 0), frL = right / n;
       lab.readouts("ro", [
-        { k: "⟨x⟩ short / long / ensemble", v: `${P.mean(sh).toFixed(2)} / ${P.mean(xs).toFixed(2)} / 0.00` },
-        { k: "Right-well fraction short / long / ensemble", v: `${frS.toFixed(2)} / ${frL.toFixed(2)} / 0.50` },
-        { k: "Crossings in short / long run", v: `${countTransitions(sh, xm)} / ${countTransitions(xs, xm)}` },
+        { k: "⟨x⟩ short / long so far / ensemble", v: `${P.mean(sh).toFixed(2)} / ${P.mean(xs).toFixed(2)} / 0.00` },
+        { k: "Right-well fraction short / long so far / ensemble", v: `${frS.toFixed(2)} / ${frL.toFixed(2)} / 0.50` },
+        { k: "Crossings in short / long run so far", v: `${countTransitions(sh, Math.SQRT2)} / ${sim.cross}` },
         { k: "ΔV / k<sub>B</sub>T", v: (4 / p.T).toFixed(1) },
       ]);
     },
