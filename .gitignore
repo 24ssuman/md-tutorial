@@ -18,3 +18,7 @@ PLAN.md
 
 # Local Claude configuration
 .claude/
+
+# Local workspace instructions and activity log
+AGENTS.md
+LOG.md
