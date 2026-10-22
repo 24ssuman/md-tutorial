@@ -286,6 +286,12 @@ Number of production samples per window (n_i): [4500 4500 4500 4500 4500 4500 45
 </section>
 
 <section class="step">
+  <h3>Watch the windows sample</h3>
+  <p>The lab above only shows the finished histograms. Press <strong>▶ Play</strong> below to replay the same trajectories frame by frame, in the order the Python loop runs them: window 1 starts at its centre $x_{0,1}$, jiggles around inside its umbrella, and its histogram fills in; then window 2 starts, and so on across the barrier. Switch to <em>All windows at once</em> to see every window running side by side, which is how umbrella windows are usually run in practice (they are independent, so they can run in parallel).</p>
+  <div id="lab-us-play"></div>
+</section>
+
+<section class="step">
   <h3>Try it: windows and springs</h3>
   <details class="exercise">
     <summary>Exercise — change <code>num_windows</code> and <code>k_us</code> and check the effects</summary>
@@ -862,8 +868,251 @@ Font 'default' does not have a glyph for '\u2010' [U+2010], substituting with a 
     onButton(id, p, lab) {
       if (id === "def") { Object.entries(DEFAULTS).forEach(([k, v]) => lab.set(k, v)); lab.rerun(); }
     },
-    foot: "<p><strong>What to try:</strong> with the defaults every neighbour pair overlaps (no gaps in the overlay, bright first off-diagonal in the matrix). Now try the exercise below: drop to 4 windows, or push $k_{us}$ to 200+, and watch gaps open and the minimum overlap collapse toward 0. Raise $k_BT$ and every window broadens ($\\sigma \\approx \\sqrt{k_BT/k_{eff}}$). The WHAM and convergence labs further down re-use whatever you simulate here.</p>",
+    foot: "<p><strong>What to try:</strong> with the defaults every neighbour pair overlaps (no gaps in the overlay, bright first off-diagonal in the matrix). Now try the exercise below: drop to 4 windows, or push $k_{us}$ to 200+, and watch gaps open and the minimum overlap collapse toward 0. Raise $k_BT$ and every window broadens ($\\sigma \\approx \\sqrt{k_BT/k_{eff}}$). The playback lab just below and the WHAM and convergence labs further down re-use whatever you simulate here.</p>",
   });
+
+  // ---------------------------------------------------------------- Lab 2b: replay the windows frame by frame
+  /** Evenly strided indices 0 … m−1 (at most ~max of them, always ending at m−1), for drawing a growing trace. */
+  function prefix(m, max = 400) {
+    const s = Math.max(1, Math.ceil(m / max)), out = [];
+    for (let j = 0; j < m; j += s) out.push(j);
+    if (m && out[out.length - 1] !== m - 1) out.push(m - 1);
+    return out;
+  }
+  const FRAME_T = STRIDE * DT; // time between recorded frames
+  const TRAIL = 40;            // recent frames drawn as a fading trail behind the particle
+  const PLOT_EVERY = 4;        // redraw the plots every 4th animation frame; the canvas every frame
+
+  const playLab = (function () {
+    // g = frames played so far: in sequential mode it runs through window 1, then window 2, …;
+    // in parallel mode every window has played g frames.
+    let d = null, mode = null, H = null, tgt = null, yMax = 1, g = 0, tick = 0, anim = null;
+    const nF = () => Math.min(...d.n_i);
+    const seq = () => mode === "seq";
+    const total = () => (seq() ? d.prod.length * nF() : nF());
+    /** Frames played in each window (Ms) and the window currently running (w, sequential mode only). */
+    function state() {
+      const n = nF();
+      if (!seq()) return { w: -1, Ms: d.prod.map(() => g) };
+      const w = Math.min(d.prod.length - 1, Math.floor(g / n));
+      return { w, Ms: d.prod.map((_, i) => (i < w ? n : i === w ? g - w * n : 0)) };
+    }
+    /** Position of window i after M frames; before the first frame it sits at its centre (x_curr = center). */
+    const xAt = (i, M) => (M ? d.prod[i][M - 1] : d.centers[i]);
+    const label = (lab) => { const b = lab.button("play"); if (b) b.textContent = anim.running ? "⏸ Pause" : "▶ Play"; };
+    const bc = (a, b) => { const sa = P.sum(a), sb = P.sum(b); let s = 0; for (let j = 0; j < a.length; j++) s += Math.sqrt((a[j] / sa) * (b[j] / sb)); return s; };
+
+    function load(lab, dd) {
+      d = dd; mode = lab.p.mode; g = 0; tick = 0;
+      anim.stop();
+      H = binData(d.prod, 100);
+      // Boltzmann distribution of V + V_bias,i on the histogram bins: what each window's histogram converges to
+      tgt = d.centers.map((c) => {
+        const e = H.centers.map((x) => V(x) + 0.5 * d.p.k * (x - c) ** 2), m = P.min(e);
+        const q = e.map((v) => Math.exp(-(v - m) / d.p.kT)), s = P.sum(q) * H.w;
+        return q.map((v) => v / s);
+      });
+      yMax = Math.max(...tgt.map(P.max), ...H.N.map((row, i) => P.max(row) / (d.n_i[i] * H.w)));
+      lab.root.querySelector('[data-role="src"]').innerHTML = `Data: ${usLabel(d)} (change it in the umbrella lab).`;
+      lab.button("next").disabled = !seq();
+      label(lab);
+      render(lab, true);
+    }
+    function render(lab, plots) {
+      if (!d) return;
+      const st = state();
+      draw(lab, st);
+      if (plots) update(lab, st);
+    }
+
+    function update(lab, st) {
+      const N = d.prod.length, n = nF(), nb = H.centers.length;
+      const live = d.prod.map((_, i) => i).filter((i) => st.Ms[i] > 0);
+      const cur = (i) => !seq() || i === st.w;
+      const counts = d.prod.map((pos, i) => (st.Ms[i] ? P.histogram(pos.subarray(0, st.Ms[i]), nb, [H.lo, H.hi]).counts : null));
+      // histograms normalised by the full n_i, so each one grows into its final curve from the umbrella lab
+      const hist = live.map((i) => Object.assign({
+        x: H.centers, y: counts[i].map((c) => c / (d.n_i[i] * H.w)), name: `Win ${i + 1}`, color: winColor(i),
+        opacity: cur(i) ? 0.95 : 0.4, line: { width: cur(i) ? 2.2 : 1.2 },
+      }, seq() && cur(i) ? { fill: "tozeroy" } : {}));
+      if (seq()) hist.push({ x: H.centers, y: tgt[st.w], name: "Boltzmann target", color: winColor(st.w), line: { dash: "dash", width: 1.5 } });
+      lab.plot("hist", hist, {
+        title: { text: "Histograms so far" }, showlegend: false,
+        xaxis: { title: { text: "Position (x)" }, range: [H.lo, H.hi] }, yaxis: { title: { text: "Pᵢ(x) (biased)" }, range: [0, yMax * 1.08] },
+      });
+      const traj = live.map((i) => {
+        const ix = prefix(st.Ms[i]);
+        return { x: ix.map((j) => (j + 1) * FRAME_T), y: ix.map((j) => d.prod[i][j]), name: `Win ${i + 1}`, color: winColor(i),
+          opacity: cur(i) ? 0.95 : 0.35, line: { width: cur(i) ? 1.4 : 1 }, hoverinfo: "skip" };
+      });
+      if (seq()) traj.push({ x: [0, n * FRAME_T], y: [d.centers[st.w], d.centers[st.w]], name: "x₀", mode: "lines", color: "ink-3", line: { dash: "dot", width: 1.5 }, hoverinfo: "skip" });
+      const nowI = live.filter(cur);
+      traj.push({ x: nowI.map((i) => st.Ms[i] * FRAME_T), y: nowI.map((i) => xAt(i, st.Ms[i])), name: "now", mode: "markers",
+        marker: { size: 7, color: nowI.map((i) => MD.color(winColor(i))), line: { width: 1.5, color: MD.css("--surface") } }, hoverinfo: "skip" });
+      lab.plot("traj", traj, {
+        title: { text: "Trajectories x(t)" }, showlegend: false,
+        xaxis: { title: { text: "Production time" }, range: [0, n * FRAME_T] }, yaxis: { title: { text: "Position (x)" }, range: [H.lo, H.hi] },
+      });
+
+      const nn = [];
+      for (let i = 0; i + 1 < N; i++) if (counts[i] && counts[i + 1]) nn.push(bc(counts[i], counts[i + 1]));
+      const mn = nn.length ? Math.min(...nn) : NaN;
+      const ro = [];
+      if (seq()) {
+        const i = st.w, M = st.Ms[i], s = d.prod[i].subarray(0, M);
+        const tm = P.sum(tgt[i].map((q, j) => q * H.centers[j])) * H.w;
+        const tsd = Math.sqrt(P.sum(tgt[i].map((q, j) => q * (H.centers[j] - tm) ** 2)) * H.w);
+        ro.push(
+          { k: "Running window", v: `${i + 1} of ${N} (x₀ = ${d.centers[i].toFixed(2)})` },
+          { k: "Frames recorded in this window", v: `${M.toLocaleString()} / ${n.toLocaleString()}` },
+          { k: "⟨x⟩ ± σ so far", v: M ? `${P.mean(s).toFixed(2)} ± ${P.std(s).toFixed(2)}` : "—" },
+          { k: "Boltzmann target ⟨x⟩ ± σ", v: `${tm.toFixed(2)} ± ${tsd.toFixed(2)}` },
+          { k: "Windows finished", v: `${st.Ms.filter((M) => M >= n).length} of ${N}` },
+        );
+      } else {
+        ro.push(
+          { k: "Running", v: `all ${N} windows at once` },
+          { k: "Frames recorded per window", v: `${g.toLocaleString()} / ${n.toLocaleString()}` },
+        );
+      }
+      ro.push(
+        { k: `Production steps so far (after ${BURN.toLocaleString()} burn-in)`, v: (st.Ms[seq() ? st.w : 0] * STRIDE).toLocaleString() },
+        { k: "Nearest-neighbour overlap BC so far (min)", v: isFinite(mn) ? MD.fmt(mn, 3) : "— (needs two windows)", cls: !isFinite(mn) ? "" : mn < 1e-3 ? "bad" : mn > 5e-3 ? "good" : "" },
+      );
+      lab.readouts("ro", ro);
+    }
+
+    /** Canvas: the double well with the umbrella(s) and the particle(s), window centres marked along the bottom. */
+    function draw(lab, st) {
+      const { ctx, w, h } = lab.canvas("cv");
+      ctx.clearRect(0, 0, w, h);
+      const L = 16, R = 16, T = 48, B = 20, n = nF();
+      const xr = [Math.min(-2.4, H.lo), Math.max(2.4, H.hi)], yr = [-0.6, 9];
+      const X = (x) => L + ((x - xr[0]) / (xr[1] - xr[0])) * (w - L - R);
+      const Y = (y) => Math.max(-1e4, Math.min(1e4, T + (1 - (y - yr[0]) / (yr[1] - yr[0])) * (h - T - B)));
+      const base = h - B + 8; // window-centre markers sit on this line
+      const U = (x) => V(x) - VMIN;
+      const grid = Array.from({ length: 301 }, (_, j) => xr[0] + ((xr[1] - xr[0]) * j) / 300);
+      const curve = (f, col, width, dash) => {
+        ctx.strokeStyle = col; ctx.lineWidth = width; ctx.setLineDash(dash || []);
+        ctx.beginPath(); grid.forEach((x, j) => (j ? ctx.lineTo(X(x), Y(f(x))) : ctx.moveTo(X(x), Y(f(x))))); ctx.stroke();
+        ctx.setLineDash([]);
+      };
+      const ball = (x, y, col, r) => {
+        ctx.fillStyle = col; ctx.strokeStyle = MD.css("--surface"); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(X(x), Y(y) - r, r, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+      };
+      // the spring: a thin dashed line from the particle down to its window centre
+      const tether = (x, y, c, col) => {
+        ctx.strokeStyle = col; ctx.globalAlpha = 0.45; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(c), base); ctx.stroke();
+        ctx.setLineDash([]); ctx.globalAlpha = 1;
+      };
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.strokeStyle = MD.css("--grid"); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(L, base); ctx.lineTo(w - R, base); ctx.stroke();
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, T - 8, w, h - T + 8); ctx.clip();
+      let header;
+      if (seq()) {
+        const i = st.w, c = d.centers[i], col = MD.color(winColor(i)), M = st.Ms[i];
+        const Vb = (x) => 0.5 * d.p.k * (x - c) ** 2;
+        const m = Math.min(...grid.map((x) => U(x) + Vb(x)));
+        const Vt = (x) => U(x) + Vb(x) - m;
+        curve(U, MD.css("--ink-3"), 1.5);
+        curve(Vb, col, 1.2, [2, 4]);
+        curve(Vt, col, 2.5);
+        ctx.fillStyle = col;
+        for (let j = Math.max(0, M - TRAIL); j < M - 1; j++) {
+          const x = d.prod[i][j];
+          ctx.globalAlpha = 0.1 + (0.5 * (j - (M - TRAIL))) / TRAIL;
+          ctx.beginPath(); ctx.arc(X(x), Y(Vt(x)) - 4, 3, 0, 2 * Math.PI); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        const x = xAt(i, M);
+        tether(x, Vt(x), c, col);
+        ball(x, Vt(x), col, 7);
+        header = `Window ${i + 1} / ${d.prod.length}    x₀ = ${c.toFixed(2)}    frame ${M} / ${n}    t = ${(M * FRAME_T).toFixed(1)}`;
+      } else {
+        curve(U, MD.css("--ink-2"), 2);
+        d.prod.forEach((_, i) => {
+          const x = xAt(i, st.Ms[i]), col = MD.color(winColor(i));
+          tether(x, U(x), d.centers[i], col);
+          ball(x, U(x), col, 6);
+        });
+        header = `All ${d.prod.length} windows    frame ${g} / ${n}    t = ${(g * FRAME_T).toFixed(1)}`;
+      }
+      ctx.restore();
+
+      // window centres: filled = finished, outlined = still to run, larger = running now
+      d.centers.forEach((c, i) => {
+        const col = MD.color(winColor(i)), on = seq() ? i === st.w : true, r = on ? 6 : 4.5;
+        ctx.beginPath(); ctx.moveTo(X(c), base - r); ctx.lineTo(X(c) - r, base + r); ctx.lineTo(X(c) + r, base + r); ctx.closePath();
+        if (st.Ms[i] >= n || on) { ctx.fillStyle = col; ctx.fill(); } else { ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke(); }
+      });
+
+      ctx.fillStyle = MD.css("--ink"); ctx.font = "600 12.5px system-ui, sans-serif";
+      ctx.fillText(header, L, 17);
+      ctx.font = "12px system-ui, sans-serif";
+      let lx = L;
+      const key = (col, txt, dash) => {
+        ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash(dash || []);
+        ctx.beginPath(); ctx.moveTo(lx, 33); ctx.lineTo(lx + 18, 33); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = MD.css("--ink-3"); ctx.fillText(txt, lx + 23, 37);
+        lx += 23 + ctx.measureText(txt).width + 16;
+      };
+      if (seq()) {
+        const col = MD.color(winColor(st.w));
+        key(MD.css("--ink-3"), "V(x) physical"); key(col, "V_bias,i(x)", [2, 4]); key(col, "V + V_bias,i (felt by window i)");
+      } else {
+        key(MD.css("--ink-2"), "V(x) physical"); key(MD.css("--ink-3"), "spring to centre x₀", [3, 3]);
+      }
+    }
+
+    function toggle(lab) {
+      if (anim.running) { anim.stop(); label(lab); render(lab, true); return; }
+      if (g >= total()) g = 0;
+      anim.start(); label(lab);
+    }
+
+    return MD.lab("#lab-us-play", {
+      title: "Watch the umbrella windows sample",
+      intro: "<p>A frame-by-frame replay of the windows simulated in the umbrella lab above (one frame = one recorded sample, every 20 Langevin steps; the 10,000 burn-in steps are not shown). Top: the double well, the current umbrella $\\frac{1}{2}k_{us}(x - x_{0,i})^2$ and the biased landscape it creates, with the particle and a fading trail of its recent positions; triangles mark the window centres. Bottom left: each window's histogram as it fills in, normalised by its final $n_i$ so it grows into the curve shown in the lab above; the dashed line is the exact Boltzmann distribution $\\propto e^{-(V+V_{bias,i})/k_BT}$ that the running window is sampling. Bottom right: the trajectory $x(t)$ of every window.</p>",
+      controls: [
+        { type: "html", html: '<div class="hint" data-role="src"></div>' },
+        { type: "select", id: "mode", label: "Playback", value: "seq", options: [{ value: "seq", label: "One window after another (like the Python loop)" }, { value: "par", label: "All windows at once (run in parallel)" }] },
+        { type: "range", id: "speed", label: "Playback speed (frames / tick)", min: 1, max: 100, step: 1, value: 25 },
+        { type: "buttons", items: [{ id: "play", label: "▶ Play" }, { id: "next", label: "Next window", secondary: true }, { id: "rew", label: "Rewind", secondary: true }, { id: "end", label: "Skip to end", secondary: true }] },
+      ],
+      cols: 2,
+      panels: [{ id: "cv", kind: "canvas", aspect: 2.4, span: true }, { id: "hist", kind: "plot" }, { id: "traj", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+      init(lab) {
+        anim = lab.loop(() => {
+          if (!d) return false;
+          g = Math.min(total(), g + lab.p.speed);
+          const done = g >= total();
+          render(lab, done || ++tick % PLOT_EVERY === 0);
+          if (done) { setTimeout(() => label(lab), 0); return false; }
+        });
+        document.addEventListener("md:theme", () => render(lab, false));
+      },
+      run(p, lab) {
+        const dd = getUS();
+        if (dd !== d || p.mode !== mode) load(lab, dd);
+        else if (!anim.running) render(lab, true);
+      },
+      onButton(id, p, lab) {
+        if (!d) load(lab, getUS());
+        if (id === "play") toggle(lab);
+        if (id === "rew") { g = 0; render(lab, true); }
+        if (id === "next" && seq()) { const n = nF(); g = Math.min(total(), (Math.floor(g / n) + 1) * n); render(lab, true); }
+        if (id === "end") { anim.stop(); label(lab); g = total(); render(lab, true); }
+      },
+      foot: "<p><strong>What to watch:</strong> (1) Each particle starts at its own centre and never strays far: the spring keeps it in a narrow slice of $x$, even on top of the barrier where an unbiased particle would never stay. (2) The histogram of the running window wobbles at first and settles onto the dashed Boltzmann curve as frames accumulate — that is sampling converging. (3) The overlap readout appears as soon as two neighbouring windows have data; it is what WHAM will use to stitch them together. (4) Change the umbrella lab to 4 windows or $k_{us} = 300$ and replay: the particles stay in islands with visible gaps between them. (5) In <em>All windows at once</em> the trajectory plot is the classic umbrella-sampling picture: one band of $x(t)$ per window, stacked across the barrier.</p>",
+    });
+  })();
+  US.dependents.push(playLab);
 
   // ---------------------------------------------------------------- Lab 3: WHAM reconstruction
   const whamLab = MD.lab("#lab-wham", {
