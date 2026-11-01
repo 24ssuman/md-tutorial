@@ -16,8 +16,8 @@ print(f"{N} SPC/E molecules, box {L:.3f} A, NVE run of {n_frames * dt_frame:.0f}
 
 # ---- 1. energy and the heat of vaporisation ---------------------------------------------------------
 u_mol = (U + Utail) / N * KJ                       # kJ/mol per molecule (unshifted LJ + analytic tail)
-mu_liq, mu_gas, alpha_pol = 2.351, 1.85, 1.44      # D, D, A^3 (Berendsen et al. 1987)
-E_pol = (mu_liq - mu_gas) ** 2 / (2 * alpha_pol) * 60.2214   # kJ/mol: 1 D^2/A^3 = 60.22 kJ/mol
+mu_liq, mu_gas, alpha_pol = 2.35, 1.85, 1.44      # D, D, A^3 (rounded SPC/E values from Berendsen et al. 1987)
+E_pol = 5.22                                        # kJ/mol, correction reported by Berendsen et al. (1987)
 dH_raw = [-u_mol[b].mean() + RT_kJ for b in blocks]
 dH_cor = [x - E_pol for x in dH_raw]
 print(f"potential energy      <U>/N          = {u_mol.mean():7.2f} kJ/mol  (blocks: {', '.join(f'{u_mol[b].mean():.2f}' for b in blocks)})")
@@ -64,7 +64,7 @@ Mvar = lambda x: ((x ** 2).sum(1).mean() - (x.mean(0) ** 2).sum())
 eps_f = lambda x: 1 + 4 * np.pi * 14.3996454784 * Mvar(x) / (3 * V * kT)
 eps_b = [eps_f(Mv[i * (len(Mv) // 4):(i + 1) * (len(Mv) // 4)]) for i in range(4)]
 print(f"static dielectric constant (box-dipole fluctuations): {eps_f(Mv):.0f}  (four {total_ps / 4:.0f} ps blocks: {', '.join(f'{x:.0f}' for x in eps_b)}; spread {np.std(eps_b, ddof=1):.0f})")
-print(f"  SPC/E literature value: about 68-71;  experiment: 78.5\n")
+print(f"  SPC/E literature value: 68 (Vega-Abascal Table 2);  experiment: 78.5\n")
 
 # ---- 6. pressure -----------------------------------------------------------------------------------
 Pb = [np.mean(P[b2]) for b2 in np.array_split(np.arange(len(P)), 4)]

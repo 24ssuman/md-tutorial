@@ -152,13 +152,13 @@
   <p>Several lessons come out of that comparison [23]:</p>
   <ul>
     <li><strong>No rigid non-polarisable model wins everywhere.</strong> The review reports that improving the match with one set of properties tends to cost accuracy on another and that none of the tested models reproduces all of the gas, liquid, solid and high-pressure properties at once.</li>
-    <li><strong>Phase behaviour is hard.</strong> For most rigid non-polarisable models the melting temperature of ice Ih lies about 25 K below the temperature of maximum density, against 4 K in experiment, with TIP5P as the exception; compare the Tm and TMD plots above.</li>
+    <li><strong>Phase behaviour is hard.</strong> For most rigid non-polarisable models the melting temperature of ice Ih lies about 25 K below the temperature of maximum density, against 4 K in experiment. TIP5P is the exception: Table 2 gives TMD = 277 K and melting temperature = 274 K (a 3 K gap), although the review's discussion describes the gap as about 10 K; the plotted values follow Table 2 [23].</li>
     <li><strong>Missing physics.</strong> The authors point to polarisation, many-body interactions and nuclear quantum effects as the physics that fixed-charge classical models leave out [23].</li>
     <li><strong>Different models for different jobs.</strong> TIP3P (modified) is the water of the CHARMM and AMBER biomolecular force fields because the proteins were parameterised with it; TIP4P/2005 is a good general-purpose rigid model for the condensed phases; TIP5P and TIP4P/Ew are tuned for the density anomaly and for PME respectively.</li>
   </ul>
   <div class="callout warn">
     <div class="callout-title">Read the table with care</div>
-    <p>The heat of vaporisation for the SPC/E model in the plot (11.79 kcal/mol) is the raw value from the simulation. SPC/E’s charges already include an average polarisation, whose energy cost must be subtracted (Module 12); with that correction SPC/E agrees with experiment (10.52 kcal/mol) almost exactly, as designed. The review’s values also come from simulations of different sizes and lengths; the diffusion constants in particular depend on finite-size corrections. The differences between models on the dielectric constant (50 to 94, against 78.5) are much larger than any such uncertainty.</p>
+    <p>The heat of vaporisation for the SPC/E model in the plot (11.79 kcal/mol) is the raw value from the simulation. SPC/E’s charges already include an average polarisation, whose energy cost must be subtracted (Module 12); subtracting the 5.22 kJ/mol correction reported in the original SPC/E paper gives about 10.54 kcal/mol, close to the experimental 10.52 kcal/mol. The review’s values also come from simulations of different sizes and lengths; the diffusion constants in particular depend on finite-size corrections. The differences between models on the dielectric constant (50 to 94, against 78.5) are much larger than any such uncertainty.</p>
   </div>
 
   <details class="exercise">
