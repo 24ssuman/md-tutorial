@@ -41,7 +41,7 @@ View the interactive course on [GitHub Pages](https://24ssuman.github.io/md-tuto
 | Module | Title | Key Learning Objectives |
 |:---:|---|---|
 | **9** | [Building a Water Model: Bonded Terms and SPC](interactive/09-water-model.html) | Bond and angle terms, partial charges plus Lennard-Jones, rigid SPC/SPC/E and flexible SPC/Fw water, constraints, and running water with ASE. |
-| **10** | [The Water-Model Zoo](interactive/10-water-models.html) | TIP3P/TIP4P/TIP5P and their descendants, flexible, polarizable and quantum models, where the parameters come from, and how the models compare with experiment. |
+| **10** | [A Survey of Water Models](interactive/10-water-models.html) | TIP3P/TIP4P/TIP5P and their descendants, flexible, polarizable and quantum models, where the parameters come from, and how the models compare with experiment. |
 | **11** | [MB-pol: Water from Many-Body Quantum Chemistry](interactive/11-mb-pol.html) | The many-body expansion, the MB-pol potential energy function, and its performance from clusters to the liquid, with classical and quantum nuclei. |
 | **12** | [Measuring Liquid Water: Simulation vs Experiment](interactive/12-water-properties.html) | Heat of vaporization, structure, diffusion, dielectric constant and pressure from an ASE simulation of liquid water, compared with experiment. |
 
@@ -49,6 +49,7 @@ View the interactive course on [GitHub Pages](https://24ssuman.github.io/md-tuto
 
 * [**Supplement: Choosing Good Collective Variables**](interactive/s1-choosing-cvs.html) — How to choose CVs that resolve complex free-energy landscapes.
 * [**Supplement: WHAM Walkthrough**](interactive/s2-wham.html) — Step-by-step derivation and hands-on exploration of the Weighted Histogram Analysis Method.
+* [**Supplement: Particle Mesh Ewald in Detail**](interactive/s3-pme.html) — Charge spreading, the FFT solve, interpolation back to the atoms, and the settings that control PME accuracy, with a live 2D PME lab.
 
 ---
 

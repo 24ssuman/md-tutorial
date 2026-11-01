@@ -29,7 +29,7 @@
       desc: "A 3D Lennard-Jones fluid: ASE workflow, minimization, NVT dynamics, and the radial distribution function." },
     { id: "09", file: "09-water-model.html", num: "9", title: "Building a Water Model: Bonded Terms and SPC", short: "Water model (SPC)", group: "Core Modules",
       desc: "Bond and angle terms, partial charges plus Lennard-Jones, rigid SPC/SPC/E and flexible SPC/Fw water, run with ASE." },
-    { id: "10", file: "10-water-models.html", num: "10", title: "The Water-Model Zoo", short: "Water-model zoo", group: "Core Modules",
+    { id: "10", file: "10-water-models.html", num: "10", title: "A Survey of Water Models", short: "Water-model survey", group: "Core Modules",
       desc: "TIP3P, TIP4P, TIP5P and their descendants; flexible, polarisable and quantum models; where the parameters come from." },
     { id: "11", file: "11-mb-pol.html", num: "11", title: "MB-pol: Water from Many-Body Quantum Chemistry", short: "MB-pol", group: "Core Modules",
       desc: "The many-body expansion, the MB-pol potential energy function, and how it reproduces water from clusters to the liquid." },
@@ -39,6 +39,8 @@
       desc: "How to pick collective variables that actually resolve barriers in multi-dimensional landscapes." },
     { id: "s2", file: "s2-wham.html", num: "S2", title: "WHAM Walkthrough", short: "WHAM walkthrough", group: "Supplements",
       desc: "A step-by-step derivation and hands-on exploration of the Weighted Histogram Analysis Method." },
+    { id: "s3", file: "s3-pme.html", num: "S3", title: "Particle Mesh Ewald in Detail", short: "PME in detail", group: "Supplements",
+      desc: "Charge spreading with B-splines, the FFT solve, interpolation back to the atoms, and the settings that control PME accuracy." },
   ];
 
   const store = {

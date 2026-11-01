@@ -22,7 +22,7 @@
   <div class="meta-row">
     <span class="chip"><b>Prerequisites</b> <a href="02-physics.html">Module 2 (Physics of MD)</a></span>
     <span class="chip"><b>What you run</b> Plots and calculations showing LJ, Coulomb, and Ewald potentials</span>
-    <span class="chip" title="Roughly 26 min reading, 17 min playing with the demos and quizzes, 20 min on the exercises"><b>Expected time to finish</b> About 65 minutes</span>
+    <span class="chip" title="Roughly 24 min reading, 13 min playing with the demos and quizzes, 16 min on the exercises"><b>Expected time to finish</b> About 55 minutes</span>
   </div>
 
   <div class="objectives">
@@ -486,40 +486,16 @@ With smaller alpha (0.1), the real-space potential decays slower, resembling 1/r
   <p>While traditional Ewald summation is accurate, its $O(N^{3/2})$ to $O(N^2)$ scaling makes it computationally intensive for systems with many thousands of atoms. The <strong>Particle Mesh Ewald (PME)</strong> method, developed by Darden, York, and Pedersen, and similar Particle-Particle Particle-Mesh (PPPM) methods, offer a more efficient way to calculate the reciprocal-space part of the Ewald sum. PME has become the de facto standard for treating long-range electrostatics in large-scale biomolecular simulations, reducing the scaling to approximately $O(N \log N)$.</p>
 
   <h3>The core idea of PME: using FFTs for the reciprocal sum</h3>
-  <p>PME retains the real-space sum and self-interaction correction from the standard Ewald method. The innovation lies in how it computes the reciprocal-space sum. Instead of a direct summation over $\mathbf{k}$-vectors, PME uses a grid and Fast Fourier Transforms (FFTs):</p>
-  <div class="tabset">
-    <div class="tab-panel" data-label="1 · Charge assignment">
-      <p><strong>Charge assignment (gridding).</strong></p>
-      <ul>
-        <li>A regular 3D grid (mesh) is superimposed on the simulation box.</li>
-        <li>The point charges of the particles are assigned (interpolated) onto the nearby grid points. This is not a simple nearest-grid-point assignment; instead, smooth interpolation functions (e.g., B-splines of various orders) are used to distribute each charge onto a small stencil of surrounding grid points. This process creates a gridded charge density, $\rho(\mathbf{r}_{grid})$. The smoothness of the interpolation is crucial for accuracy.</li>
-      </ul>
-    </div>
-    <div class="tab-panel" data-label="2 · FFT reciprocal sum">
-      <p><strong>Reciprocal sum calculation (via FFTs).</strong> The electrostatic potential on the grid, $\Phi(\mathbf{r}_{grid})$, due to the gridded charge density $\rho(\mathbf{r}_{grid})$ is calculated by solving Poisson's equation in Fourier space. This involves several steps:</p>
-      <ol type="a">
-        <li><strong>FFT of charge density:</strong> compute the Fourier transform of the gridded charge density: $\hat{\rho}(\mathbf{k}) = \text{FFT}(\rho(\mathbf{r}_{grid}))$.</li>
-        <li><strong>Multiplication by influence function:</strong> multiply $\hat{\rho}(\mathbf{k})$ by the (discretized) Ewald Green's function or influence function in Fourier space, $\hat{G}(\mathbf{k})$. This $\hat{G}(\mathbf{k})$ is essentially the $\exp(-k^2 / 4\alpha^2)/k^2$ term from the Ewald reciprocal sum, adapted for the grid and the interpolation scheme.</li>
-        <li><strong>Inverse FFT for potential:</strong> compute the inverse FFT of the product to get the electrostatic potential on the grid: $\Phi(\mathbf{r}_{grid}) = \text{IFFT}(\hat{G}(\mathbf{k}) \hat{\rho}(\mathbf{k}))$.</li>
-      </ol>
-      <p>The reciprocal space energy can then be calculated from the gridded charge density and potential.</p>
-    </div>
-    <div class="tab-panel" data-label="3 · Interpolate back">
-      <p><strong>Force/potential interpolation.</strong> The electrostatic potential (and its derivatives, which give the forces) are interpolated from the grid points <em>back</em> to the actual particle positions. The same (or a related) interpolation scheme used in the charge assignment step is typically employed here to maintain consistency and accuracy (e.g., using the derivatives of the B-spline functions).</p>
-    </div>
-    <div class="tab-panel" data-label="4 · Real space &amp; self">
-      <p><strong>Real-space and self-interaction terms.</strong></p>
-      <ul>
-        <li>The direct, short-range part of the Ewald sum (screened Coulomb interactions $q_i q_j\, \text{erfc}(\alpha r_{ij})/r_{ij}$) is calculated exactly as in the standard Ewald method, typically within a cutoff radius $r_c$. This corrects for the approximations made by the grid-based calculation at short distances where the grid might be too coarse to represent interactions accurately.</li>
-        <li>The self-interaction correction is also applied as in standard Ewald.</li>
-      </ul>
-    </div>
+  <p>PME keeps the real-space sum and the self-interaction correction exactly as in standard Ewald. Only the reciprocal-space sum changes: instead of summing over $\mathbf{k}$-vectors one at a time, PME puts the charges on a regular grid and lets Fast Fourier Transforms (FFTs) compute all the Fourier components at once.</p>
+  <div class="cards">
+    <div class="card"><div class="card-num">1</div><h4>Spread charges onto a grid</h4><p>Each point charge is distributed over a few nearby grid points with smooth (B-spline) weights, giving a gridded charge density.</p></div>
+    <div class="card"><div class="card-num">2</div><h4>Solve on the grid with FFTs</h4><p>Fourier-transform the gridded charge, multiply by the Ewald reciprocal kernel $\exp(-k^2/4\alpha^2)/k^2$, and transform back to get the potential on the grid.</p></div>
+    <div class="card"><div class="card-num">3</div><h4>Interpolate back to the atoms</h4><p>The potential and its gradient are interpolated from the grid to each atom with the same weights, giving the reciprocal-space forces.</p></div>
   </div>
-</section>
-
-<section class="step">
-  <h3>PME, step by step on a grid</h3>
-  <div id="lab-pme"></div>
+  <div class="callout note">
+    <div class="callout-title">Want the details?</div>
+    <p><a href="s3-pme.html">Supplement S3 — Particle Mesh Ewald in Detail</a> works through each step, with a live 2D PME lab in which you change the grid size and interpolation order and compare the PME forces with the exact Ewald sum.</p>
+  </div>
 </section>
 
 <section class="step">
@@ -532,8 +508,8 @@ With smaller alpha (0.1), the real-space potential decays slower, resembling 1/r
 </section>
 
 <section class="step">
-  <h3>Implementation complexity and usage</h3>
-  <p>PME is algorithmically sophisticated. Its robust and efficient implementation involves careful handling of FFTs, spline interpolation, differentiation of splines for forces, and managing communication in parallel environments. Fortunately, users of modern MD simulation packages (like GROMACS, AMBER, NAMD, CHARMM, LAMMPS, OpenMM) do not need to implement PME themselves. It is a standard, highly optimized feature. However, users <em>do</em> need to understand the key parameters that control its accuracy and performance to make sensible choices for their simulations:</p>
+  <h3>Using PME in practice</h3>
+  <p>Users of modern MD simulation packages (like GROMACS, AMBER, NAMD, CHARMM, LAMMPS, OpenMM) do not need to implement PME themselves. It is a standard, highly optimized feature. However, users <em>do</em> need to understand the key parameters that control its accuracy and performance to make sensible choices for their simulations (<a href="s3-pme.html">Supplement S3</a> shows what each one does on a live grid):</p>
   <table>
     <thead><tr><th>Parameter</th><th>What it controls</th></tr></thead>
     <tbody>
@@ -598,22 +574,12 @@ With smaller alpha (0.1), the real-space potential decays slower, resembling 1/r
     <details class="reveal">
       <summary>Discussion</summary>
       <p>A <strong>larger</strong> $\alpha$. The real-space term $\text{erfc}(\alpha r)/r$ must have died away by $r_c$, or the truncation error is large; since $\text{erfc}$ is controlled by the product $\alpha r_c$, a small $r_c$ needs a large $\alpha$. The price is in reciprocal space: $\exp(-k^2/4\alpha^2)$ then decays slowly, so you need more $\mathbf{k}$-vectors (a larger $k_{max}$ or a finer PME grid) to keep the reciprocal sum converged.</p>
+      <p>For the PME version of this trade-off (grid spacing and interpolation order), see the exercises in <a href="s3-pme.html">Supplement S3 — Particle Mesh Ewald in Detail</a>.</p>
     </details>
   </details>
 
   <details class="exercise">
-    <summary>Exercise 3 — PME grid spacing</summary>
-    <p>What do you think are the consequences of choosing a very coarse FFT grid (large <code>fourierspacing</code>) in a PME calculation? Conversely, what about a very fine grid (small <code>fourierspacing</code>)?</p>
-    <p><em>Lab:</em> change the grid size and interpolation order in <a href="#lab-pme">PME, step by step on a grid</a> and watch the force error.</p>
-    <details class="reveal">
-      <summary>Discussion</summary>
-      <p><strong>Coarse grid:</strong> the gridded density cannot represent the charge distribution and the high-$k$ part of the reciprocal sum (only wave vectors up to the grid's Nyquist limit exist), so reciprocal-space forces carry interpolation and aliasing errors. Forces become inaccurate and slightly position-dependent relative to the grid, which shows up as noise, energy drift and artifacts. You can partly compensate with a higher interpolation order or a smaller $\alpha$ (with a larger $r_c$).</p>
-      <p><strong>Very fine grid:</strong> more accurate, but memory and FFT cost grow ($O(M \log M)$ with $M$ grid points, and $M$ grows as the cube of 1/spacing in 3D), with diminishing returns once the error is below the real-space and other errors.</p>
-    </details>
-  </details>
-
-  <details class="exercise">
-    <summary>Exercise 4 — Why not Ewald for LJ?</summary>
+    <summary>Exercise 3 — Why not Ewald for LJ?</summary>
     <p>The attractive part of the LJ potential is $-(1/r)^6$. Could one, in principle, develop an Ewald-like summation method for this $r^{-6}$ term if it were the dominant long-range interaction and simple cutoffs were insufficient (e.g., for extremely high accuracy studies)? What might be some practical reasons why this is generally not done for standard LJ interactions?</p>
     <details class="reveal">
       <summary>Discussion</summary>
@@ -622,7 +588,7 @@ With smaller alpha (0.1), the real-space potential decays slower, resembling 1/r
   </details>
 
   <details class="exercise">
-    <summary>Exercise 5 — Real-world impact</summary>
+    <summary>Exercise 4 — Real-world impact</summary>
     <p>Consider a simulation of DNA (highly charged) in a water solution with salt ions. Why would using a simple 1 nm cutoff for <em>all</em> non-bonded interactions (both LJ and Coulomb) likely lead to completely incorrect simulation results regarding DNA structure or ion binding?</p>
     <details class="reveal">
       <summary>Discussion</summary>
@@ -644,6 +610,7 @@ With smaller alpha (0.1), the real-space potential decays slower, resembling 1/r
     </ul>
   </div>
   <h3>➡️ What's next?</h3>
+  <p>For a closer look at how PME works, the optional <a href="s3-pme.html">Supplement S3 — Particle Mesh Ewald in Detail</a> takes the algorithm apart step by step.</p>
   <p>In <a href="04-1d-simulations.html">Module 4 — Simulating One-Dimensional Systems</a>, we will put our integrators and potentials to work. We will simulate realistic 1D models using Langevin thermostats to observe how a system transitions between energy states!</p>
 </section>
 
@@ -1138,219 +1105,6 @@ With smaller alpha (0.1), the real-space potential decays slower, resembling 1/r
         ]);
       },
       foot: "<p><strong>What to try:</strong> (1) With $r_c = 3$ and $n_{max} = 5$, slide α from 1 to 2.5: the three parts change a lot, but their total stays at 1.747565 — α is a numerical knob, not physics. (2) In the error plot, the valley is the usable α window: too small and the truncated real-space sum fails (left), too large and the reciprocal sum runs out of k-vectors (right). (3) Exercise 2: drop $r_c$ to 1.5 — the valley moves to larger α and you need a larger $n_{max}$ to stay accurate. (4) Compare the term counts with the hundreds of ions the spherical-cutoff sum used without converging.</p>",
-    });
-  })();
-
-  // ---------------------------------------------------------------- PME on a 2D grid
-  (function () {
-    const N = 10;
-    let charges, rng, cache = null;
-    function reset(seed) {
-      rng = P.rng(seed);
-      charges = Array.from({ length: N }, (_, i) => ({ x: rng(), y: rng(), q: i % 2 ? -1 : 1 }));
-    }
-    reset(5);
-    // Cardinal B-spline M_n(t) on [0, n]; centred version B_p(t) = M_p(t + p/2)
-    function bsM(t, n) {
-      if (n === 1) return t >= 0 && t < 1 ? 1 : 0;
-      return (t * bsM(t, n - 1) + (n - t) * bsM(t - 1, n - 1)) / (n - 1);
-    }
-    function weights(u, p, M) {
-      const out = [];
-      for (let g = Math.floor(u - p / 2); g <= Math.ceil(u + p / 2); g++) {
-        const w = bsM(u - g + p / 2, p);
-        if (w > 1e-12) out.push([((g % M) + M) % M, w]);
-      }
-      return out;
-    }
-    // Separable 2D DFT (sign = -1 forward, +1 inverse, unnormalized). O(M³) — fine for M ≤ 32.
-    function dft2(re, im, M, sign) {
-      const c = new Float64Array(M), s = new Float64Array(M);
-      for (let t = 0; t < M; t++) { c[t] = Math.cos((2 * Math.PI * t) / M); s[t] = sign * Math.sin((2 * Math.PI * t) / M); }
-      const R2 = new Float64Array(M * M), I2 = new Float64Array(M * M);
-      for (let y = 0; y < M; y++) for (let m = 0; m < M; m++) {
-        let a = 0, b = 0;
-        for (let g = 0; g < M; g++) { const t = (m * g) % M, xr = re[g + M * y], xi = im[g + M * y]; a += xr * c[t] - xi * s[t]; b += xr * s[t] + xi * c[t]; }
-        R2[m + M * y] = a; I2[m + M * y] = b;
-      }
-      const R3 = new Float64Array(M * M), I3 = new Float64Array(M * M);
-      for (let x = 0; x < M; x++) for (let m = 0; m < M; m++) {
-        let a = 0, b = 0;
-        for (let g = 0; g < M; g++) { const t = (m * g) % M, xr = R2[x + M * g], xi = I2[x + M * g]; a += xr * c[t] - xi * s[t]; b += xr * s[t] + xi * c[t]; }
-        R3[x + M * m] = a; I3[x + M * m] = b;
-      }
-      return [R3, I3];
-    }
-    const Gk = (k2, a) => (4 * Math.PI * Math.exp(-k2 / (4 * a * a))) / k2;
-    const sinc = (x) => (x === 0 ? 1 : Math.sin(x) / x);
-    function compute(p) {
-      const M = p.M, ord = p.ord, a = p.alpha;
-      const W = charges.map((c) => [weights(c.x * M, ord, M), weights(c.y * M, ord, M)]);
-      // 1. spread charges onto the grid
-      const rho = new Float64Array(M * M);
-      charges.forEach((c, i) => { for (const [gx, wx] of W[i][0]) for (const [gy, wy] of W[i][1]) rho[gx + M * gy] += c.q * wx * wy; });
-      // 2. FFT, multiply by the influence function, inverse FFT (potential and ik-differentiated field)
-      const [R, I] = dft2(rho, new Float64Array(M * M), M, -1);
-      const pR = new Float64Array(M * M), pI = new Float64Array(M * M);
-      const xR = new Float64Array(M * M), xI = new Float64Array(M * M), yR = new Float64Array(M * M), yI = new Float64Array(M * M);
-      for (let my = 0; my < M; my++) for (let mx = 0; mx < M; mx++) {
-        const fx = mx < M / 2 ? mx : mx - M, fy = my < M / 2 ? my : my - M;
-        if (!fx && !fy) continue;
-        const kx = 2 * Math.PI * fx, ky = 2 * Math.PI * fy;
-        let g = Gk(kx * kx + ky * ky, a);
-        if (p.corr) g /= Math.pow(sinc((Math.PI * fx) / M) * sinc((Math.PI * fy) / M), 2 * ord);
-        const i = mx + M * my;
-        pR[i] = g * R[i]; pI[i] = g * I[i];
-        const kxe = 2 * fx === -M ? 0 : kx, kye = 2 * fy === -M ? 0 : ky; // no derivative at Nyquist
-        xR[i] = kxe * g * I[i]; xI[i] = -kxe * g * R[i]; // E = −ik·G·ρ̂
-        yR[i] = kye * g * I[i]; yI[i] = -kye * g * R[i];
-      }
-      const [phi] = dft2(pR, pI, M, 1), [Ex] = dft2(xR, xI, M, 1), [Ey] = dft2(yR, yI, M, 1);
-      // 3. interpolate the field back to the charges with the same weights
-      const Fp = charges.map((c, i) => {
-        let ex = 0, ey = 0;
-        for (const [gx, wx] of W[i][0]) for (const [gy, wy] of W[i][1]) { ex += wx * wy * Ex[gx + M * gy]; ey += wx * wy * Ey[gx + M * gy]; }
-        return [c.q * ex, c.q * ey];
-      });
-      // reference: direct Ewald reciprocal-space sum over k-vectors
-      const mmax = Math.ceil((2 * a * Math.sqrt(Math.log(1e12))) / (2 * Math.PI));
-      let nK = 0;
-      const Fd = charges.map((ci) => {
-        let ex = 0, ey = 0;
-        for (let mx = -mmax; mx <= mmax; mx++) for (let my = -mmax; my <= mmax; my++) {
-          if (!mx && !my) continue;
-          const kx = 2 * Math.PI * mx, ky = 2 * Math.PI * my, g = Gk(kx * kx + ky * ky, a);
-          let s = 0;
-          for (const cj of charges) s += cj.q * Math.sin(kx * (ci.x - cj.x) + ky * (ci.y - cj.y));
-          ex += g * kx * s; ey += g * ky * s;
-        }
-        return [ci.q * ex, ci.q * ey];
-      });
-      nK = (2 * mmax + 1) ** 2 - 1;
-      let e2 = 0, n2 = 0;
-      Fp.forEach((f, i) => { e2 += (f[0] - Fd[i][0]) ** 2 + (f[1] - Fd[i][1]) ** 2; n2 += Fd[i][0] ** 2 + Fd[i][1] ** 2; });
-      let Qgrid = 0; for (let i = 0; i < M * M; i++) Qgrid += rho[i];
-      const w0 = W[0][0].reduce((s, q) => s + q[1], 0) * W[0][1].reduce((s, q) => s + q[1], 0);
-      cache = { M, rho, phi, W, Fp, Fd, err: Math.sqrt(e2 / n2), nK, Qgrid, w0 };
-    }
-    function draw(lab) {
-      const p = lab.p, c = cache, M = c.M;
-      const { ctx, w, h } = lab.canvas("cv");
-      ctx.clearRect(0, 0, w, h);
-      const legend = w >= 560;
-      const S = legend ? Math.min(h - 24, w * 0.58) : Math.min(h - 16, w - 16), ox = legend ? 12 : (w - S) / 2, oy = (h - S) / 2, cell = S / M;
-      const X = (x) => ox + x * S, Y = (y) => oy + (1 - y) * S;
-      const field = p.view === "rho" ? c.rho : c.phi;
-      let mx = 1e-12; for (let i = 0; i < field.length; i++) mx = Math.max(mx, Math.abs(field[i]));
-      ctx.save();
-      ctx.beginPath(); ctx.rect(ox, oy, S, S); ctx.clip();
-      for (let gy = 0; gy < M; gy++) for (let gx = 0; gx < M; gx++) {
-        const v = field[gx + M * gy] / mx;
-        if (Math.abs(v) < 0.01) continue;
-        ctx.fillStyle = MD.alpha(v > 0 ? "s8" : "s1", Math.min(0.85, Math.abs(v) * 0.85));
-        for (const dx of [0, M]) for (const dy of [0, M]) ctx.fillRect(X((gx + dx) / M) - cell / 2, Y((gy + dy) / M) - cell / 2, cell, cell);
-      }
-      // grid points
-      ctx.fillStyle = MD.css("--ink-3");
-      for (let gy = 0; gy < M; gy++) for (let gx = 0; gx < M; gx++) { ctx.beginPath(); ctx.arc(X(gx / M), Y(gy / M), M > 20 ? 0.9 : 1.4, 0, 2 * Math.PI); ctx.fill(); }
-      // stencil of the highlighted charge
-      ctx.strokeStyle = MD.color("s4"); ctx.lineWidth = 2;
-      for (const [gx] of c.W[0][0]) for (const [gy] of c.W[0][1]) for (const dx of [0, M]) for (const dy of [0, M]) ctx.strokeRect(X((gx + dx) / M) - cell / 2 + 1, Y((gy + dy) / M) - cell / 2 + 1, cell - 2, cell - 2);
-      // forces
-      if (p.view === "phi") {
-        let fm = 1e-12; c.Fd.forEach((f) => (fm = Math.max(fm, Math.hypot(f[0], f[1]))));
-        const L = 0.14 * S / fm;
-        const arrow = (x0, y0, fx, fy, col, dash) => {
-          const x1 = x0 + fx * L, y1 = y0 - fy * L, ang = Math.atan2(y1 - y0, x1 - x0);
-          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2; ctx.setLineDash(dash);
-          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.setLineDash([]);
-          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - 8 * Math.cos(ang - 0.4), y1 - 8 * Math.sin(ang - 0.4)); ctx.lineTo(x1 - 8 * Math.cos(ang + 0.4), y1 - 8 * Math.sin(ang + 0.4)); ctx.closePath(); ctx.fill();
-        };
-        charges.forEach((q, i) => {
-          arrow(X(q.x), Y(q.y), c.Fd[i][0], c.Fd[i][1], MD.css("--ink-3"), [4, 3]);
-          arrow(X(q.x), Y(q.y), c.Fp[i][0], c.Fp[i][1], MD.css("--ink"), []);
-        });
-      }
-      ctx.restore();
-      ctx.strokeStyle = MD.css("--ink-2"); ctx.lineWidth = 2; ctx.strokeRect(ox, oy, S, S);
-      // charges
-      charges.forEach((q, i) => {
-        ctx.fillStyle = MD.color(q.q > 0 ? "s8" : "s1");
-        ctx.beginPath(); ctx.arc(X(q.x), Y(q.y), 8, 0, 2 * Math.PI); ctx.fill();
-        if (i === 0) { ctx.strokeStyle = MD.color("s4"); ctx.lineWidth = 3; ctx.stroke(); }
-        ctx.fillStyle = "#fff"; ctx.font = "700 13px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(q.q > 0 ? "+" : "−", X(q.x), Y(q.y) + 0.5);
-      });
-      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-      if (!legend) return;
-      // pipeline legend
-      const tx = ox + S + 22, steps = [
-        ["1", "Spread charges onto grid", "B-spline order " + p.ord + " → " + p.ord + "×" + p.ord + " stencil", "rho"],
-        ["2", "FFT → ×Ĝ(k) → inverse FFT", "potential Φ on the grid", "phi"],
-        ["3", "Interpolate back to charges", "forces: PME solid, exact dashed", "phi"],
-        ["4", "Add real-space + self terms", "exactly as in standard Ewald", ""],
-      ];
-      let ty = oy + 18;
-      ctx.font = "600 13px system-ui, sans-serif"; ctx.fillStyle = MD.css("--ink");
-      ctx.fillText(p.view === "rho" ? "Showing: gridded charge ρ" : "Showing: reciprocal potential Φ", tx, ty);
-      ty += 26;
-      steps.forEach(([n, a, b, v]) => {
-        const on = v === p.view || (p.view === "phi" && n === "2");
-        ctx.fillStyle = on ? MD.color("accent") : MD.css("--ink-3");
-        ctx.font = "700 13px system-ui, sans-serif"; ctx.fillText(n, tx, ty);
-        ctx.fillStyle = on ? MD.css("--ink") : MD.css("--ink-3"); ctx.font = (on ? "600 " : "") + "12.5px system-ui, sans-serif";
-        ctx.fillText(a, tx + 16, ty);
-        ctx.fillStyle = MD.css("--ink-3"); ctx.font = "12px system-ui, sans-serif";
-        ctx.fillText(b, tx + 16, ty + 16);
-        ty += 44;
-      });
-      ctx.font = "12px system-ui, sans-serif"; ctx.fillStyle = MD.css("--ink-3");
-      ctx.fillText("red = positive, blue = negative", tx, ty + 4);
-      ctx.fillText("yellow = stencil of one charge", tx, ty + 20);
-    }
-    function refresh(lab, withReadouts = true) {
-      compute(lab.p); draw(lab);
-      if (!withReadouts) return;
-      const c = cache;
-      lab.readouts("ro", [
-        { k: "Grid points M × M", v: `${c.M} × ${c.M} = ${c.M * c.M}` },
-        { k: "Grid points per charge (stencil)", v: `${lab.p.ord}² = ${lab.p.ord * lab.p.ord}` },
-        { k: "Σ weights of highlighted charge", v: c.w0.toFixed(4), cls: "good" },
-        { k: "Total charge on the grid", v: (Math.abs(c.Qgrid) < 5e-13 ? 0 : c.Qgrid).toFixed(4) },
-        { k: "Reciprocal-force error vs direct k-sum", v: (100 * c.err).toFixed(c.err < 0.01 ? 3 : 1) + "%", cls: c.err < 0.01 ? "good" : "bad" },
-        { k: "k-vectors in the direct reference sum", v: String(c.nK) },
-      ]);
-    }
-    MD.lab("#lab-pme", {
-      title: "Particle Mesh Ewald on a 2D grid",
-      intro: "<p>Ten charges in a periodic box, shown in 2D (real PME uses a 3D grid, but the steps are identical). Step 1 spreads every charge onto its $p \\times p$ stencil of nearby grid points with B-spline weights; step 2 Fourier-transforms the grid, multiplies by the influence function $\\hat G(\\mathbf{k}) = 4\\pi e^{-k^2/4\\alpha^2}/k^2$ (the Ewald reciprocal kernel; optionally divided by the B-spline smoothing factor, as real PME codes do) and transforms back; step 3 interpolates the field back to each charge. The force error compares the grid result with a direct sum over all $\\mathbf{k}$-vectors.</p>",
-      controls: [
-        { type: "select", id: "view", label: "Show", value: "rho", options: [{ value: "rho", label: "Step 1 · gridded charge ρ" }, { value: "phi", label: "Steps 2–3 · potential Φ and forces" }] },
-        { type: "select", id: "M", label: "Grid size M (finer = smaller fourierspacing)", value: 16, options: [8, 12, 16, 24, 32] },
-        { type: "select", id: "ord", label: "Interpolation order (pme_order)", value: 4, options: [{ value: 1, label: "1 — nearest grid point" }, { value: 2, label: "2 — linear" }, { value: 4, label: "4 — cubic B-spline" }, { value: 6, label: "6 — quintic B-spline" }] },
-        { type: "range", id: "alpha", label: "Ewald α (box length = 1)", min: 4, max: 16, step: 0.5, value: 8 },
-        { type: "check", id: "corr", label: "Divide out the B-spline smoothing factor", value: true },
-        { type: "buttons", items: [{ id: "play", label: "Jiggle charges" }, { id: "new", label: "New charges", secondary: true }] },
-      ],
-      panels: [{ id: "cv", kind: "canvas", aspect: 1.6 }, { id: "ro", kind: "readouts" }],
-      init(lab) {
-        let seed = 5;
-        lab.seed = () => ++seed;
-        // Charges move every frame; the grid/canvas is recomputed every 2nd frame and the
-        // readouts (force error etc.) every 4th, so everything stays live while jiggling.
-        let frame = 0;
-        lab.anim = lab.loop(() => {
-          for (const q of charges) { q.x = (q.x + rng.normal(0, 0.003) + 1) % 1; q.y = (q.y + rng.normal(0, 0.003) + 1) % 1; }
-          frame++;
-          if (frame % 2 === 0) refresh(lab, frame % 4 === 0);
-        });
-      },
-      run(p, lab) { refresh(lab); },
-      onButton(id, p, lab) {
-        if (id === "play") lab.anim.running ? lab.anim.stop() : lab.anim.start();
-        if (id === "new") { reset(lab.seed()); refresh(lab); }
-      },
-      foot: "<p><strong>What to try:</strong> (1) Step 1: switch the order from 1 (nearest grid point, all charge on one point) to 4 and 6 and watch each charge smear over more points — the weights always sum to 1, so the total grid charge stays zero. (2) Steps 2–3: compare the solid PME forces with the dashed exact ones. With M = 8 and order 1 they disagree badly; M = 16 with order 4 gets below 1%; M = 32 with order 6 is essentially exact (Exercise 3). (3) Raise α: the kernel reaches higher $k$, so a coarse grid fails sooner. (4) Untick the smoothing correction to see why real codes include it. (5) Press <em>Jiggle</em>: as charges cross between grid points, coarse grids make the forces wobble.</p>",
     });
   })();
 
