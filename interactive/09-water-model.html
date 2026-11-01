@@ -15,8 +15,8 @@
   .lab canvas.sim { cursor: grab; }
   .lab .lab-stage > * { min-width: 0; }
   .lab pre.output.live-log { max-height: 260px; overflow: auto; margin: 0; font-size: 11px; white-space: pre; }
-  ol.refs { font-size: 14.5px; color: var(--ink-2); padding-left: 1.4rem; }
-  ol.refs li { margin: 0.35rem 0; }
+  ol.refs { font-size: 14.5px; color: var(--ink-2); list-style: none; padding-left: 0; }
+  ol.refs li { margin: 0.35rem 0; scroll-margin-top: 5rem; }
 </style>
 </head>
 <body data-module="09">
@@ -166,7 +166,7 @@ mode 8:    3671.3 cm^-1</pre></details>
       <tr><td>$\angle\mathrm{HOH}$</td><td>109.47°</td><td>109.47°</td><td>113.24° (equilibrium)</td></tr>
       <tr><td>$k_b$, $k_\theta$</td><td colspan="2">— (constraints)</td><td>1059.162 kcal/mol/Å², 75.90 kcal/mol/rad²</td></tr>
       <tr><td>Dipole of the gas-phase geometry</td><td>2.27 D</td><td>2.35 D</td><td>2.19 D</td></tr>
-      <tr><td>Original reference</td><td>Berendsen et al. 1981 [1]</td><td>Berendsen, Grigera, Straatsma 1987 [2]</td><td>Wu, Tepper, Voth 2006 [3]</td></tr>
+      <tr><td>Original reference</td><td>Berendsen et al. 1981 [<a class="citation-ref" href="#ref-1" title="Jump to reference 1">1</a>]</td><td>Berendsen, Grigera, Straatsma 1987 [<a class="citation-ref" href="#ref-2" title="Jump to reference 2">2</a>]</td><td>Wu, Tepper, Voth 2006 [<a class="citation-ref" href="#ref-3" title="Jump to reference 3">3</a>]</td></tr>
     </tbody>
   </table>
   <p>Notice that the isolated water molecule has a dipole of only 1.85 D, while these models carry 2.2–2.35 D: an effective model has to work for water <em>in water</em>, where the neighbours polarise each molecule and the dipole is larger. SPC/E makes this explicit by raising the charges, at a price: the energy needed to polarise the molecule from 1.85 D to 2.35 D is not included in the simulation, so SPC/E’s computed potential energy is too negative, and the heat of vaporisation needs a correction (Module 12 does this calculation).</p>
@@ -180,7 +180,7 @@ mode 8:    3671.3 cm^-1</pre></details>
 <section class="lesson step">
   <h2 data-toc="Running water in ASE"><span class="lesson-num">Lesson 5</span>Running Water in ASE</h2>
   <h3>Rigid or flexible?</h3>
-  <p>A flexible model has all three vibrations and needs 0.5 fs time steps. A <strong>rigid</strong> model freezes the two bond lengths and the angle, which removes the fast vibrations entirely: with the molecule rigid, the fastest remaining motion is the libration (hindered rotation) of the molecule, and a time step of 2 fs is safe. The price is that rigid models cannot describe the infrared spectrum or any property that depends on intramolecular vibration, and the three constraints must be satisfied at every step by an algorithm: <strong>SHAKE</strong> (Ryckaert et al. 1977 [4]) corrects positions after the Verlet step, <strong>RATTLE</strong> (Andersen 1983 [5]) also corrects velocities, and <strong>SETTLE</strong> (Miyamoto and Kollman 1992 [6]) solves the three constraints of a rigid water molecule analytically, which is why it is the default in production codes.</p>
+  <p>A flexible model has all three vibrations and needs 0.5 fs time steps. A <strong>rigid</strong> model freezes the two bond lengths and the angle, which removes the fast vibrations entirely: with the molecule rigid, the fastest remaining motion is the libration (hindered rotation) of the molecule, and a time step of 2 fs is safe. The price is that rigid models cannot describe the infrared spectrum or any property that depends on intramolecular vibration, and the three constraints must be satisfied at every step by an algorithm: <strong>SHAKE</strong> (Ryckaert et al. 1977 [<a class="citation-ref" href="#ref-4" title="Jump to reference 4">4</a>]) corrects positions after the Verlet step, <strong>RATTLE</strong> (Andersen 1983 [<a class="citation-ref" href="#ref-5" title="Jump to reference 5">5</a>]) also corrects velocities, and <strong>SETTLE</strong> (Miyamoto and Kollman 1992 [<a class="citation-ref" href="#ref-6" title="Jump to reference 6">6</a>]) solves the three constraints of a rigid water molecule analytically, which is why it is the default in production codes.</p>
   <h3>What ASE provides</h3>
   <p>ASE has two water calculators, <code>ase.calculators.tip3p.TIP3P</code> and <code>ase.calculators.tip4p.TIP4P</code>. They use a smooth molecule-based cutoff instead of Ewald and keep their parameters in module constants, so they cannot be used for SPC/E or SPC/Fw. Rigid molecules are made with <code>ase.constraints.FixBondLengths</code>. Everything else in ASE is generic: <strong>a force field is just a <code>Calculator</code> that returns an energy and forces</strong>. So we wrote one: <a href="assets/code/water_ase.py" download><code>water_ase.py</code></a> (about 200 lines of NumPy) implements SPC, SPC/E and SPC/Fw with Ewald electrostatics. The core of the flexible model is only these lines:</p>
   <div class="code-static"><pre><code class="language-python"># inside Water3Site.calculate(): bonded terms of the flexible model, vectorised over all molecules
@@ -310,13 +310,13 @@ done in 38 s (19 ms per step)</pre></details>
 
   <h3>References</h3>
   <ol class="refs">
-    <li>[1] H. J. C. Berendsen, J. P. M. Postma, W. F. van Gunsteren, J. Hermans, “Interaction models for water in relation to protein hydration”, in <em>Intermolecular Forces</em>, ed. B. Pullman, Reidel, Dordrecht (1981), pp. 331–342 (book chapter). <a href="https://doi.org/10.1007/978-94-015-7658-1_21" target="_blank" rel="noopener">doi:10.1007/978-94-015-7658-1_21</a></li>
-    <li>[2] H. J. C. Berendsen, J. R. Grigera, T. P. Straatsma, “The missing term in effective pair potentials”, <em>J. Phys. Chem.</em> <strong>91</strong>, 6269 (1987). <a href="https://doi.org/10.1021/j100308a038" target="_blank" rel="noopener">doi:10.1021/j100308a038</a></li>
-    <li>[3] Y. Wu, H. L. Tepper, G. A. Voth, “Flexible simple point-charge water model with improved liquid-state properties”, <em>J. Chem. Phys.</em> <strong>124</strong>, 024503 (2006). <a href="https://doi.org/10.1063/1.2136877" target="_blank" rel="noopener">doi:10.1063/1.2136877</a></li>
-    <li>[4] J.-P. Ryckaert, G. Ciccotti, H. J. C. Berendsen, “Numerical integration of the Cartesian equations of motion of a system with constraints: molecular dynamics of n-alkanes”, <em>J. Comput. Phys.</em> <strong>23</strong>, 327 (1977). <a href="https://doi.org/10.1016/0021-9991(77)90098-5" target="_blank" rel="noopener">doi:10.1016/0021-9991(77)90098-5</a></li>
-    <li>[5] H. C. Andersen, “Rattle: a ‘velocity’ version of the SHAKE algorithm for molecular dynamics calculations”, <em>J. Comput. Phys.</em> <strong>52</strong>, 24 (1983). <a href="https://doi.org/10.1016/0021-9991(83)90014-1" target="_blank" rel="noopener">doi:10.1016/0021-9991(83)90014-1</a></li>
-    <li>[6] S. Miyamoto, P. A. Kollman, “SETTLE: an analytical version of the SHAKE and RATTLE algorithm for rigid water models”, <em>J. Comput. Chem.</em> <strong>13</strong>, 952 (1992). <a href="https://doi.org/10.1002/jcc.540130805" target="_blank" rel="noopener">doi:10.1002/jcc.540130805</a></li>
-    <li>[7] G. Bussi, D. Donadio, M. Parrinello, “Canonical sampling through velocity rescaling”, <em>J. Chem. Phys.</em> <strong>126</strong>, 014101 (2007) (the thermostat used in the browser labs). <a href="https://doi.org/10.1063/1.2408420" target="_blank" rel="noopener">doi:10.1063/1.2408420</a></li>
+    <li id="ref-1">[1] H. J. C. Berendsen, J. P. M. Postma, W. F. van Gunsteren, J. Hermans, “Interaction models for water in relation to protein hydration”, in <em>Intermolecular Forces</em>, ed. B. Pullman, Reidel, Dordrecht (1981), pp. 331–342 (book chapter). <a href="https://doi.org/10.1007/978-94-015-7658-1_21" target="_blank" rel="noopener">doi:10.1007/978-94-015-7658-1_21</a></li>
+    <li id="ref-2">[2] H. J. C. Berendsen, J. R. Grigera, T. P. Straatsma, “The missing term in effective pair potentials”, <em>J. Phys. Chem.</em> <strong>91</strong>, 6269 (1987). <a href="https://doi.org/10.1021/j100308a038" target="_blank" rel="noopener">doi:10.1021/j100308a038</a></li>
+    <li id="ref-3">[3] Y. Wu, H. L. Tepper, G. A. Voth, “Flexible simple point-charge water model with improved liquid-state properties”, <em>J. Chem. Phys.</em> <strong>124</strong>, 024503 (2006). <a href="https://doi.org/10.1063/1.2136877" target="_blank" rel="noopener">doi:10.1063/1.2136877</a></li>
+    <li id="ref-4">[4] J.-P. Ryckaert, G. Ciccotti, H. J. C. Berendsen, “Numerical integration of the Cartesian equations of motion of a system with constraints: molecular dynamics of n-alkanes”, <em>J. Comput. Phys.</em> <strong>23</strong>, 327 (1977). <a href="https://doi.org/10.1016/0021-9991(77)90098-5" target="_blank" rel="noopener">doi:10.1016/0021-9991(77)90098-5</a></li>
+    <li id="ref-5">[5] H. C. Andersen, “Rattle: a ‘velocity’ version of the SHAKE algorithm for molecular dynamics calculations”, <em>J. Comput. Phys.</em> <strong>52</strong>, 24 (1983). <a href="https://doi.org/10.1016/0021-9991(83)90014-1" target="_blank" rel="noopener">doi:10.1016/0021-9991(83)90014-1</a></li>
+    <li id="ref-6">[6] S. Miyamoto, P. A. Kollman, “SETTLE: an analytical version of the SHAKE and RATTLE algorithm for rigid water models”, <em>J. Comput. Chem.</em> <strong>13</strong>, 952 (1992). <a href="https://doi.org/10.1002/jcc.540130805" target="_blank" rel="noopener">doi:10.1002/jcc.540130805</a></li>
+    <li id="ref-7">[7] G. Bussi, D. Donadio, M. Parrinello, “Canonical sampling through velocity rescaling”, <em>J. Chem. Phys.</em> <strong>126</strong>, 014101 (2007) (the thermostat used in the browser labs). <a href="https://doi.org/10.1063/1.2408420" target="_blank" rel="noopener">doi:10.1063/1.2408420</a></li>
   </ol>
 
   <h3>What to study next</h3>
