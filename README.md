@@ -34,7 +34,16 @@ View the interactive course on [GitHub Pages](https://24ssuman.github.io/md-tuto
 | **5** | [The Sampling Challenge](interactive/05-sampling.html) | Rare events, ergodicity, collective variables (CVs), free energy, and Potential of Mean Force (PMF). |
 | **6** | [Umbrella Sampling & PMF Reconstruction](interactive/06-umbrella.html) | Harmonic bias windows, multi-window sampling, overlap assessment, and WHAM-based reconstruction. |
 | **7** | [Metadynamics](interactive/07-metadynamics.html) | Adaptive bias, Gaussian hill deposition, well-tempered metadynamics, and reconstructing free energy profiles. |
-| **8** | [Multi-Particle LJ Fluid Simulation](interactive/08-lj-fluid.html) | 3D multi-particle systems, energy minimization, NVT ensembles, and radial distribution functions (RDF). |
+| **8** | [Multi-Particle LJ Fluid Simulation](interactive/08-lj-fluid.html) | 3D multi-particle systems, energy minimization, NVT ensembles, and radial distribution functions (RDF), and a recreation of Rahman's 1964 liquid-argon simulation (NVE, velocity autocorrelation, diffusion). |
+
+### 💧 Water Track
+
+| Module | Title | Key Learning Objectives |
+|:---:|---|---|
+| **9** | [Building a Water Model: Bonded Terms and SPC](interactive/09-water-model.html) | Bond and angle terms, partial charges plus Lennard-Jones, rigid SPC/SPC/E and flexible SPC/Fw water, constraints, and running water with ASE. |
+| **10** | [The Water-Model Zoo](interactive/10-water-models.html) | TIP3P/TIP4P/TIP5P and their descendants, flexible, polarizable and quantum models, where the parameters come from, and how the models compare with experiment. |
+| **11** | [MB-pol: Water from Many-Body Quantum Chemistry](interactive/11-mb-pol.html) | The many-body expansion, the MB-pol potential energy function, and its performance from clusters to the liquid, with classical and quantum nuclei. |
+| **12** | [Measuring Liquid Water: Simulation vs Experiment](interactive/12-water-properties.html) | Heat of vaporization, structure, diffusion, dielectric constant and pressure from an ASE simulation of liquid water, compared with experiment. |
 
 ### 🔬 Supplements
 

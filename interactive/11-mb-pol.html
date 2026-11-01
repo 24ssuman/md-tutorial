@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 11 — MB-pol: Many-Body Water · MD Tutorial</title>
+<meta name="description" content="The many-body expansion, the MB-pol potential energy function built from coupled-cluster data, and how it reproduces water from clusters to the liquid, with classical and quantum nuclei.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+<style>
+  /* page-local */
+  .lab select { max-width: 100%; }
+  .lab .lab-stage > * { min-width: 0; }
+  ol.refs { font-size: 14.5px; color: var(--ink-2); padding-left: 1.4rem; }
+  ol.refs li { margin: 0.3rem 0; }
+</style>
+</head>
+<body data-module="11">
+<main id="main">
+<article class="content">
+
+<!-- ================================================================== -->
+<header class="hero step">
+  <div class="eyebrow">Module 11 · Core track</div>
+  <h1>MB-pol: Water from Many-Body Quantum Chemistry</h1>
+  <p class="lede">Module 10 ended with a puzzle: fitting a few parameters to bulk water gives a model that is good at what it was fitted to and fragile elsewhere. MB-pol takes the opposite route. It is built from accurate quantum-chemistry calculations on small clusters (monomers, dimers, trimers) and then used, with no further adjustment to liquid water, to predict clusters, the liquid, the vapour-liquid critical point and ice.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Prerequisites</b> Modules 3, 9 and 10</span>
+    <span class="chip"><b>What you do</b> Decompose cluster energies into 2-, 3- and 4-body terms; compare classical and quantum-nuclei results</span>
+    <span class="chip" title="Roughly 30 min reading, 15 min playing with the demos and quizzes, 10 min on the exercise"><b>Expected time to finish</b> About 55 minutes</span>
+  </div>
+
+  <div class="objectives">
+    <h3>What you will learn</h3>
+    <ul>
+      <li>What the many-body expansion of the energy is, and why pair potentials cannot capture water.</li>
+      <li>How MB-pol is assembled: a one-body monomer surface, two- and three-body polynomial fits to coupled-cluster data, and long-range electrostatics, dispersion and induction.</li>
+      <li>How many parameters it has, what it is fitted to, and (importantly) what it is <em>not</em> fitted to.</li>
+      <li>What it reproduces from the dimer to the liquid, why classical nuclei are not enough, and what it cannot do.</li>
+    </ul>
+  </div>
+  <div class="callout tip">
+    <div class="callout-title">How to use this page</div>
+    <p>We do <strong>not</strong> run MB-pol here: it needs the MBX software library and is far more expensive than the force fields of Module 9. The first lab below uses a small, deliberately simple polarisable model of our own to show <em>why</em> a many-body expansion is needed, and is not MB-pol. All the MB-pol numbers on this page (parameter counts, training sets, liquid properties, the critical point) are taken from the papers listed in the references; the second lab plots them. Press <kbd>P</kbd> for presentation mode.</p>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="The many-body expansion"><span class="lesson-num">Lesson 1</span>The Many-Body Expansion</h2>
+  <p>Every force field you have used so far is a sum over pairs (plus bonded terms). A pair potential assumes that the energy of three molecules is the sum of the three pair energies. For water that is not true: the electric field of molecule A polarises molecule B, which changes the field that molecule C feels. The right way to ask how far this goes is the <strong>many-body expansion</strong> (MBE). For $N$ molecules,</p>
+  $$
+  E_N = \sum_i E_{1}(i) + \sum_{i<j} \Delta E_{2}(i,j) + \sum_{i<j<k} \Delta E_{3}(i,j,k) + \sum_{i<j<k<l} \Delta E_{4}(i,j,k,l) + \cdots
+  $$
+  <p>where the terms are defined recursively by subtracting everything of lower order:</p>
+  $$
+  \Delta E_2(i,j) = E(i,j) - E(i) - E(j), \qquad
+  \Delta E_3(i,j,k) = E(i,j,k) - \Delta E_2(i,j) - \Delta E_2(j,k) - \Delta E_2(i,k) - E(i) - E(j) - E(k).
+  $$
+  <p>Here $E(i,j,k)$ is the energy of those three molecules <em>alone</em>, computed with a quantum-chemistry method; $\Delta E_3$ is the part of it that cannot be explained by pairs. The expansion is exact if carried to order $N$, and its value is that, for water, it converges quickly: in hydrogen-bonded water the two-body term provides roughly 70–75 % of the binding energy, the three-body term roughly 20–25 %, and everything beyond that a few per cent at most, mostly long-range induction [8]. The three-body term is not a small correction: in the water hexamer, for instance, a pairwise model cannot get the energy ordering of the compact three-dimensional cage and prism isomers against the flat ring, whereas including three-body interactions can [9].</p>
+  <p>This suggests a strategy. Compute the one-, two- and three-body terms accurately with a quantum-chemistry method, fit each to a function that can be evaluated cheaply, treat the (small) four-body and higher terms through a physical model of the long-range <em>induction</em> that causes most of them, and add them up. That is what MB-pol does.</p>
+
+  <div id="lab-mbe"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">In the lab above, switching the polarisability off leaves the Lennard-Jones and permanent-charge interactions. Why are the three-body and higher terms then exactly zero?</p>
+    <ol class="choices">
+      <li>Because the program only computes pairs when polarisability is off.</li>
+      <li>Because a sum of pair interactions is, by definition, pairwise additive: the energy of any group of molecules is the sum of its pair energies, so $\Delta E_{n\ge3} = 0$.</li>
+      <li>Because three-body interactions only exist in clusters with fewer than five molecules.</li>
+    </ol>
+    <div class="explain">The inclusion–exclusion procedure computes the full energy of every subset. If the energy of a set is just the sum over its pairs, subtracting all the pair terms leaves nothing. Permanent charges and Lennard-Jones are pair interactions. Induction is not: the dipole induced on molecule $i$ depends on the induced dipoles of all the others, so it couples every molecule to every other and generates three-body and higher terms.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Anatomy of MB-pol"><span class="lesson-num">Lesson 2</span>The Anatomy of MB-pol</h2>
+  <p>MB-pol (“many-body polarisable”) is a potential energy function for water built in exactly this way [2, 3, 4, 6]. It is <strong>full-dimensional</strong> (the molecules are flexible) and combines machine-learned short-range terms with physically motivated long-range ones:</p>
+  $$
+  V_N = \sum_{i=1}^N V_{1\mathrm b}(i) + \sum_{i<j} V_{2\mathrm b}(i,j) + \sum_{i<j<k} V_{3\mathrm b}(i,j,k) + V_{\text{ind}}(1,\dots,N)
+  $$
+  <table>
+    <thead><tr><th>Term</th><th>What it is</th><th>Where it comes from</th></tr></thead>
+    <tbody>
+      <tr><td><strong>One-body</strong> $V_{1\mathrm b}$</td><td>The energy of an isolated flexible molecule (O–H stretching and H–O–H bending)</td><td>The spectroscopically accurate <strong>Partridge–Schwenke</strong> potential energy surface [15]</td></tr>
+      <tr><td><strong>Two-body</strong> $V_{2\mathrm b}$</td><td>A short-range permutationally invariant polynomial (PIP) <em>plus</em> long-range electrostatics, dispersion and induction</td><td>The PIP is fitted to 42,508 water dimers at the CCSD(T) complete-basis-set limit [2]</td></tr>
+      <tr><td><strong>Three-body</strong> $V_{3\mathrm b}$</td><td>A short-range PIP that corrects the induction model where the electron clouds of three molecules overlap</td><td>Fitted to 12,347 trimers at CCSD(T)/aug-cc-pVTZ with mid-bond functions [3]</td></tr>
+      <tr><td><strong>Long-range induction</strong> $V_\text{ind}$</td><td>Polarisable point dipoles on O and H, solved self-consistently for all molecules, with Thole damping</td><td>A re-parameterised Thole-type (TTM4-F family) model [2, 16]</td></tr>
+    </tbody>
+  </table>
+  <h3>What is a permutationally invariant polynomial?</h3>
+  <p>A potential energy surface must not change if you swap two identical atoms, for example the two hydrogens of one molecule or the two molecules of a dimer. Writing a flexible function of the interatomic distances that respects this symmetry exactly is the job of <strong>permutationally invariant polynomials</strong> [17]. Take the distances between all pairs of atoms, transform each into a bounded variable $x_{ab} = \exp(-k_{ab}\, r_{ab})$, and form all monomials in the $x_{ab}$ up to a given degree, <em>symmetrised</em> by summing over all permutations of identical atoms. The potential is a linear combination of these symmetrised monomials, $V_\text{poly} = \sum_l c_l\, m_l(\mathbf x)$. The coefficients $c_l$ are linear parameters, so given the training data they are found by (regularised) linear least squares; the ranges $k_{ab}$ are nonlinear parameters found by a simplex search [2].</p>
+  <h3>The long-range pieces</h3>
+  <ul>
+    <li><strong>Permanent electrostatics.</strong> Point charges on the two hydrogens and a massless M site (as in TIP4P, Module 10), but with charges that <em>change with the geometry</em> of the molecule, taken from an accurate dipole-moment surface [2].</li>
+    <li><strong>Dispersion.</strong> A $C_6/r^6$ interaction between all atom pairs, damped at short range by a Tang–Toennies function [18]. The three $C_6$ coefficients (HH, OH, OO) are fitted to long-range dimer energies and constrained so that they sum to the correct total dispersion of the molecule pair [2].</li>
+    <li><strong>Induction.</strong> Each atom carries an isotropic polarisability; the induced dipoles interact with the permanent charges and with each other through a damped dipole–dipole tensor (the Thole damping [16]), and the whole set is solved self-consistently at every step. This is the same idea as the toy model in the lab above and it is what makes the potential many-body.</li>
+  </ul>
+  <p>Two cut-offs keep the cost down: the short-range two-body PIP is switched off smoothly between 5.5 and 7.5 Å (oxygen–oxygen distance), and the three-body PIP at 4.5 Å [2, 3].</p>
+
+  <h3>How many parameters, and what was fitted to what?</h3>
+  <table>
+    <thead><tr><th>Part</th><th>Parameters</th><th>Fitted to</th></tr></thead>
+    <tbody>
+      <tr><td>Two-body PIP (degree 4)</td><td>1153 linear coefficients, 16 nonlinear parameters</td><td>42,508 dimers, CCSD(T)/CBS (RMS error 0.054 kcal/mol per dimer) [2]</td></tr>
+      <tr><td>Two-body dispersion</td><td>6 linear coefficients ($C_{6,8}$ for HH, OH, OO)</td><td>A long-range set of 10⁶ rigid dimers at 9–21 bohr separation [2]</td></tr>
+      <tr><td>Three-body PIP (degree 4)</td><td>1163 linear coefficients, 10 nonlinear parameters</td><td>12,347 trimers (RMS error 0.028 kcal/mol per trimer) [3]</td></tr>
+      <tr><td>Monomer, charges, polarisabilities</td><td>Taken from the Partridge–Schwenke surface and a dipole-moment surface; a handful of polarisability and damping parameters</td><td>Not refitted to the liquid</td></tr>
+    </tbody>
+  </table>
+  <p>So roughly 2300 linear coefficients and a few dozen nonlinear parameters, all fitted to <strong>gas-phase quantum-chemistry calculations on two and three molecules</strong>. MB-pol was not fitted to any experimental property of liquid water: every liquid, ice and interface result below is a prediction [6]. On the same set of 12,347 coupled-cluster trimers, the three-body error of MB-pol is 0.028 kcal/mol per trimer, against 0.104 for the fitted surface WHBB, 0.158 for HBB2-pol and 0.313 for the polarisable iAMOEBA-rev5 model [3].</p>
+  <div class="callout deep">
+    <div class="callout-title">💡 Deep dive: how the potential was later refined</div>
+    <p>The 2023 update, MB-pol(2023), keeps the same physical core and offers higher-degree two- and three-body polynomials (up to 3828 and 2207 coefficients), a trained explicit <strong>four-body</strong> term (266 coefficients), and larger training sets (71,892 dimers, 45,332 trimers, 3,692 tetramers) [11]. A recent variant replaces the polynomials by permutationally invariant Fourier series for better robustness at short range [12]. The software used to fit such potentials from new quantum-chemistry data (MB-Fit) and to evaluate them in molecular dynamics (MBX) are described in [14] and [13].</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="What it reproduces"><span class="lesson-num">Lesson 3</span>What MB-pol Reproduces: From the Dimer to the Liquid</h2>
+  <p>The evidence is staged by system size. Each stage tests the potential on something it was <em>not</em> fitted to.</p>
+  <ul>
+    <li><strong>The dimer.</strong> Twelve-dimensional quantum bound-state calculations of the vibration–rotation–tunnelling spectrum of (H₂O)₂ and (D₂O)₂ agree with experimental tunnelling splittings to within 0.02–0.5 cm⁻¹ [2].</li>
+    <li><strong>The second virial coefficient</strong> (the first correction to the ideal gas, set by pair interactions) agrees with experiment from 200 to 600 K, without any adjustment [2]. The <strong>third virial coefficient</strong>, which probes three-body interactions, was used to validate the trimer term [3].</li>
+    <li><strong>Clusters.</strong> MB-pol reproduces the energy ordering of the tested small-cluster isomers (up to the hexamer) within chemical accuracy, with one exception, a pentamer isomer; many-body energy contributions and vibrational frequencies agree closely with coupled-cluster references [3, 5].</li>
+    <li><strong>The liquid.</strong> See the lab below and the table.</li>
+    <li><strong>Ice.</strong> With classical nuclei the melting temperature of ice Ih is 263.5 K against 273 K in experiment; lattice energies and densities of several ice phases are well reproduced, and the authors attribute the remaining deviations to the omitted nuclear quantum effects [5]. Getting the <em>ordering</em> of the lattice energies of the ice polymorphs right needs every term of the many-body expansion to be accurate, at short and long range [11].</li>
+    <li><strong>Vapour–liquid equilibrium.</strong> Direct-coexistence simulations give a critical temperature of 639 ± 14 K and density of 0.34 ± 0.03 g/cm³ for the flexible potential, against the experimental 647.1 K and 0.322 g/cm³ [10]. For comparison, the five rigid fixed-charge models in the Vega–Abascal review (Module 10) span 521–640 K, with SPC/E and TIP4P/2005 also close to experiment [Module 10, ref. 23].</li>
+    <li><strong>Spectra.</strong> Infrared and Raman spectra of liquid water from path-integral (centroid) dynamics with MB-pol agree with experiment in line positions and shapes; the remaining error in the O–H stretch band shape is attributed to quantum dynamical effects [11].</li>
+  </ul>
+
+  <h3>The role of nuclear quantum effects</h3>
+  <p>The comparison below uses the liquid-phase properties of the third paper in the MB-pol series [4]: the same potential run twice, once with classical nuclei and once with quantum nuclei (path-integral molecular dynamics, Module 10). The two runs differ in nothing else.</p>
+
+  <div id="lab-nqe"></div>
+
+  <table>
+    <thead><tr><th>Property (ambient conditions)</th><th>Classical MB-pol</th><th>MB-pol with PIMD</th><th>Experiment (as quoted in [4])</th></tr></thead>
+    <tbody>
+      <tr><td>Density (g/cm³)</td><td>1.004(1)</td><td>1.001(2)</td><td>0.997</td></tr>
+      <tr><td>Enthalpy of vaporisation (kcal/mol)</td><td>10.9(2)</td><td>10.1(4)</td><td>10.5176</td></tr>
+      <tr><td>Orientational relaxation time $\tau_2$ (ps)</td><td>5.3(2)</td><td>2.3(3)</td><td>2.5</td></tr>
+      <tr><td>Self-diffusion coefficient (Å²/ps)</td><td>0.12(1)</td><td>0.22(3)</td><td>0.23</td></tr>
+    </tbody>
+  </table>
+  <p>Look at the pattern. The static properties (density, heat of vaporisation) are good either way: the classical density is 0.7 % high and the heat of vaporisation 4 % high, and the quantum values straddle the experiment. The <strong>dynamics</strong> is a different story: with classical nuclei the molecules diffuse and rotate twice as slowly as in reality, and with quantum nuclei they agree with experiment. Quantum delocalisation of the hydrogens weakens the effective hydrogen bonds, and that is invisible to a classical simulation however accurate the potential. This is the strongest argument for treating the nuclei quantum mechanically when the goal is quantitative agreement, and it is why MB-pol is routinely used with PIMD.</p>
+
+  <details class="exercise">
+    <summary>Exercise 1 — What does MB-pol buy over a fitted model?</summary>
+    <p>Compare the lab above with Module 10’s “models versus experiment” lab. (a) For the three properties that appear in both, which fitted rigid model comes closest to experiment, and how does MB-pol (PIMD) compare? (b) MB-pol has about 2300 fitted coefficients, TIP4P/2005 has about half a dozen parameters. Why is the larger model less likely to be an artefact of fitting?</p>
+    <details class="reveal">
+      <summary>One possible answer</summary>
+      <p>(a) For the density TIP4P/2005 (0.993) and SPC/E (0.994) are within 0.5 % of experiment and MB-pol is within 0.4 %; for the heat of vaporisation the raw SPC/E and TIP4P/2005 values are 12–14 % too high (before the polarisation correction) while MB-pol with PIMD is within 4 %; for diffusion SPC/E (2.54) and TIP4P/2005 (2.06) are within about 10 % and MB-pol with PIMD (2.2) within about 5 %. The point is not that MB-pol wins every row, it is that it matches comparably well <em>without having been told any of these numbers</em>. (b) A model is an artefact of fitting when it reproduces its targets by compensating errors. MB-pol’s coefficients are constrained by tens of thousands of quantum-chemistry energies of <em>small clusters</em>, whose physics (exchange repulsion, induction, dispersion) is the same physics that governs the liquid, so it transfers: the liquid properties are predictions, not fit results. TIP4P/2005’s few parameters were adjusted to the bulk properties themselves.</p>
+    </details>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Limits and practical use"><span class="lesson-num">Lesson 4</span>Limits and Practical Use</h2>
+  <ul>
+    <li><strong>Cost.</strong> MB-pol is more expensive than a rigid force field because of the polynomial evaluations and the self-consistent induction, and a path-integral simulation multiplies the cost by the number of beads [6]. It is nevertheless far cheaper than ab initio MD with coupled-cluster accuracy (which is out of reach).</li>
+    <li><strong>It is not reactive.</strong> Water molecules keep their identity: MB-pol cannot dissociate into H₃O⁺ and OH⁻, so processes such as proton transfer need a reactive model or ab initio MD [6].</li>
+    <li><strong>Charge transfer</strong> is represented only implicitly, through the short-range polynomial fits [6].</li>
+    <li><strong>Systematic improvability.</strong> This is the design goal: if a property is wrong, one can identify which term is responsible (two-body? three-body? induction?) and improve it with more data, as in MB-pol(2023) with its four-body term [11].</li>
+  </ul>
+  <h3>Running it</h3>
+  <p>MB-pol is distributed as part of <strong>MBX</strong>, a C++ library that evaluates the many-body energies and forces and interfaces with molecular dynamics engines including i-PI (for path-integral simulations), LAMMPS, OpenMM and AMBER [13]. New many-body potentials of this kind are fitted from quantum-chemistry data with <strong>MB-Fit</strong> [14]. The workflow, in outline: (1) prepare a water box; (2) point your MD engine (or i-PI, for quantum nuclei) at MBX; (3) run NVT or NPT dynamics exactly as in Modules 9 and 12, with a time step small enough for a flexible model (a fraction of a femtosecond). Installation and the interface to each engine are described in the MBX paper and its documentation, which we do not reproduce here.</p>
+</section>
+
+<!-- ================================================================== -->
+<section class="step">
+  <hr>
+  <p>End of Module 11. MB-pol showed a different philosophy of force-field building:</p>
+  <ul>
+    <li>Expand the energy in the number of interacting molecules and compute each order accurately from quantum chemistry.</li>
+    <li>Fit cheap functions to the one-, two- and three-body terms, and treat the rest through physically motivated induction.</li>
+    <li>Test the result, with no further adjustment, on the dimer, clusters, the liquid, ice and the critical point.</li>
+    <li>Combine it with path-integral nuclei to get the dynamics right.</li>
+  </ul>
+
+  <div class="takeaways">
+    <h2 data-toc="Key takeaways">📝 Key Takeaways</h2>
+    <ul>
+      <li>The <strong>many-body expansion</strong> splits the energy into one-, two-, three-… body terms; for water the two-body term gives about 70–75 % of the binding energy and the three-body term about 20–25 %, so pair potentials are not enough.</li>
+      <li>Permanent charges and Lennard-Jones are pairwise additive; <strong>induction (polarisation)</strong> is what generates the many-body terms.</li>
+      <li><strong>MB-pol</strong> combines a monomer surface, short-range two- and three-body permutationally invariant polynomials fitted to CCSD(T) data on dimers and trimers, and long-range electrostatics, dispersion and Thole-damped induction.</li>
+      <li>It is fitted to <strong>gas-phase clusters only</strong>, never to liquid-water experiments, so liquid, ice and critical-point results are predictions.</li>
+      <li>With classical nuclei the dynamics are too slow by a factor of two; with <strong>path-integral nuclei</strong> the same potential matches the experimental diffusion and rotation.</li>
+    </ul>
+  </div>
+
+  <h3>References</h3>
+  <ol class="refs">
+    <li>[1] V. Babin, G. R. Medders, F. Paesani, “Toward a universal water model: first principles simulations from the dimer to the liquid phase”, <em>J. Phys. Chem. Lett.</em> <strong>3</strong>, 3765 (2012). <a href="https://doi.org/10.1021/jz3017733" target="_blank" rel="noopener">doi:10.1021/jz3017733</a></li>
+    <li>[2] V. Babin, C. Leforestier, F. Paesani, “Development of a ‘first principles’ water potential with flexible monomers: dimer potential energy surface, VRT spectrum, and second virial coefficient”, <em>J. Chem. Theory Comput.</em> <strong>9</strong>, 5395 (2013) (MB-pol). <a href="https://doi.org/10.1021/ct400863t" target="_blank" rel="noopener">doi:10.1021/ct400863t</a></li>
+    <li>[3] V. Babin, G. R. Medders, F. Paesani, “Development of a ‘first principles’ water potential with flexible monomers. II: trimer potential energy surface, third virial coefficient, and small clusters”, <em>J. Chem. Theory Comput.</em> <strong>10</strong>, 1599 (2014). <a href="https://doi.org/10.1021/ct500079y" target="_blank" rel="noopener">doi:10.1021/ct500079y</a></li>
+    <li>[4] G. R. Medders, V. Babin, F. Paesani, “Development of a ‘first-principles’ water potential with flexible monomers. III. Liquid phase properties”, <em>J. Chem. Theory Comput.</em> <strong>10</strong>, 2906 (2014). <a href="https://doi.org/10.1021/ct5004115" target="_blank" rel="noopener">doi:10.1021/ct5004115</a></li>
+    <li>[5] S. K. Reddy et al., “On the accuracy of the MB-pol many-body potential for water: interaction energies, vibrational frequencies, and classical thermodynamic and dynamical properties from clusters to liquid water and ice”, <em>J. Chem. Phys.</em> <strong>145</strong>, 194504 (2016). <a href="https://doi.org/10.1063/1.4967719" target="_blank" rel="noopener">doi:10.1063/1.4967719</a></li>
+    <li>[6] F. Paesani, “Getting the right answers for the right reasons: toward predictive molecular simulations of water with many-body potential energy functions”, <em>Acc. Chem. Res.</em> <strong>49</strong>, 1844 (2016). <a href="https://doi.org/10.1021/acs.accounts.6b00285" target="_blank" rel="noopener">doi:10.1021/acs.accounts.6b00285</a></li>
+    <li>[7] G. A. Cisneros, K. T. Wikfeldt, L. Ojamäe, J. Lu, Y. Xu, H. Torabifard, A. P. Bartók, G. Csányi, V. Molinero, F. Paesani, “Modeling molecular interactions in water: from pairwise to many-body potential energy functions”, <em>Chem. Rev.</em> <strong>116</strong>, 7501 (2016). <a href="https://doi.org/10.1021/acs.chemrev.5b00644" target="_blank" rel="noopener">doi:10.1021/acs.chemrev.5b00644</a></li>
+    <li>[8] G. R. Medders, V. Babin, F. Paesani, “A critical assessment of two-body and three-body interactions in water”, <em>J. Chem. Theory Comput.</em> <strong>9</strong>, 1103 (2013). <a href="https://doi.org/10.1021/ct300913g" target="_blank" rel="noopener">doi:10.1021/ct300913g</a></li>
+    <li>[9] V. Babin, F. Paesani, “The curious case of the water hexamer: cage vs. prism”, <em>Chem. Phys. Lett.</em> <strong>580</strong>, 1 (2013). <a href="https://doi.org/10.1016/j.cplett.2013.06.041" target="_blank" rel="noopener">doi:10.1016/j.cplett.2013.06.041</a></li>
+    <li>[10] M. A. Muniz, A. J. Gartner, M. Riera, C. Knight, S. Yue, F. Paesani, A. Z. Panagiotopoulos, “Vapor–liquid equilibrium of water with the MB-pol many-body potential”, <em>J. Chem. Phys.</em> <strong>154</strong>, 211103 (2021). <a href="https://doi.org/10.1063/5.0050068" target="_blank" rel="noopener">doi:10.1063/5.0050068</a></li>
+    <li>[11] E. Palos, S. Bull-Vulpe, X. Zhu, E. Agnew, M. Gupta, S. Saha, F. Paesani, “Current status of the MB-pol data-driven many-body potential for predictive simulations of water across different phases”, <em>J. Chem. Theory Comput.</em> <strong>20</strong>, 9269 (2024). <a href="https://doi.org/10.1021/acs.jctc.4c01005" target="_blank" rel="noopener">doi:10.1021/acs.jctc.4c01005</a></li>
+    <li>[12] X. Zhu, F. Paesani, “Permutationally invariant Fourier series for accurate and robust data-driven many-body potentials”, <em>J. Chem. Theory Comput.</em> <strong>21</strong>, 6950 (2025). <a href="https://doi.org/10.1021/acs.jctc.5c00407" target="_blank" rel="noopener">doi:10.1021/acs.jctc.5c00407</a></li>
+    <li>[13] M. Riera et al., “MBX: a many-body energy and force calculator for data-driven many-body simulations”, <em>J. Chem. Phys.</em> <strong>159</strong>, 054802 (2023). <a href="https://doi.org/10.1063/5.0156036" target="_blank" rel="noopener">doi:10.1063/5.0156036</a></li>
+    <li>[14] M. Bull-Vulpe, M. Riera, A. W. Götz, F. Paesani, “MB-Fit: software infrastructure for data-driven many-body potential energy functions”, <em>J. Chem. Phys.</em> <strong>155</strong>, 124801 (2021). <a href="https://doi.org/10.1063/5.0063198" target="_blank" rel="noopener">doi:10.1063/5.0063198</a></li>
+    <li>[15] H. Partridge, D. W. Schwenke, “The determination of an accurate isotope dependent potential energy surface for water from extensive ab initio calculations and experimental data”, <em>J. Chem. Phys.</em> <strong>106</strong>, 4618 (1997). <a href="https://doi.org/10.1063/1.473987" target="_blank" rel="noopener">doi:10.1063/1.473987</a></li>
+    <li>[16] B. T. Thole, “Molecular polarizabilities calculated with a modified dipole interaction”, <em>Chem. Phys.</em> <strong>59</strong>, 341 (1981). <a href="https://doi.org/10.1016/0301-0104(81)85176-2" target="_blank" rel="noopener">doi:10.1016/0301-0104(81)85176-2</a></li>
+    <li>[17] B. J. Braams, J. M. Bowman, “Permutationally invariant potential energy surfaces in high dimensionality”, <em>Int. Rev. Phys. Chem.</em> <strong>28</strong>, 577 (2009). <a href="https://doi.org/10.1080/01442350903234923" target="_blank" rel="noopener">doi:10.1080/01442350903234923</a></li>
+    <li>[18] K. T. Tang, J. P. Toennies, “An improved simple model for the van der Waals potential based on universal damping functions for the dispersion coefficients”, <em>J. Chem. Phys.</em> <strong>80</strong>, 3726 (1984). <a href="https://doi.org/10.1063/1.447150" target="_blank" rel="noopener">doi:10.1063/1.447150</a></li>
+  </ol>
+  <p style="font-size:14px;color:var(--ink-2)">The MB-pol facts on this page were collected from the primary papers above (via the course author’s paper library); the three-body and four-body percentages quoted in Lesson 1 are from [8]. The toy model in the first lab is our own illustration and is not MB-pol.</p>
+
+  <h3>What to study next</h3>
+  <p>In <a href="12-water-properties.html">Module 12</a> we return to a classical model and do what MB-pol was validated against: compute the properties of liquid water from a simulation and compare them with experiment.</p>
+</section>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script>
+(function () {
+  "use strict";
+  const KE = 1389.35457, DEG = Math.PI / 180;
+
+  // ================================================================ toy polarisable water ring (NOT MB-pol)
+  // Rigid molecules with gas-phase charges (dipole 1.85 D), an O–O Lennard-Jones pair term, and a Thole-damped
+  // isotropic polarisability on each oxygen, solved self-consistently. Everything except the induction is pairwise additive.
+  const TOY = { qH: 0.3284, alpha: 1.43, a: 0.39, sig: 3.15, eps: 0.65, rOH: 0.9572, th: 104.52 };
+  function ring(n, dOO) {
+    const R = dOO / (2 * Math.sin(Math.PI / n)), mols = [], c = Math.cos(TOY.th * DEG);
+    for (let i = 0; i < n; i++) {
+      const a = (2 * Math.PI * i) / n, b = (2 * Math.PI * (i + 1)) / n;
+      const O = [R * Math.cos(a), R * Math.sin(a), 0], On = [R * Math.cos(b), R * Math.sin(b), 0];
+      let u = [On[0] - O[0], On[1] - O[1], 0]; const l = Math.hypot(u[0], u[1]); u = [u[0] / l, u[1] / l, 0];
+      const Ha = O.map((x, k) => x + TOY.rOH * u[k]);                         // donated hydrogen, pointing at the next oxygen
+      const s = Math.sin(TOY.th * DEG) * (i % 2 ? -1 : 1);                    // free hydrogen alternately above / below the ring plane
+      const Hb = [O[0] + TOY.rOH * u[0] * c, O[1] + TOY.rOH * u[1] * c, TOY.rOH * s];
+      mols.push({ O, Ha, Hb });
+    }
+    return mols;
+  }
+  function energy(M, polar) {
+    const q = [-2 * TOY.qH, TOY.qH, TOY.qH], at = (m) => [m.O, m.Ha, m.Hb], n = M.length;
+    let Eperm = 0, Elj = 0, Eind = 0;
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      const A = at(M[i]), B = at(M[j]);
+      for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) Eperm += (KE * q[a] * q[b]) / Math.hypot(A[a][0] - B[b][0], A[a][1] - B[b][1], A[a][2] - B[b][2]);
+      const r = Math.hypot(M[i].O[0] - M[j].O[0], M[i].O[1] - M[j].O[1], M[i].O[2] - M[j].O[2]), x6 = (TOY.sig / r) ** 6;
+      Elj += 4 * TOY.eps * (x6 * x6 - x6);
+    }
+    if (polar && n > 1) {
+      const a3 = Math.cbrt(TOY.alpha), E0 = M.map(() => [0, 0, 0]);
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (i !== j) {
+        const S = at(M[j]);
+        for (let b = 0; b < 3; b++) {
+          const d = [M[i].O[0] - S[b][0], M[i].O[1] - S[b][1], M[i].O[2] - S[b][2]], r = Math.hypot(d[0], d[1], d[2]);
+          const l3 = 1 - Math.exp(-TOY.a * (r / a3) ** 3);                     // Thole damping of the charge-dipole interaction
+          for (let k = 0; k < 3; k++) E0[i][k] += (q[b] * l3 * d[k]) / r ** 3;
+        }
+      }
+      let mu = E0.map((e) => e.map((x) => TOY.alpha * x));
+      for (let it = 0; it < 300; it++) {
+        let change = 0; const next = [];
+        for (let i = 0; i < n; i++) {
+          const E = E0[i].slice();
+          for (let j = 0; j < n; j++) if (i !== j) {
+            const d = [M[i].O[0] - M[j].O[0], M[i].O[1] - M[j].O[1], M[i].O[2] - M[j].O[2]], r = Math.hypot(d[0], d[1], d[2]), u3 = (r / a3) ** 3, e = Math.exp(-TOY.a * u3);
+            const l3 = 1 - e, l5 = 1 - (1 + TOY.a * u3) * e, dm = d[0] * mu[j][0] + d[1] * mu[j][1] + d[2] * mu[j][2];
+            for (let k = 0; k < 3; k++) E[k] += (3 * l5 * d[k] * dm) / r ** 5 - (l3 * mu[j][k]) / r ** 3;
+          }
+          const nm = E.map((x) => TOY.alpha * x); next.push(nm);
+          for (let k = 0; k < 3; k++) change = Math.max(change, Math.abs(nm[k] - mu[i][k]));
+        }
+        mu = next; if (change < 1e-10) break;
+      }
+      for (let i = 0; i < n; i++) Eind -= 0.5 * KE * (mu[i][0] * E0[i][0] + mu[i][1] * E0[i][1] + mu[i][2] * E0[i][2]);
+    }
+    return { perm: Eperm, lj: Elj, ind: Eind, tot: Eperm + Elj + Eind };
+  }
+  /** Many-body expansion by inclusion–exclusion over all subsets. Returns the total k-body contributions, k = 2..n. */
+  function mbe(M, polar) {
+    const n = M.length, delta = new Float64Array(1 << n), byK = new Array(n + 1).fill(0);
+    const pop = (m) => { let c = 0; while (m) { c += m & 1; m >>= 1; } return c; };
+    const masks = []; for (let m = 1; m < 1 << n; m++) masks.push(m);
+    masks.sort((a, b) => pop(a) - pop(b));
+    for (const m of masks) {
+      let d = energy(M.filter((_, i) => m & (1 << i)), polar).tot;
+      for (let s = (m - 1) & m; s > 0; s = (s - 1) & m) d -= delta[s];
+      delta[m] = d; byK[pop(m)] += d;
+    }
+    return { byK, full: energy(M, polar) };
+  }
+
+  MD.lab("#lab-mbe", {
+    title: "The many-body expansion of a water ring (a toy polarisable model, not MB-pol)",
+    intro: "<p>A cyclic hydrogen-bonded ring of $n$ rigid water molecules; each donates one hydrogen to the next oxygen and the free hydrogens point alternately above and below the ring. The model has gas-phase point charges (dipole 1.85 D), a Lennard-Jones term on the oxygens, and a Thole-damped polarisable dipole on each oxygen, solved self-consistently. The page then computes the energy of <em>every subset</em> of molecules and applies the inclusion–exclusion formula of Lesson 1 to extract the total two-, three-, … $n$-body contributions. Orange bars: the same ring with the polarisability switched off (a purely pairwise model).</p>",
+    controls: [
+      { type: "select", id: "n", label: "Molecules in the ring", value: 5, options: [4, 5, 6] },
+      { type: "range", id: "d", label: "O···O distance (Å)", min: 2.6, max: 3.4, step: 0.05, value: 2.8, fmt: (v) => `${v.toFixed(2)} (typical hydrogen bond: 2.8)` },
+    ],
+    cols: 1,
+    panels: [{ id: "bar", kind: "plot" }, { id: "ro", kind: "readouts" }],
+    run(p, lab) {
+      const M = ring(p.n, p.d), withInd = mbe(M, true), noInd = mbe(M, false);
+      const ks = [], lab2 = [], vInd = [], vNo = [];
+      for (let k = 2; k <= p.n; k++) { ks.push(k); lab2.push(`${k}-body`); vInd.push(withInd.byK[k]); vNo.push(noInd.byK[k]); }
+      const T = withInd.full.tot, T0 = noInd.full.tot;
+      lab.plot("bar", [
+        { type: "bar", name: "with induction", x: lab2, y: vInd, marker: { color: MD.color("s1") }, text: vInd.map((v) => `${((100 * v) / T).toFixed(1)} %`), textposition: "outside", cliponaxis: false },
+        { type: "bar", name: "pairwise model (no induction)", x: lab2, y: vNo, marker: { color: MD.color("s2") }, text: vNo.map((v) => (Math.abs(v) < 1e-6 ? "0" : "")), textposition: "outside", cliponaxis: false },
+      ], {
+        title: { text: `Total k-body contributions to the interaction energy of the ${p.n}-ring (kJ/mol); labels: percentage of the total` },
+        yaxis: { title: { text: "energy (kJ/mol)" }, zeroline: true }, barmode: "group", legend: { y: 1.14 }, margin: { t: 70 },
+      });
+      const three = withInd.byK.slice(3).reduce((a, b) => a + b, 0);
+      lab.readouts("ro", [
+        { k: "Total interaction energy (with induction)", v: `${T.toFixed(1)} kJ/mol = ${withInd.full.perm.toFixed(1)} (charges) + ${withInd.full.lj.toFixed(1)} (LJ) + ${withInd.full.ind.toFixed(1)} (induction)` },
+        { k: "Sum of the k-body terms", v: `${withInd.byK.reduce((a, b) => a + b, 0).toFixed(1)} kJ/mol (equals the total: the expansion is exact)` },
+        { k: "Three-body and higher", v: `${three.toFixed(1)} kJ/mol = ${((100 * three) / T).toFixed(1)} % of the total` },
+        { k: "Pairwise model (no induction)", v: `total ${T0.toFixed(1)} kJ/mol; three-body and higher: ${noInd.byK.slice(3).reduce((a, b) => a + b, 0).toFixed(6)} kJ/mol` },
+      ]);
+    },
+    foot: "<p><strong>What to try.</strong> (1) Leave the settings at 5 molecules and 2.8 Å. The orange bars show that without induction <em>everything</em> is two-body, exactly: charges and Lennard-Jones are pair interactions. With induction the three-body term is about 11 % of the total energy and the four-body term about 1 %, and the expansion converges rapidly, as it does for real water. (2) Compress the ring (2.6–2.7 Å): the many-body share grows, because the molecules polarise each other more strongly when close; stretch it (3.3 Å) and it falls towards the pairwise limit. (3) Increase the number of molecules: the relative importance of three-body and higher terms rises a little. (4) The many-body fractions of this crude toy (about 10 % three-body) are smaller than for real water (20–25 % three-body [8]), because it polarises only through oxygen, has no explicit exchange, and uses fixed geometries. The pattern, not the numbers, is the point.</p>",
+  });
+
+  // ================================================================ classical vs quantum nuclei
+  const PR = [
+    { name: "Density", expt: 0.997, cl: 1.004, q: 1.001, unit: "g/cm³" },
+    { name: "Enthalpy of vaporisation", expt: 10.5176, cl: 10.9, q: 10.1, unit: "kcal/mol" },
+    { name: "Diffusion coefficient", expt: 0.23, cl: 0.12, q: 0.22, unit: "Å²/ps" },
+    { name: "Orientational relaxation time τ₂", expt: 2.5, cl: 5.3, q: 2.3, unit: "ps" },
+  ];
+  MD.lab("#lab-nqe", {
+    title: "MB-pol with classical and quantum nuclei, relative to experiment",
+    intro: "<p>Each bar is the simulation value divided by the experimental value (100 % = perfect agreement), for the same MB-pol potential run with classical nuclei and with path-integral (quantum) nuclei. Values are from Table 1 of Medders et al. [4]; the experimental values are those quoted there.</p>",
+    controls: [{ type: "check", id: "ci", label: "Show the quoted statistical uncertainties of the simulations as error bars (diffusion and τ₂ only where listed)", value: true }],
+    cols: 1,
+    panels: [{ id: "bar", kind: "plot" }],
+    run(p, lab) {
+      const x = PR.map((r) => r.name), cl = PR.map((r) => (100 * r.cl) / r.expt), q = PR.map((r) => (100 * r.q) / r.expt);
+      const errCl = [0.1, 1.9, 4.3, 8.0], errQ = [0.2, 3.8, 13.0, 12.0];       // 1σ from the quoted uncertainties, in % of experiment
+      lab.plot("bar", [
+        { type: "bar", name: "classical nuclei", x, y: cl, marker: { color: MD.color("s2") }, error_y: p.ci ? { type: "data", array: errCl, visible: true } : undefined, text: cl.map((v) => `${v.toFixed(0)} %`), textposition: "outside", cliponaxis: false },
+        { type: "bar", name: "quantum nuclei (PIMD)", x, y: q, marker: { color: MD.color("s1") }, error_y: p.ci ? { type: "data", array: errQ, visible: true } : undefined, text: q.map((v) => `${v.toFixed(0)} %`), textposition: "outside", cliponaxis: false },
+      ], {
+        title: { text: "Simulation / experiment (%)" }, barmode: "group", yaxis: { title: { text: "% of experimental value" }, range: [0, 240] },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 100, y1: 100, line: { color: "ink", dash: "dash", width: 1.5 } }], legend: { y: 1.14 }, margin: { t: 64, b: 60 },
+      });
+    },
+    foot: "<p><strong>What to try.</strong> The static properties (density, heat of vaporisation) are within a few per cent of experiment whether the nuclei are classical or quantum. The dynamical properties are not: classical nuclei make the diffusion about half as fast as experiment (52 %) and rotation more than twice as slow (212 %), and quantum nuclei bring both back to within 10 %. The error bars (1σ, from the uncertainties quoted in [4]) show that the quantum diffusion and relaxation times are the less precisely known, but the difference between classical and quantum is much larger than the uncertainty.</p>",
+  });
+})();
+</script>
+</body>
+</html>

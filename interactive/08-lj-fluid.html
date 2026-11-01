@@ -29,7 +29,7 @@
   <div class="meta-row">
     <span class="chip"><b>Prerequisites</b> All previous modules</span>
     <span class="chip"><b>What you run</b> An ASE-based LJ fluid simulation with trajectory visualization</span>
-    <span class="chip" title="Roughly 20 min reading, 11 min playing with the demos and quizzes, 12 min on the exercises"><b>Expected time to finish</b> About 45 minutes</span>
+    <span class="chip" title="Roughly 25 min reading, 15 min playing with the demos and quizzes, 20 min on the exercises"><b>Expected time to finish</b> About 60 minutes</span>
   </div>
 
   <div class="objectives">
@@ -38,6 +38,7 @@
       <li>How to use the Atomic Simulation Environment (ASE) for 3D MD simulations.</li>
       <li>How to set up a Lennard-Jones fluid with periodic boundary conditions.</li>
       <li>How to run NVT simulations and compute properties like the radial distribution function.</li>
+      <li>How to recreate Rahman’s 1964 simulation of liquid argon in NVE and measure the velocity autocorrelation function and the diffusion constant.</li>
     </ul>
   </div>
   <div class="callout tip">
@@ -641,6 +642,171 @@ plt.show()</code></pre></div>
   <p>Visualizing the trajectory helps understand the dynamics, check for equilibration, and observe phase behavior (e.g., melting, evaporation). The rotating 3D views on this page are a minimal version of what these programs do: watch the highlighted atom rattle in its cage in the NVT lab, a melted liquid flow in the phase explorer, or its gas spread through the box.</p>
 </section>
 
+<!-- LESSON5:BEGIN -->
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Rahman's argon (1964)"><span class="lesson-num">Lesson 5</span>Recreating the First MD of a Liquid: Rahman (1964)</h2>
+  <p>You have just run a molecular dynamics simulation of liquid argon. It is worth knowing that this exact calculation, a few hundred argon atoms interacting through the Lennard-Jones potential, is one of the founding experiments of the field. The first molecular dynamics simulations (Alder and Wainwright, 1957 [1]) used <em>hard spheres</em>: particles that move in straight lines and collide like billiard balls. Real atoms feel smooth, continuous forces. In 1964 <strong>Aneesur Rahman</strong>, at Argonne National Laboratory, integrated Newton’s equations for atoms interacting through the Lennard-Jones potential, the first MD of a liquid with a continuous potential, and compared the result with experiment [2].</p>
+  <p>The abstract of his paper [2] tells us what he did: <strong>864 argon atoms</strong> interacting through a Lennard-Jones potential and obeying classical equations of motion, simulated on a CDC 3600 computer, at <strong>94.4 K</strong> and a density of <strong>1.374 g/cm³</strong>. He computed the pair-correlation function and the self-diffusion constant (both in good agreement with experiment, the diffusion constant being 15 % lower than the measured value) and the <strong>velocity autocorrelation function</strong>, whose behaviour shows how an atom in a liquid is trapped by its neighbours. That is the simulation we recreate here. Everything it needs is something you have already learned: an fcc starting lattice, periodic boundaries (Module 2), the Lennard-Jones potential (Module 3), Velocity Verlet (Module 2), the radial distribution function (Lesson 4).</p>
+
+  <table>
+    <thead><tr><th>Ingredient</th><th>Rahman (1964)</th><th>This lesson</th></tr></thead>
+    <tbody>
+      <tr><td>Atoms</td><td>864</td><td>864 = 6 × 6 × 6 fcc cells × 4</td></tr>
+      <tr><td>Temperature</td><td>94.4 K</td><td>94.4 K (the NVE run averages 94.3 K)</td></tr>
+      <tr><td>Density</td><td>1.374 g/cm³</td><td>1.374 g/cm³, i.e. a cubic box of 34.68 Å = 10.20 σ</td></tr>
+      <tr><td>$\sigma$, $\epsilon/k_B$</td><td>3.4 Å, 120 K *</td><td>3.4 Å, 120 K</td></tr>
+      <tr><td>Time step</td><td>10⁻¹⁴ s *</td><td>10 fs</td></tr>
+      <tr><td>Dynamics</td><td>Newtonian (NVE)</td><td>Velocity Verlet, NVE for the measurement</td></tr>
+      <tr><td>Cut-off</td><td>see the paper</td><td>2.5 σ (our choice), energy shifted</td></tr>
+      <tr><td>Self-diffusion constant</td><td>2.43 × 10⁻⁵ cm²/s * (15 % below experiment)</td><td>measured below</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:14px;color:var(--ink-2)">* The abstract [2] gives the number of atoms, the state point and the 15 % statement. The values marked * (Lennard-Jones parameters, time step and the value of $D$) are quoted from a modern replication write-up [3]; check the paper itself before relying on them for anything but this exercise. His start-up procedure and cut-off are described in the paper, we use a simpler modern protocol.</p>
+
+  <h3>Step 1: the 864-atom box</h3>
+  <p>The density fixes the lattice constant: 1.374 g/cm³ of argon is 0.02071 atoms/Å³, and an fcc cell holds four atoms, so $a = (4/n)^{1/3} = 5.780$ Å. Six cells along each axis give 864 atoms.</p>
+  <details class="code-cell"><summary>ASE: Rahman’s state point and the 864-atom fcc box</summary><pre><code class="language-python">"""Recreate Rahman's 1964 liquid-argon MD with ASE (864 atoms, 94.4 K, 1.374 g/cm^3)."""
+import time
+import numpy as np
+from ase import units
+from ase.build import bulk
+from ase.calculators.lj import LennardJones
+from ase.md.langevin import Langevin
+from ase.md.verlet import VelocityVerlet
+from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
+from ase.neighborlist import neighbor_list
+
+# --- Rahman's state point ---------------------------------------------------
+sigma, eps_K, mass = 3.4, 120.0, 39.948          # A, K, amu
+epsilon = eps_K * units.kB                       # eV
+T_target, rho_gcc, N_cells = 94.4, 1.374, 6      # K, g/cm^3, 6x6x6 fcc cells -&gt; 864 atoms
+dt_fs = 10.0                                     # 1e-14 s
+rc = 2.5 * sigma                                 # our choice
+
+n_per_A3 = rho_gcc / (mass * 1.66053906660e-24) * 1e-24
+a = (4.0 / n_per_A3) ** (1.0 / 3.0)
+atoms = bulk("Ar", "fcc", a=a, cubic=True).repeat((N_cells,) * 3)
+atoms.pbc = True
+L = atoms.cell[0, 0]
+print(f"N = {len(atoms)}, a = {a:.4f} A, L = {L:.3f} A = {L/sigma:.3f} sigma, rho = {len(atoms)/L**3:.5f} A^-3")
+atoms.calc = LennardJones(sigma=sigma, epsilon=epsilon, rc=rc, smooth=False)</code></pre><pre class="output">N = 864, a = 5.7802 A, L = 34.681 A = 10.200 sigma, rho = 0.02071 A^-3</pre></details>
+
+  <h3>Step 2: melt, cool, then run in NVE</h3>
+  <p>At this density the crystal does not melt by itself in a short run (see “A closer look: liquid, or hot crystal?” above), so the lattice is first melted at 300 K, then cooled to 94.4 K with a Langevin thermostat, and the velocities are rescaled to exactly 94.4 K. From then on the thermostat is <em>removed</em>: the production run is pure Velocity Verlet at constant energy, like Rahman’s. That matters for dynamics, because a thermostat constantly disturbs the velocities. We store positions and velocities at every step (a few seconds of memory) so that the dynamical correlation functions can be computed afterwards.</p>
+  <details class="code-cell"><summary>ASE: melt, cool, then 30 ps in the NVE ensemble</summary><pre><code class="language-python">seed = np.random.default_rng(1964)
+# 1) melt the lattice hot, 2) cool to 94.4 K, 3) NVE production
+MaxwellBoltzmannDistribution(atoms, temperature_K=300, rng=seed); Stationary(atoms)
+t0 = time.time()
+dyn = Langevin(atoms, dt_fs * units.fs, temperature_K=300, friction=0.01 / units.fs, rng=seed)
+dyn.run(300)       # 3 ps melt
+dyn = Langevin(atoms, dt_fs * units.fs, temperature_K=T_target, friction=0.01 / units.fs, rng=seed)
+dyn.run(500)       # 5 ps cool/equilibrate
+print(f"equilibration done in {time.time()-t0:.1f} s, T = {atoms.get_temperature():.1f} K")
+
+# rescale to exactly 94.4 K and switch to NVE
+p = atoms.get_momenta(); atoms.set_momenta(p * np.sqrt(T_target / atoms.get_temperature()))
+nve = VelocityVerlet(atoms, dt_fs * units.fs)
+
+nsteps, every_rdf = 3000, 20
+pos = np.empty((nsteps + 1, len(atoms), 3)); vel = np.empty_like(pos)
+Ts, Es = [], []
+rmax, nb = L / 2 - 0.05, 200
+hist = np.zeros(nb); nframes = 0
+def record(i):
+    global nframes
+    pos[i] = atoms.get_positions(); vel[i] = atoms.get_velocities() / (units.Ang / units.fs)  # A/fs
+    if i % every_rdf == 0:
+        d = neighbor_list("d", atoms, rmax)
+        hist[:] += np.histogram(d, bins=nb, range=(0, rmax))[0]; nframes += 1
+    Ts.append(atoms.get_temperature()); Es.append((atoms.get_potential_energy(), atoms.get_kinetic_energy()))
+record(0)
+for i in range(1, nsteps + 1):
+    nve.run(1); record(i)
+print(f"NVE run done: {nsteps} steps = {nsteps*dt_fs/1000:.0f} ps in {time.time()-t0:.1f} s total")
+Es = np.array(Es); Etot = Es.sum(1)
+print(f"&lt;T&gt; = {np.mean(Ts):.1f} +- {np.std(Ts):.1f} K;  E_tot drift = {Etot[-1]-Etot[0]:+.4f} eV over {nsteps} steps (std {Etot.std():.4f} eV)")
+print(f"Epot/N = {Es[:,0].mean()/len(atoms):.5f} eV")</code></pre><pre class="output">equilibration done in 120.3 s, T = 91.0 K
+NVE run done: 3000 steps = 30 ps in 726.5 s total
+&lt;T&gt; = 94.3 +- 1.7 K;  E_tot drift = +0.0021 eV over 3000 steps (std 0.0005 eV)
+Epot/N = -0.05134 eV</pre></details>
+  <p>In NVE the total energy should not change. It moved by 2 meV in total over 3000 steps (0.0021 eV for the whole 864-atom system, with a standard deviation of 0.5 meV), the signature of a well-behaved Velocity Verlet integration (Module 2). The temperature fluctuates around 94.3 K with ±1.7 K. That is a little less than the canonical estimate $\sqrt{2/(3N)} \approx 2.8\,\%$ (2.6 K), as usual at constant energy, where kinetic and potential energy fluctuations compensate each other. The run took 12 minutes on a busy laptop; the browser lab below does the same in about a minute.</p>
+
+  <h3>Step 3: three measurements</h3>
+  <p>Three quantities come out of the stored trajectory:</p>
+  <ul>
+    <li>$g(r)$, as before: the structure.</li>
+    <li>The <strong>mean-squared displacement</strong>, $\mathrm{MSD}(t) = \langle |\mathbf r(t) - \mathbf r(0)|^2\rangle$. In a liquid it grows linearly, $\mathrm{MSD} = 6Dt$ (the Einstein relation), which gives the self-diffusion constant $D$.</li>
+    <li>The <strong>velocity autocorrelation function</strong> $C(t) = \langle \mathbf v(0)\cdot\mathbf v(t)\rangle / \langle v^2\rangle$: how much an atom remembers its velocity. It starts at 1 and decays. The Green–Kubo relation gives the same diffusion constant, $D = \tfrac13\int_0^\infty \langle \mathbf v(0)\cdot\mathbf v(t)\rangle\,dt$, as a second check.</li>
+  </ul>
+  <p>All three are averaged over many <em>time origins</em>: every frame is used as a starting point, which turns one 30 ps trajectory into hundreds of overlapping short ones.</p>
+  <details class="code-cell"><summary>Analysis: g(r), VACF, MSD and two estimates of D</summary><pre><code class="language-python"># --- g(r) ---------------------------------------------------------------------
+edges = np.linspace(0, rmax, nb + 1); r = 0.5 * (edges[1:] + edges[:-1])
+shell = 4 / 3 * np.pi * (edges[1:] ** 3 - edges[:-1] ** 3)
+g = hist / (nframes * len(atoms) * (len(atoms) / L**3) * shell)
+k = g.argmax(); print(f"g(r): first peak r = {r[k]:.2f} A, g = {g[k]:.2f}")
+kmin = k + np.argmin(g[k:k + 40]); cn = np.sum(4*np.pi*(len(atoms)/L**3)*g[:kmin+1]*r[:kmin+1]**2*(edges[1]-edges[0]))
+print(f"first minimum r = {r[kmin]:.2f} A, coordination number = {cn:.1f}")
+
+# --- VACF (A/fs -&gt; reduced to C(0)=1) and MSD -----------------------------------
+M = pos.shape[0]; nlag = 400  # 4 ps
+v = vel.reshape(M, -1)
+f = np.fft.rfft(v, n=2 * M, axis=0); ac = np.fft.irfft(f * np.conj(f), axis=0)[:nlag].sum(1)
+ac /= (M - np.arange(nlag)) ; C = ac / ac[0]
+t_ps = np.arange(nlag) * dt_fs / 1000
+kmin_v = C.argmin(); print(f"VACF: minimum {C[kmin_v]:.3f} at t = {t_ps[kmin_v]:.2f} ps; first zero crossing at {t_ps[np.argmax(C&lt;0)]:.2f} ps")
+# &lt;v(0).v(t)&gt; per atom is ac / N (ac sums over all 3N components); 1 A^2/fs = 0.1 cm^2/s
+N = len(atoms)
+D_gk = (ac[0] / N / 3.0) * np.trapz(C, dx=dt_fs) * 0.1
+lags = np.arange(1, nlag); msd = np.array([np.mean(np.sum((pos[l:] - pos[:-l]) ** 2, axis=2)) for l in lags])
+def D_from_msd(P):
+    m = np.array([np.mean(np.sum((P[l:] - P[:-l]) ** 2, axis=2)) for l in lags])
+    sel = (lags * dt_fs / 1000 &gt;= 1.0) &amp; (lags * dt_fs / 1000 &lt;= 3.0)
+    return np.polyfit(lags[sel] * dt_fs, m[sel], 1)[0] / 6.0 * 0.1      # cm^2/s
+D_msd = D_from_msd(pos)
+blocks = [D_from_msd(pos[i * 1000:(i + 1) * 1000 + 1]) for i in range(3)]  # three 10 ps blocks
+err = np.std(blocks, ddof=1) / np.sqrt(3)
+print(f"D (Einstein, MSD slope 1-3 ps)    = {D_msd*1e5:.2f} x 1e-5 cm^2/s  (3 blocks of 10 ps: {np.mean(blocks)*1e5:.2f} +- {err*1e5:.2f})")
+print(f"D (Green-Kubo, VACF integral 4 ps) = {D_gk*1e5:.2f} x 1e-5 cm^2/s")
+print("Rahman 1964: D = 2.43 x 1e-5 cm^2/s (15% below experiment)")</code></pre><pre class="output">g(r): first peak r = 3.67 A, g = 2.84
+first minimum r = 5.23 A, coordination number = 12.3
+VACF: minimum -0.090 at t = 0.43 ps; first zero crossing at 0.31 ps
+D (Einstein, MSD slope 1-3 ps)    = 2.43 x 1e-5 cm^2/s  (3 blocks of 10 ps: 2.44 +- 0.05)
+D (Green-Kubo, VACF integral 4 ps) = 2.46 x 1e-5 cm^2/s
+Rahman 1964: D = 2.43 x 1e-5 cm^2/s (15% below experiment)</pre></details>
+  <p>The structure first: a first peak at 3.67 Å of height 2.84 (one atomic diameter plus the softness of the repulsion) and about 12 neighbours in the first shell, as in a dense liquid. The velocity autocorrelation function crosses zero after 0.31 ps and reaches a <strong>minimum of −0.09 at 0.43 ps</strong>. A negative value means that, on average, an atom is moving <em>against</em> the direction it moved 0.4 ps earlier: it has run into the cage of neighbours and bounced back. A simple random-walk (Brownian) picture gives a pure exponential decay with no negative region; the negative dip is a many-body effect, and it was one of the striking results of the 1964 paper. Finally, diffusion: the Einstein estimate (2.43 × 10⁻⁵ cm²/s) and the Green–Kubo estimate (2.46 × 10⁻⁵ cm²/s) agree with each other and with the 2.43 × 10⁻⁵ cm²/s quoted for Rahman’s value [3]. Be careful not to over-read that last agreement: this is one 30 ps trajectory, and three 10 ps blocks of it give 2.44 ± 0.05 × 10⁻⁵ cm²/s, but three numbers cannot give a trustworthy error bar. A realistic uncertainty on $D$ from a run this short is 5–10 %, and our cut-off and thermostat protocol differ from Rahman’s. What the exercise shows is that a laptop now reproduces in minutes a calculation that was a landmark on a 1964 mainframe.</p>
+
+  <h3>Play along: Rahman’s simulation in your browser</h3>
+  <div id="lab-rahman"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">The velocity autocorrelation function of liquid argon becomes <em>negative</em> at about 0.3–0.4 ps. What does this mean?</p>
+    <ol class="choices">
+      <li>The integrator is unstable and the velocities are numerical noise.</li>
+      <li>An atom that was moving in some direction is, a short time later, more likely to be moving the opposite way: it has collided with the cage of neighbours and rebounded.</li>
+      <li>The liquid has frozen and the atoms are vibrating about lattice sites.</li>
+    </ol>
+    <div class="explain">In a dense liquid each atom sits in a cage formed by its roughly 12 neighbours. It moves a fraction of an atomic diameter, hits the cage wall and is pushed back, so its velocity reverses. This “backscattering” gives $C(t) &lt; 0$ at intermediate times, and the Fourier transform of $C(t)$ shows a broad maximum at finite frequency. Brownian motion would give a pure exponential decay with no negative part. A frozen crystal would give a damped oscillation that keeps returning below zero, which is also what a hot crystal does, so the dip alone does not distinguish liquid from solid: the diffusion constant does.</div>
+  </div>
+
+  <details class="exercise">
+    <summary>Exercise 4 — How reliable is that diffusion constant?</summary>
+    <p>In the Rahman lab, run 10 ps, press Reset, run 30 ps, and finally 60 ps. Note the two estimates of $D$ each time. What do you conclude about the precision of a diffusion constant from a short run, and which of the two estimators (MSD slope or VACF integral) is easier to converge?</p>
+    <details class="reveal">
+      <summary>What you should find</summary>
+      <p>The estimates scatter by 5–10 % at 10 ps and settle towards a common value with longer runs. The mean-squared displacement is the more robust of the two for a liquid: its slope uses the whole trajectory, while the VACF integral adds up a noisy tail (the VACF is small and noisy after 1 ps and the integral accumulates that noise). To get a real error bar, run several <em>independent</em> trajectories (different initial velocities) and quote the spread of the results, or split a long run into blocks much longer than the correlation time. Finite-size effects are a second, systematic error: periodic images slow diffusion, and for 864 atoms the correction (Yeh and Hummer, Module 12) is of order 10 %; in the small water boxes of the next modules it is 20–30 %.</p>
+    </details>
+  </details>
+
+  <h3>References</h3>
+  <ol class="refs">
+    <li>[1] B. J. Alder, T. E. Wainwright, “Phase transition for a hard sphere system”, <em>J. Chem. Phys.</em> <strong>27</strong>, 1208 (1957). <a href="https://doi.org/10.1063/1.1743957" target="_blank" rel="noopener">doi:10.1063/1.1743957</a></li>
+    <li>[2] A. Rahman, “Correlations in the motion of atoms in liquid argon”, <em>Phys. Rev.</em> <strong>136</strong>, A405 (1964). <a href="https://doi.org/10.1103/PhysRev.136.A405" target="_blank" rel="noopener">doi:10.1103/PhysRev.136.A405</a></li>
+    <li>[3] Hunter Heidenreich, “Modernizing Rahman’s 1964 argon simulation” (LAMMPS replication write-up, 2025), <a href="https://hunterheidenreich.com/posts/rahman-1964-lammps-liquid-argon/" target="_blank" rel="noopener">hunterheidenreich.com</a>.</li>
+  </ol>
+</section>
+<!-- LESSON5:END -->
+
 <!-- ================================================================== -->
 <section class="step">
   <hr>
@@ -652,6 +818,7 @@ plt.show()</code></pre></div>
     <li>Ran an <strong>NVT simulation</strong> using the <code>Langevin</code> dynamics module in ASE.</li>
     <li>Discussed basic analysis, focusing on calculating and interpreting the <strong>Radial Distribution Function (RDF)</strong> using ASE tools.</li>
     <li>Mentioned tools for <strong>visualizing</strong> the simulation trajectory.</li>
+    <li>Recreated <strong>Rahman’s 1964 simulation</strong> of 864 argon atoms in NVE, with the velocity autocorrelation function and the diffusion constant.</li>
   </ul>
   <p>This module provides a practical starting point for using standard simulation tools to study more complex systems.</p>
 
@@ -662,18 +829,19 @@ plt.show()</code></pre></div>
       <li>Before starting molecular dynamics, <strong>Energy Minimization</strong> is required to relax high-force atomic clashes that would otherwise make the simulation unstable.</li>
       <li>We simulated a 3D <strong>Lennard-Jones</strong> system at liquid-argon conditions (90 K), analyzing its physical properties — and saw that telling a liquid from a hot crystal needs dynamics (MSD) as well as structure.</li>
       <li>The <strong>Radial Distribution Function (RDF, $g(r)$)</strong> measures local liquid structure, showing clear peaks corresponding to shells of neighboring atoms.</li>
+      <li>In an NVE run, <strong>dynamical</strong> properties follow from the trajectory: the mean-squared displacement and the velocity autocorrelation function both give the diffusion constant, and the negative dip of the VACF is the signature of the cage effect.</li>
     </ul>
   </div>
 
-  <h3>🎓 Congratulations! What to study next</h3>
-  <p>You have completed the entire course! You now have a solid first-principles foundation in Molecular Dynamics, thermodynamics, and enhanced sampling.</p>
-  <p><strong>Recommended next steps:</strong></p>
+  <h3>🎓 What to study next</h3>
+  <p>You now have a first-principles foundation in molecular dynamics, thermodynamics and enhanced sampling, and you have recreated the first MD simulation of a liquid. The course continues with the most important liquid of all: <strong>water</strong>. <a href="09-water-model.html">Module 9</a> adds bonded terms and builds the SPC family of water models; <a href="10-water-models.html">Module 10</a> surveys the many other water models; <a href="11-mb-pol.html">Module 11</a> introduces the many-body MB-pol potential; and <a href="12-water-properties.html">Module 12</a> computes properties of liquid water and compares them with experiment.</p>
+  <p><strong>Beyond the course:</strong></p>
   <ol>
     <li><strong>Explore large-scale packages:</strong> Learn to set up and run GROMACS, OpenMM, or LAMMPS on multi-thousand atom biomolecules or materials.</li>
     <li><strong>Deeper theory:</strong> Read Tuckerman's <em>Statistical Mechanics: Theory and Molecular Simulation</em> companion text.</li>
     <li><strong>Contribute:</strong> Try modifying the code in these modules, adding new potentials, or building your own simulation projects!</li>
   </ol>
-  <p>Want to keep going on this site? The supplements dig deeper into two topics from the enhanced-sampling modules, starting with <a href="s1-choosing-cvs.html">Supplement S1 — Choosing Good Collective Variables</a>.</p>
+  <p>The supplements dig deeper into two topics from the enhanced-sampling modules, starting with <a href="s1-choosing-cvs.html">Supplement S1 — Choosing Good Collective Variables</a>.</p>
 </section>
 
 </article>
@@ -1553,6 +1721,203 @@ plt.show()</code></pre></div>
         if (id === "reset") { build(p); draw(lab); report(lab); }
       },
       foot: "<p><strong>What to try.</strong> Click the three presets and let each run until the average has a few hundred frames. <em>Solid</em> (20 K, 0.0255 Å⁻³): sharp, separated peaks at the fcc shell distances that persist to the edge of the box, and an MSD that stays below ~0.1 Å² — atoms only vibrate. <em>Liquid</em> (90 K, 0.0216 Å⁻³): this module's state, prepared by melting at 300 K first — peaks are broad, $g(r)$ decays to 1 with only a weak third shell, and the MSD keeps growing. Untick <em>start from a melt</em> and press <em>Restart from lattice</em> to get the hot crystal of the NVT lab instead and compare. <em>Gas</em> (300 K, 0.003 Å⁻³): one low peak just beyond σ and almost no structure after it. Then explore in between: heat the solid (at this higher density it is still crystalline at 120 K), or keep 90 K and lower the density step by step and watch the second and third shells fade as the system becomes gas-like.</p>",
+    });
+  })();
+
+  // ================================================================ Lab: Rahman (1964)
+  // Rahman's state point (argon: σ = 3.4 Å, ε/k_B = 120 K, 864 atoms, 94.4 K, 1.374 g/cm³) in reduced units.
+  // The engine is the one above; added here: an NVE Velocity-Verlet step and multi-origin VACF/MSD accumulators.
+  (function () {
+    const RS = (function () {
+      const sigma = 3.4, epsK = 120, massAmu = 39.948, kB = 1.380649e-23, amuKg = 1.66053906660e-27;
+      const tauS = sigma * 1e-10 * Math.sqrt((massAmu * amuKg) / (epsK * kB));   // ≈ 2.151e-12 s
+      return {
+        sigma, epsK, tauFs: tauS * 1e15,
+        epsEv: epsK * 8.617333262e-5,
+        dUnit: (sigma * 1e-8) ** 2 / tauS,                                       // cm²/s per unit of D* = σ²/τ
+        rho: 1.374 / (massAmu * amuKg * 1e3) * 1e-24,                            // atoms / Å³
+      };
+    })();
+    const CFG = { nSide: 6, T: 94.4, dtFs: 10, rcSig: 2.5, meltK: 300, meltSteps: 300, coolSteps: 500, friction: 0.01, nLag: 400, originEvery: 25, seed: 1964 };
+    const RAHMAN_D = 2.43;     // 10⁻⁵ cm²/s, Rahman 1964 (15 % below experiment)
+    let sim = null, view = null, frame = 0;
+
+    function nveStep(s, dt) {
+      const { pos, vel, frc } = s, n = pos.length;
+      for (let i = 0; i < n; i++) { vel[i] += 0.5 * dt * frc[i]; pos[i] += dt * vel[i]; }
+      s.wrap(); computeForces(s);
+      for (let i = 0; i < n; i++) vel[i] += 0.5 * dt * frc[i];
+      s.step++;
+      return isFinite(s.epot) && Math.abs(s.epot) < 1e9;
+    }
+    function build(p) {
+      const a = Math.cbrt(4 / U_R_rhoStar()), s = LJSystem(fccPositions(CFG.nSide, a), CFG.nSide * a, CFG.rcSig);
+      const rng = P.rng(CFG.seed);
+      maxwellBoltzmann(s, CFG.meltK / RS.epsK, rng, true);
+      const rmax = s.L / 2 - 0.05 / RS.sigma;
+      sim = {
+        s, rng, rmax, tracker: makeTracker(s), phase: "melt", k: 0, nveTotal: p.ps * 100, nve: 0, origins: [],
+        vacf: new Float64Array(CFG.nLag + 1), msd: new Float64Array(CFG.nLag + 1), cnt: new Float64Array(CFG.nLag + 1),
+        acc: rdfAccumulator(100, rmax), Tlog: [], E0: null, Elast: null, status: "ready", inst: null,
+      };
+    }
+    const U_R_rhoStar = () => RS.rho * RS.sigma ** 3;
+    const dtStar = () => CFG.dtFs / RS.tauFs, gamStar = () => CFG.friction * RS.tauFs;
+
+    function startNVE() {
+      const s = sim.s, f = Math.sqrt((CFG.T / RS.epsK) / tempOf(s));
+      for (let i = 0; i < s.vel.length; i++) s.vel[i] *= f;
+      computeForces(s);
+      sim.phase = "nve"; sim.nve = 0; sim.tracker.update(); sim.tracker.resetRef();
+      sim.E0 = s.epot + kinetic(s);
+    }
+    function accumulate() {
+      const s = sim.s, st = sim.nve, tr = sim.tracker;
+      if (st % CFG.originEvery === 0) sim.origins.push({ t0: st, v: Float64Array.from(s.vel), r: Float64Array.from(tr.unw) });
+      while (sim.origins.length && st - sim.origins[0].t0 > CFG.nLag) sim.origins.shift();
+      for (const o of sim.origins) {
+        const lag = st - o.t0; let vv = 0, rr = 0;
+        for (let i = 0; i < s.vel.length; i++) { vv += o.v[i] * s.vel[i]; const d = tr.unw[i] - o.r[i]; rr += d * d; }
+        sim.vacf[lag] += vv; sim.msd[lag] += rr; sim.cnt[lag]++;
+      }
+    }
+    function advance(spf) {
+      const s = sim.s, dt = dtStar();
+      for (let n = 0; n < spf && sim.status === "running"; n++) {
+        if (sim.phase === "melt" || sim.phase === "cool") {
+          const Tk = sim.phase === "melt" ? CFG.meltK : CFG.T;
+          if (!langevinStep(s, dt, gamStar(), Tk / RS.epsK, sim.rng)) { sim.status = "blown"; return; }
+          sim.tracker.update();
+          if (++sim.k === (sim.phase === "melt" ? CFG.meltSteps : CFG.coolSteps)) {
+            if (sim.phase === "melt") { sim.phase = "cool"; sim.k = 0; } else startNVE();
+          }
+        } else if (sim.phase === "nve") {
+          if (!nveStep(s, dt)) { sim.status = "blown"; return; }
+          sim.tracker.update(); sim.nve++;
+          accumulate();
+          if (sim.nve % 5 === 0) sim.Tlog.push(RS.epsK * tempOf(s));
+          if (sim.nve % 20 === 0) sim.acc.add(s);
+          sim.Elast = s.epot + kinetic(s);
+          if (sim.nve >= sim.nveTotal) { sim.status = "finished"; sim.phase = "done"; return; }
+        }
+      }
+    }
+    const tPs = (lag) => (lag * CFG.dtFs) / 1000;
+    function analyse() {
+      const out = { maxLag: 0 };
+      for (let l = 0; l <= CFG.nLag; l++) if (sim.cnt[l] > 0) out.maxLag = l;
+      const N = sim.s.N, c0 = sim.cnt[0] ? sim.vacf[0] / sim.cnt[0] : 0;
+      out.C = []; out.t = []; out.msdA = [];
+      for (let l = 0; l <= out.maxLag; l++) {
+        out.t.push(tPs(l));
+        out.C.push(c0 ? sim.vacf[l] / sim.cnt[l] / c0 : 0);
+        out.msdA.push((sim.msd[l] / sim.cnt[l] / N) * RS.sigma ** 2);        // per-atom MSD in Å² (msd summed over atoms)
+      }
+      // diffusion constants
+      out.Dmsd = null; out.Dgk = null; out.vmin = null;
+      if (out.maxLag >= 300) {
+        let sx = 0, sy = 0, sxx = 0, sxy = 0, n = 0;
+        for (let l = 100; l <= 300; l++) { const x = out.t[l], y = out.msdA[l]; sx += x; sy += y; sxx += x * x; sxy += x * y; n++; }
+        const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);               // Å²/ps
+        out.Dmsd = (slope / 6) * 1e-4 / 1e-5;                                  // 10⁻⁵ cm²/s
+        out.slope = slope; out.icpt = (sy - slope * sx) / n;
+      }
+      if (out.maxLag >= 150) {
+        let integ = 0; for (let l = 0; l < out.maxLag; l++) integ += 0.5 * (out.C[l] + out.C[l + 1]) * (CFG.dtFs / RS.tauFs);
+        out.Dgk = ((c0 / N) / 3) * integ * RS.dUnit / 1e-5;                    // 10⁻⁵ cm²/s
+      }
+      let m = 0; for (let l = 1; l < out.C.length; l++) if (out.C[l] < out.C[m]) m = l;
+      if (out.C.length > 5 && out.C[m] < 0) out.vmin = { c: out.C[m], t: out.t[m] };
+      return out;
+    }
+    function draw(lab) {
+      const s = sim.s, ph = { melt: `melting at ${CFG.meltK} K`, cool: `cooling to ${CFG.T} K`, nve: "NVE production", done: "finished" }[sim.phase];
+      view.draw(s, { radius: 0.34, label: `${s.N} atoms · L = ${(s.L * RS.sigma).toFixed(2)} Å · ${ph}` });
+    }
+    function report(lab) {
+      const s = sim.s, a = analyse();
+      // g(r)
+      const one = rdfAccumulator(100, sim.rmax); one.add(s); const cur = one.result();
+      const tr = [{ x: cur.r.map((x) => x * RS.sigma), y: cur.g, name: "current frame", color: "s3", line: { width: 1 }, opacity: 0.6 }];
+      let an = null;
+      if (sim.acc.frames) {
+        const avg = sim.acc.result();
+        tr.push({ x: avg.r.map((x) => x * RS.sigma), y: avg.g, name: `NVE average (${sim.acc.frames} frames)`, color: "s1" });
+        an = analyseRdf(avg.r, avg.g, s.N / s.L ** 3, sim.acc.dr);
+      }
+      lab.plot("gr", tr, {
+        title: { text: "g(r), 864 atoms" },
+        xaxis: { title: { text: "r (Å)" }, range: [0, sim.rmax * RS.sigma] }, yaxis: { title: { text: "g(r)" }, rangemode: "tozero" },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: "ink-3", dash: "dash", width: 1 } }],
+        legend: { y: 1.14 }, margin: { t: 64 },
+      });
+      // VACF
+      lab.plot("vacf", [{ x: a.t, y: a.C, name: "C(t)", color: "s2" }], {
+        title: { text: "Velocity autocorrelation C(t)" },
+        xaxis: { title: { text: "t (ps)" }, range: [0, tPs(CFG.nLag)] }, yaxis: { title: { text: "⟨v(0)·v(t)⟩ / ⟨v²⟩" }, range: [-0.3, 1.05] },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, line: { color: "ink-3", dash: "dash", width: 1 } }],
+        margin: { t: 48 },
+      });
+      // MSD
+      const mt = [{ x: a.t, y: a.msdA, name: "MSD", color: "s4" }];
+      if (a.Dmsd !== null) mt.push({ x: [1, 3], y: [a.icpt + a.slope, a.icpt + 3 * a.slope], name: "fit, 1–3 ps", color: "s8", line: { dash: "dash", width: 2 } });
+      lab.plot("msd", mt, {
+        title: { text: "Mean-squared displacement" },
+        xaxis: { title: { text: "t (ps)" }, range: [0, tPs(CFG.nLag)] }, yaxis: { title: { text: "MSD (Å²)" }, rangemode: "tozero" },
+        legend: { y: 1.14 }, margin: { t: 64 },
+      });
+      const E0 = sim.E0, dE = E0 === null ? null : ((sim.Elast - E0) * RS.epsEv) / s.N;
+      const tNve = (sim.nve * CFG.dtFs) / 1000;
+      const phase = sim.phase === "nve" || sim.phase === "done" ? `NVE: ${tNve.toFixed(1)} of ${((sim.nveTotal * CFG.dtFs) / 1000).toFixed(0)} ps`
+        : `${sim.phase === "melt" ? "melting" : "cooling"}… ${sim.k} / ${sim.phase === "melt" ? CFG.meltSteps : CFG.coolSteps} steps`;
+      lab.readouts("ro", [
+        { k: "Run", v: sim.status === "blown" ? "blew up" : phase, cls: sim.status === "finished" ? "good" : sim.status === "blown" ? "bad" : "" },
+        { k: "⟨T⟩ in NVE ± fluctuation", v: sim.Tlog.length ? `${P.mean(sim.Tlog).toFixed(1)} ± ${P.std(sim.Tlog).toFixed(1)} K` : "—" },
+        { k: "Energy drift in NVE", v: dE === null ? "—" : `${(dE * 1000).toFixed(2)} meV/atom` },
+        { k: "First g(r) peak · coordination number", v: an ? `${(an.rPeak * RS.sigma).toFixed(2)} Å (g = ${an.gPeak.toFixed(2)}) · ${an.cn.toFixed(1)}` : "—" },
+        { k: "VACF minimum", v: a.vmin ? `${a.vmin.c.toFixed(3)} at ${a.vmin.t.toFixed(2)} ps` : "—" },
+        { k: "D from MSD slope (1–3 ps)", v: a.Dmsd !== null ? `${a.Dmsd.toFixed(2)} × 10⁻⁵ cm²/s` : "—" },
+        { k: "D from VACF (Green–Kubo)", v: a.Dgk !== null ? `${a.Dgk.toFixed(2)} × 10⁻⁵ cm²/s` : "—" },
+        { k: "Rahman (1964)", v: `D = ${RAHMAN_D} × 10⁻⁵ cm²/s` },
+      ]);
+    }
+    MD.lab("#lab-rahman", {
+      title: "Rahman's 1964 liquid argon, run in your browser",
+      intro: "<p>Rahman's system and state point: <strong>864 argon atoms</strong> ($\\sigma = 3.4$ Å, $\\epsilon/k_B = 120$ K) at <strong>94.4 K</strong> and <strong>1.374 g/cm³</strong>, a 10 fs time step, and — like his — a final <strong>NVE</strong> run in which energy is conserved and nothing but Newton's equations moves the atoms. Press <em>Run</em>: the lattice is melted (5 ps at 300 K), cooled to 94.4 K, the velocities are rescaled to exactly 94.4 K, and the production run starts. During it the page accumulates $g(r)$, the velocity autocorrelation function and the mean-squared displacement, using many time origins per run. The cutoff is $2.5\\sigma$ (our choice, not necessarily Rahman's). This is the same engine as the labs above; with 864 atoms a full 30 ps run takes about a minute in the browser (ASE needed 12 minutes for the same run).</p>",
+      controls: [
+        { type: "select", id: "ps", label: "NVE production length", value: 30, options: [{ value: 10, label: "10 ps (quick)" }, { value: 30, label: "30 ps (as in the ASE code)" }, { value: 60, label: "60 ps (better statistics)" }] },
+        { type: "range", id: "spf", label: "MD steps per animation frame", min: 2, max: 60, step: 2, value: 20 },
+        { type: "check", id: "spin", label: "Auto-rotate", value: true },
+        { type: "buttons", items: [{ id: "play", label: "Run / pause" }, { id: "reset", label: "Reset", secondary: true }] },
+      ],
+      cols: 2,
+      panels: [
+        { id: "cv", kind: "canvas", aspect: 1.1 }, { id: "gr", kind: "plot" },
+        { id: "vacf", kind: "plot" }, { id: "msd", kind: "plot" }, { id: "ro", kind: "readouts", span: true },
+      ],
+      init(lab) {
+        view = makeViewer(lab, "cv", () => draw(lab));
+        build(lab.p); sim.status = "ready";
+        lab.anim = lab.loop(() => {
+          advance(lab.p.spf);
+          if (lab.p.spin) view.tick();
+          draw(lab);
+          const over = sim.status !== "running";
+          if (++frame % 5 === 0 || over) report(lab);
+          if (over) return false;
+        });
+        whenHidden(lab.root, () => lab.anim.stop());
+      },
+      run(p, lab) { draw(lab); report(lab); },
+      onButton(id, p, lab) {
+        if (id === "play") {
+          if (lab.anim.running) { sim.status = "paused"; lab.anim.stop(); return; }
+          if (sim.status === "finished" || sim.status === "blown") build(p);
+          sim.nveTotal = p.ps * 100; sim.status = "running"; lab.anim.start();
+        }
+        if (id === "reset") { lab.anim.stop(); build(p); draw(lab); report(lab); }
+      },
+      foot: "<p><strong>What to try.</strong> (1) Run the default 30 ps and compare with the ASE output above: first peak of $g(r)$ near 3.7 Å, coordination ≈ 12, a VACF that dips <em>below zero</em> around 0.3–0.4 ps and a diffusion constant of $2.4$–$2.6 \\times 10^{-5}$ cm²/s (this page and the ASE run use different random numbers, so they agree to within a few per cent, not to the last digit). (2) Look at the VACF: a negative value means that, on average, an atom is moving <em>backwards</em> relative to where it was heading 0.4 ps ago — it has bounced off the cage of neighbours. That backscattering is what made the paper famous, because a simple Brownian-motion picture would give a pure exponential decay. (3) Run 10 ps and then 60 ps and watch the diffusion constants: short runs scatter by 10 % or more, which is why the error bar in the ASE output matters. (4) The energy drift readout should stay at the meV-per-atom level: that is the Velocity Verlet integrator conserving energy (Module 2).</p>",
     });
   })();
 })();

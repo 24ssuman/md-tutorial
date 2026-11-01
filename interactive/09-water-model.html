@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Module 9 — Building a Water Model · MD Tutorial</title>
+<meta name="description" content="From atoms to molecules: bonded terms (bond and angle), non-bonded charges and Lennard-Jones, and the SPC, SPC/E and SPC/Fw water models, run with ASE and live in your browser.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<script>try{var t=localStorage.getItem("md-theme");if(t)document.documentElement.dataset.theme=JSON.parse(t)}catch(e){}</script>
+<style>
+  /* page-local */
+  .lab select { max-width: 100%; }
+  .lab canvas.sim { cursor: grab; }
+  .lab .lab-stage > * { min-width: 0; }
+  .lab pre.output.live-log { max-height: 260px; overflow: auto; margin: 0; font-size: 11px; white-space: pre; }
+  ol.refs { font-size: 14.5px; color: var(--ink-2); padding-left: 1.4rem; }
+  ol.refs li { margin: 0.35rem 0; }
+</style>
+</head>
+<body data-module="09">
+<main id="main">
+<article class="content">
+
+<!-- ================================================================== -->
+<header class="hero step">
+  <div class="eyebrow">Module 9 · Core track</div>
+  <h1>Building a Water Model: Bonded Terms and SPC</h1>
+  <p class="lede">So far every particle was a single atom. Water is a <em>molecule</em>: two O–H bonds and an H–O–H angle, plus charges that make it stick to its neighbours. This module adds the bonded terms of a force field, builds the classic SPC family of water models, and runs them with ASE.</p>
+  <div class="meta-row">
+    <span class="chip"><b>Prerequisites</b> Modules 2, 3 and 8</span>
+    <span class="chip"><b>What you run</b> A bond, a flexible H₂O molecule, and a box of liquid water (SPC/E and SPC/Fw)</span>
+    <span class="chip" title="Roughly 25 min reading, 15 min playing with the demos and quizzes, 20 min on the exercises"><b>Expected time to finish</b> About 60 minutes</span>
+  </div>
+
+  <div class="objectives">
+    <h3>What you will learn</h3>
+    <ul>
+      <li>What bonded terms are (bond stretching and angle bending) and how they set the time step.</li>
+      <li>How a simple water model combines bonded terms, Lennard-Jones on oxygen and partial charges.</li>
+      <li>The difference between rigid (SPC, SPC/E) and flexible (SPC/Fw) models, and how constraints work.</li>
+      <li>How to run water in ASE: vibrational modes of one molecule, then a box of liquid water.</li>
+    </ul>
+  </div>
+  <div class="callout tip">
+    <div class="callout-title">How to use this page</div>
+    <p>ASE runs in Python, so the code cells below show real code together with the output it printed when we ran it. The <strong>Interactive</strong> panels are driven by a JavaScript engine written for this course (<code>assets/js/water.js</code>): the same three-site water models, Ewald electrostatics (Module 3), Velocity Verlet and SHAKE/RATTLE constraints. We checked it against the Python calculator on identical configurations: the energies agree to a few parts per million. Browser boxes are small (27–125 molecules) so that they run in seconds. Press <kbd>P</kbd> for presentation mode.</p>
+  </div>
+</header>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="From atoms to molecules"><span class="lesson-num">Lesson 1</span>From Atoms to Molecules</h2>
+  <p>In Module 8 the whole force field was one pair potential, Lennard-Jones. A molecule needs more. The classic force-field energy splits into <em>bonded</em> terms, which hold a molecule together, and <em>non-bonded</em> terms, which act between molecules (and between distant parts of one large molecule):</p>
+  $$
+  U = \underbrace{\sum_{\text{bonds}} \tfrac12 k_b (r - r_0)^2 + \sum_{\text{angles}} \tfrac12 k_\theta (\theta - \theta_0)^2 + \sum_{\text{dihedrals}} V_\phi}_{\text{bonded}} \;+\; \underbrace{\sum_{i<j} \left[ 4\epsilon_{ij}\Big(\tfrac{\sigma_{ij}^{12}}{r_{ij}^{12}} - \tfrac{\sigma_{ij}^6}{r_{ij}^6}\Big) + \frac{q_i q_j}{4\pi\varepsilon_0\, r_{ij}} \right]}_{\text{non-bonded}}
+  $$
+  <table>
+    <thead><tr><th>Term</th><th>Describes</th><th>Needed for water?</th></tr></thead>
+    <tbody>
+      <tr><td>Bond stretch $\tfrac12 k_b (r-r_0)^2$</td><td>Two atoms joined by a covalent bond</td><td>Yes: two O–H bonds (or a rigid constraint instead)</td></tr>
+      <tr><td>Angle bend $\tfrac12 k_\theta (\theta-\theta_0)^2$</td><td>Three atoms A–B–C in a row of two bonds</td><td>Yes: the H–O–H angle (or a constraint)</td></tr>
+      <tr><td>Dihedral $V_\phi$</td><td>Twisting around a bond (four atoms)</td><td>No: water has only three atoms</td></tr>
+      <tr><td>Lennard-Jones</td><td>Repulsion and dispersion between atoms</td><td>Yes, on oxygen only</td></tr>
+      <tr><td>Coulomb $q_i q_j / r_{ij}$</td><td>Partial charges on atoms</td><td>Yes: this is what makes water water</td></tr>
+    </tbody>
+  </table>
+  <div class="callout key">
+    <div class="callout-title">Exclusions: no double counting</div>
+    <p>Atoms joined by one or two bonds (1–2 and 1–3 pairs) are already described by the bond and angle terms. Their non-bonded interaction is therefore <em>excluded</em>. In water the hydrogens are 1–2 partners of the oxygen and 1–3 partners of each other, so <strong>all</strong> intramolecular non-bonded interactions are excluded and molecules interact only through their atoms on <em>different</em> molecules. With an Ewald sum (Module 3) the exclusion must also remove the intramolecular part of the reciprocal-space sum: subtract $q_i q_j\,\mathrm{erf}(\alpha r_{ij})/r_{ij}$ for every excluded pair. The code in this module does exactly that.</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="The bond term"><span class="lesson-num">Lesson 2</span>The Bond Term and the Time Step</h2>
+  <p>Near its equilibrium length an O–H bond behaves like a spring: $V(r)=\tfrac12 k_b (r-r_0)^2$. For the flexible model we use in this module (SPC/Fw, see Lesson 4) $k_b = 1059.162$ kcal mol⁻¹ Å⁻² and $r_0 = 1.012$ Å. Two atoms joined by a spring oscillate with</p>
+  $$ \omega = \sqrt{\frac{k_b}{\mu}}, \qquad \mu = \frac{m_\mathrm{O}\, m_\mathrm{H}}{m_\mathrm{O}+m_\mathrm{H}} \approx 0.949\ \text{amu}, \qquad \tilde\nu = \frac{\omega}{2\pi c}. $$
+  <p>With these numbers $\tilde\nu \approx 3630$ cm⁻¹, a period of only about 9 fs. This is the fastest motion in water, and it decides how small the time step has to be: an integrator needs roughly ten steps per period (Module 2), so about 1 fs or less (flexible water is usually run with 0.5 fs). Real bonds are not perfectly harmonic: a Morse potential $D(1-e^{-a(r-r_0)})^2$ is closer to the truth and softens at large stretch. Force fields usually keep the harmonic form because the thermal motion of an O–H bond stays well inside the harmonic region.</p>
+
+  <div id="lab-bond"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">You double the force constant $k_b$ of an O–H bond. What happens to its vibrational frequency?</p>
+    <ol class="choices">
+      <li>It doubles.</li>
+      <li>It increases by a factor of $\sqrt{2} \approx 1.41$.</li>
+      <li>It stays the same: only the amplitude changes.</li>
+    </ol>
+    <div class="explain">$\omega = \sqrt{k_b/\mu}$, so the frequency grows with the square root of the stiffness. Doubling $k_b$ shortens the period by a factor of 1.41, and the largest stable time step shrinks by the same factor. Try it in the lab above.</div>
+  </div>
+
+  <details class="exercise">
+    <summary>Exercise 1 — How big a time step can a flexible water molecule take?</summary>
+    <p>In the bond lab, keep the default force constant and the harmonic potential. Increase the time step from 0.25 fs upward. (a) Read the “largest energy error” for 0.25, 0.5, 1 and 2 fs: how does it scale with the time step? Where does it first exceed 1 %? (b) At which time step does the trajectory blow up? (c) How does your answer for (b) compare with the textbook stability limit $\Delta t < 2/\omega$ of Velocity Verlet?</p>
+    <details class="reveal">
+      <summary>What you should see</summary>
+      <p>(a) The error is a bounded oscillation of $E(t)$ around $E(0)$ (not a drift) and it scales as $(\omega\Delta t)^2$: about 0.7 % at 0.25 fs, 2.9 % at 0.5 fs, 12 % at 1 fs and 47 % at 2 fs. It first exceeds 1 % between 0.25 and 0.5 fs. (b) and (c) The run stays bounded up to $\Delta t = 2/\omega \approx 2.93$ fs, exactly the limit the lab prints, and diverges above it (3 fs already blows up). In practice nobody runs near the stability limit: the dynamics is badly wrong long before it explodes. This is why <strong>flexible water is run with 0.25–0.5 fs steps</strong>, and why most production simulations replace the O–H bonds by constraints, which removes the fast motion and allows 2 fs.</p>
+    </details>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="The angle term"><span class="lesson-num">Lesson 3</span>The Angle Term and a Flexible H₂O Molecule</h2>
+  <p>Three atoms joined by two bonds also resist bending: $V(\theta)=\tfrac12 k_\theta(\theta-\theta_0)^2$, with $\theta_0 = 113.24^\circ$ and $k_\theta = 75.90$ kcal mol⁻¹ rad⁻² for SPC/Fw. A bent triatomic molecule has three vibrations, the <strong>symmetric stretch</strong> (both O–H bonds lengthen together), the <strong>asymmetric stretch</strong> (one lengthens while the other shortens) and the <strong>bend</strong> (the angle opens and closes). The bend is much softer than the stretches, so it is slower.</p>
+  <p>We can find the frequencies two ways. <em>Analytically</em>, diagonalise the Hessian (the matrix of second derivatives of the energy); ASE does this for us with <code>ase.vibrations.Vibrations</code>, which differentiates the forces numerically. <em>Dynamically</em>, run a short MD simulation and Fourier transform a time series (the idea behind the vibrational spectra computed from MD). The next cell does the first.</p>
+  <details class="code-cell"><summary>ASE: vibrational modes of one SPC/Fw molecule (needs <code>water_ase.py</code>, see Lesson 5)</summary><pre><code class="language-python">import numpy as np
+from ase import Atoms, units
+from ase.vibrations import Vibrations
+from water_ase import Water3Site, MODELS
+
+par = MODELS["spcfw"]
+h = np.radians(par["theta"]) / 2
+mol = Atoms("OHH", positions=[[0, 0, 0],
+                              [par["rOH"] * np.sin(h), par["rOH"] * np.cos(h), 0],
+                              [-par["rOH"] * np.sin(h), par["rOH"] * np.cos(h), 0]],
+            cell=[24, 24, 24], pbc=True)
+mol.center()
+mol.calc = Water3Site("spcfw")
+print(f"energy of the relaxed geometry: {mol.get_potential_energy():.6f} eV (bonded part = {mol.calc.parts['bond'] + mol.calc.parts['angle']:.6f} eV)")
+vib = Vibrations(mol, name="tmp_vib", delta=0.01)
+vib.run()
+freqs = vib.get_frequencies()
+for i, f in enumerate(freqs):
+    print(f"mode {i}: {f.real:9.1f} cm^-1" if abs(f.imag) &lt; 1e-6 else f"mode {i}: {f.imag:9.1f}i cm^-1")
+vib.clean()</code></pre><pre class="output">energy of the relaxed geometry: -0.000460 eV (bonded part = 0.000000 eV)
+mode 0:      16.7i cm^-1
+mode 1:       1.7i cm^-1
+mode 2:       0.0i cm^-1
+mode 3:       0.1 cm^-1
+mode 4:      17.0 cm^-1
+mode 5:      24.2 cm^-1
+mode 6:    1370.9 cm^-1
+mode 7:    3587.4 cm^-1
+mode 8:    3671.3 cm^-1</pre></details>
+  <p>The first six “modes” are the three translations and three rotations of the free molecule, which should have zero frequency (the tiny values, a few cm⁻¹ to 24 cm⁻¹ here, come from the finite displacement and from the molecule seeing its own periodic images in a 24 Å cell). The three real modes are at about <strong>1371 cm⁻¹ (bend)</strong> and <strong>3587 and 3671 cm⁻¹ (symmetric and asymmetric stretch)</strong>. For comparison, the gas-phase experimental values are about 1595, 3657 and 3756 cm⁻¹. SPC/Fw was parameterised for the liquid, where hydrogen bonding shifts the bend up and the stretches down, so it is not expected to match the gas phase exactly: the stretches are within 2.5 %, the bend about 14 % low.</p>
+
+  <div id="lab-monomer"></div>
+
+  <div class="quiz" data-answer="3">
+    <p class="q">Why does an H₂O molecule have exactly three vibrational modes?</p>
+    <ol class="choices">
+      <li>Because it has three atoms, and each atom contributes one vibration.</li>
+      <li>Because it has two bonds and one angle, so every internal coordinate is its own mode.</li>
+      <li>Because three atoms have $3 \times 3 = 9$ degrees of freedom, and removing 3 translations and 3 rotations leaves 3 vibrations.</li>
+    </ol>
+    <div class="explain">$3N - 6$ for a non-linear molecule. In water the bond and angle coordinates happen to be close to the normal modes, but in general normal modes are <em>combinations</em> of internal coordinates: the symmetric stretch and the bend mix a little, which is why the lab can show a small peak of one in the time series of the other.</div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Charges and Lennard-Jones"><span class="lesson-num">Lesson 4</span>The Non-Bonded Part and the SPC Family</h2>
+  <p>The bonded terms give the molecule its shape. What makes liquid water a liquid is the non-bonded part: <strong>partial charges</strong> on oxygen (negative) and hydrogens (positive) produce a molecular dipole and hydrogen bonds, and a <strong>Lennard-Jones</strong> interaction on the oxygens provides the short-range repulsion. This is the physics of Module 3 applied to three sites per molecule. A neutral molecule needs $q_\mathrm O = -2 q_\mathrm H$.</p>
+  <p>The simple point charge (<strong>SPC</strong>) model of Berendsen and co-workers uses a rigid tetrahedral geometry and the smallest possible set of ingredients. <strong>SPC/E</strong> (“extended”) raises the charges a little to account on average for the polarisation of a molecule in the liquid. <strong>SPC/Fw</strong> keeps the SPC charges and Lennard-Jones but makes the molecule flexible and re-fits the geometry.</p>
+  <table>
+    <thead><tr><th>Parameter</th><th>SPC</th><th>SPC/E</th><th>SPC/Fw</th></tr></thead>
+    <tbody>
+      <tr><td>Molecule</td><td>rigid</td><td>rigid</td><td>flexible</td></tr>
+      <tr><td>$q_\mathrm O$, $q_\mathrm H$ (e)</td><td>−0.82, +0.41</td><td>−0.8476, +0.4238</td><td>−0.82, +0.41</td></tr>
+      <tr><td>$\sigma_\mathrm{OO}$ (Å)</td><td>3.166</td><td>3.166</td><td>3.165</td></tr>
+      <tr><td>$\epsilon_\mathrm{OO}$ (kcal/mol)</td><td>0.1553</td><td>0.1553</td><td>0.1554</td></tr>
+      <tr><td>$r_\mathrm{OH}$ (Å)</td><td>1.0</td><td>1.0</td><td>1.012 (equilibrium)</td></tr>
+      <tr><td>$\angle\mathrm{HOH}$</td><td>109.47°</td><td>109.47°</td><td>113.24° (equilibrium)</td></tr>
+      <tr><td>$k_b$, $k_\theta$</td><td colspan="2">— (constraints)</td><td>1059.162 kcal/mol/Å², 75.90 kcal/mol/rad²</td></tr>
+      <tr><td>Dipole of the gas-phase geometry</td><td>2.27 D</td><td>2.35 D</td><td>2.19 D</td></tr>
+      <tr><td>Original reference</td><td>Berendsen et al. 1981 [1]</td><td>Berendsen, Grigera, Straatsma 1987 [2]</td><td>Wu, Tepper, Voth 2006 [3]</td></tr>
+    </tbody>
+  </table>
+  <p>Notice that the isolated water molecule has a dipole of only 1.85 D, while these models carry 2.2–2.35 D: an effective model has to work for water <em>in water</em>, where the neighbours polarise each molecule and the dipole is larger. SPC/E makes this explicit by raising the charges, at a price: the energy needed to polarise the molecule from 1.85 D to 2.35 D is not included in the simulation, so SPC/E’s computed potential energy is too negative, and the heat of vaporisation needs a correction (Module 12 does this calculation).</p>
+  <div class="callout deep">
+    <div class="callout-title">💡 Deep dive: electrostatics in these codes</div>
+    <p>Both the Python calculator and the browser engine use a plain <strong>Ewald sum</strong> (Module 3) for the electrostatics: a real-space sum of $q_i q_j\,\mathrm{erfc}(\alpha r)/r$ out to a cutoff, plus a reciprocal-space sum, a self term $-\alpha/\sqrt\pi \sum q^2$, and the exclusion correction of Lesson 1. Production codes use the faster particle-mesh version (PME). The Lennard-Jones interaction on oxygen is truncated and shifted at the same cutoff; the long-range tail correction is added only when comparing with experiment (Module 12).</p>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="lesson step">
+  <h2 data-toc="Running water in ASE"><span class="lesson-num">Lesson 5</span>Running Water in ASE</h2>
+  <h3>Rigid or flexible?</h3>
+  <p>A flexible model has all three vibrations and needs 0.5 fs time steps. A <strong>rigid</strong> model freezes the two bond lengths and the angle, which removes the fast vibrations entirely: with the molecule rigid, the fastest remaining motion is the libration (hindered rotation) of the molecule, and a time step of 2 fs is safe. The price is that rigid models cannot describe the infrared spectrum or any property that depends on intramolecular vibration, and the three constraints must be satisfied at every step by an algorithm: <strong>SHAKE</strong> (Ryckaert et al. 1977 [4]) corrects positions after the Verlet step, <strong>RATTLE</strong> (Andersen 1983 [5]) also corrects velocities, and <strong>SETTLE</strong> (Miyamoto and Kollman 1992 [6]) solves the three constraints of a rigid water molecule analytically, which is why it is the default in production codes.</p>
+  <h3>What ASE provides</h3>
+  <p>ASE has two water calculators, <code>ase.calculators.tip3p.TIP3P</code> and <code>ase.calculators.tip4p.TIP4P</code>. They use a smooth molecule-based cutoff instead of Ewald and keep their parameters in module constants, so they cannot be used for SPC/E or SPC/Fw. Rigid molecules are made with <code>ase.constraints.FixBondLengths</code>. Everything else in ASE is generic: <strong>a force field is just a <code>Calculator</code> that returns an energy and forces</strong>. So we wrote one: <a href="assets/code/water_ase.py" download><code>water_ase.py</code></a> (about 200 lines of NumPy) implements SPC, SPC/E and SPC/Fw with Ewald electrostatics. The core of the flexible model is only these lines:</p>
+  <div class="code-static"><pre><code class="language-python"># inside Water3Site.calculate(): bonded terms of the flexible model, vectorised over all molecules
+kb, kt, r0, t0 = p["kb"], p["ktheta"], p["rOH"], np.radians(p["theta"])
+v1, v2 = R[:, 1] - R[:, 0], R[:, 2] - R[:, 0]            # O->H1 and O->H2 for every molecule
+r1, rb = np.linalg.norm(v1, axis=1), np.linalg.norm(v2, axis=1)
+e1, e2 = v1 / r1[:, None], v2 / rb[:, None]
+e_b = 0.5 * kb * ((r1 - r0) ** 2 + (rb - r0) ** 2).sum()  # bond energy
+f1, f2 = -kb * (r1 - r0), -kb * (rb - r0)                 # bond forces
+F[:, 1] += f1[:, None] * e1; F[:, 0] -= f1[:, None] * e1
+F[:, 2] += f2[:, None] * e2; F[:, 0] -= f2[:, None] * e2
+cth = np.clip((e1 * e2).sum(1), -0.999999, 0.999999); th = np.arccos(cth); sth = np.sqrt(1 - cth ** 2)
+dth = th - t0; e_a = 0.5 * kt * (dth ** 2).sum()           # angle energy
+pref = kt * dth / sth                                      # -dV/dcos(theta)
+g1 = pref[:, None] * (e2 - cth[:, None] * e1) / r1[:, None]
+g2 = pref[:, None] * (e1 - cth[:, None] * e2) / rb[:, None]
+F[:, 1] += g1; F[:, 2] += g2; F[:, 0] -= g1 + g2</code></pre></div>
+  <p>We checked the forces against finite differences (agreement to 10⁻⁹ eV/Å) and the energies against the independent JavaScript implementation on the same configurations. ASE’s own <code>FixBondLengths</code> loops over bonds in pure Python (seconds per step for a water box), so <code>water_ase.py</code> also contains <code>RigidWater</code>, a subclass that applies SHAKE/RATTLE to all molecules at once with NumPy.</p>
+
+  <h3>A box of liquid water</h3>
+  <p>The recipe is the same as for the LJ fluid in Module 8: build, minimise, assign velocities, run Langevin NVT. Two differences: the box holds <em>molecules</em> (placed on a lattice in the least clashing of 60 random orientations), and rigid models carry constraints. The system is 64 molecules at 0.997 g/cm³ (the density of water at 25 °C) and 300 K.</p>
+  <details class="code-cell"><summary>ASE: rigid SPC/E, 64 molecules, 2 fs steps &mdash; run as <code>python m9_boxes.py spce 64 2.0 1500 150</code></summary><pre><code class="language-python">import time, sys
+import numpy as np
+from ase import units
+from ase.md.langevin import Langevin
+from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
+from ase.optimize import FIRE
+from water_ase import Water3Site, water_box, rigid_constraint
+
+model, nmol, dt_fs, n_steps, every = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
+kJ = 96.4853                                    # eV -&gt; kJ/mol
+atoms = water_box(model, nmol, density_gcc=0.997, seed=11)
+atoms.calc = Water3Site(model)
+L = atoms.cell[0, 0]
+print(f"{model}: {nmol} molecules, {len(atoms)} atoms, box {L:.3f} A, density {nmol * 18.01528 / 0.602214076 / L**3:.3f} g/cm^3")
+if model != "spcfw":
+    atoms.set_constraint(rigid_constraint(nmol, model))
+print(f"E before minimisation: {atoms.get_potential_energy() / nmol * kJ:.2f} kJ/mol per molecule")
+FIRE(atoms, logfile=None).run(fmax=0.3, steps=300)
+print(f"E after minimisation:  {atoms.get_potential_energy() / nmol * kJ:.2f} kJ/mol per molecule, max |F| = {abs(atoms.get_forces()).max():.2f} eV/A")
+MaxwellBoltzmannDistribution(atoms, temperature_K=300, rng=np.random.default_rng(3)); Stationary(atoms)
+
+# stage 1: strong friction and a short step absorb the heat released while the lattice relaxes
+Langevin(atoms, 0.5 * dt_fs * units.fs, temperature_K=300, friction=0.1 / units.fs, rng=np.random.default_rng(4)).run(int(0.4 * n_steps))
+# stage 2: production-like run with weak friction
+dyn = Langevin(atoms, dt_fs * units.fs, temperature_K=300, friction=0.01 / units.fs, rng=np.random.default_rng(5))
+t0 = time.time()
+def log():
+    n = dyn.nsteps
+    print(f"step {n:5d}  t = {n * dt_fs / 1000:5.2f} ps  Epot/molecule = {atoms.get_potential_energy() / nmol * kJ:7.2f} kJ/mol  T = {atoms.get_temperature():6.1f} K")
+dyn.attach(log, interval=every)
+dyn.run(n_steps)
+print(f"done in {time.time() - t0:.0f} s ({(time.time() - t0) / n_steps * 1000:.0f} ms per step)")</code></pre><pre class="output">spce: 64 molecules, 192 atoms, box 12.430 A, density 0.997 g/cm^3
+E before minimisation: -19.44 kJ/mol per molecule
+E after minimisation:  -38.88 kJ/mol per molecule, max |F| = 0.25 eV/A
+step     0  t =  0.00 ps  Epot/molecule =  -42.06 kJ/mol  T =  319.6 K
+step   150  t =  0.30 ps  Epot/molecule =  -45.04 kJ/mol  T =  288.1 K
+step   300  t =  0.60 ps  Epot/molecule =  -44.85 kJ/mol  T =  278.7 K
+step   450  t =  0.90 ps  Epot/molecule =  -45.20 kJ/mol  T =  336.9 K
+step   600  t =  1.20 ps  Epot/molecule =  -43.58 kJ/mol  T =  318.9 K
+step   750  t =  1.50 ps  Epot/molecule =  -44.88 kJ/mol  T =  294.3 K
+step   900  t =  1.80 ps  Epot/molecule =  -44.61 kJ/mol  T =  295.6 K
+step  1050  t =  2.10 ps  Epot/molecule =  -44.77 kJ/mol  T =  299.2 K
+step  1200  t =  2.40 ps  Epot/molecule =  -44.55 kJ/mol  T =  272.7 K
+step  1350  t =  2.70 ps  Epot/molecule =  -44.96 kJ/mol  T =  287.6 K
+step  1500  t =  3.00 ps  Epot/molecule =  -43.49 kJ/mol  T =  316.0 K
+done in 89 s (59 ms per step)</pre></details>
+  <details class="code-cell"><summary>The same script for the flexible model: <code>python m9_boxes.py spcfw 64 0.5 2000 200</code></summary><pre class="output">spcfw: 64 molecules, 192 atoms, box 12.430 A, density 0.997 g/cm^3
+E before minimisation: -18.03 kJ/mol per molecule
+E after minimisation:  -37.45 kJ/mol per molecule, max |F| = 0.29 eV/A
+step     0  t =  0.00 ps  Epot/molecule =  -36.21 kJ/mol  T =  315.1 K
+step   200  t =  0.10 ps  Epot/molecule =  -37.02 kJ/mol  T =  365.5 K
+step   400  t =  0.20 ps  Epot/molecule =  -37.47 kJ/mol  T =  306.7 K
+step   600  t =  0.30 ps  Epot/molecule =  -38.33 kJ/mol  T =  332.8 K
+step   800  t =  0.40 ps  Epot/molecule =  -39.00 kJ/mol  T =  318.9 K
+step  1000  t =  0.50 ps  Epot/molecule =  -40.19 kJ/mol  T =  303.9 K
+step  1200  t =  0.60 ps  Epot/molecule =  -38.74 kJ/mol  T =  325.4 K
+step  1400  t =  0.70 ps  Epot/molecule =  -39.05 kJ/mol  T =  326.0 K
+step  1600  t =  0.80 ps  Epot/molecule =  -38.41 kJ/mol  T =  312.4 K
+step  1800  t =  0.90 ps  Epot/molecule =  -40.73 kJ/mol  T =  301.0 K
+step  2000  t =  1.00 ps  Epot/molecule =  -39.69 kJ/mol  T =  309.8 K
+done in 38 s (19 ms per step)</pre></details>
+  <p>Look at the logs. After minimisation the potential energy sits near −39 kJ/mol per molecule for SPC/E, and relaxes to about <strong>−45 kJ/mol per molecule</strong> while the thermostat holds 300 K (the instantaneous temperature of 64 rigid molecules fluctuates by about ±7 %). This is the energy of the hydrogen-bond network: each molecule takes part in about 3.5 hydrogen bonds, which works out at roughly 20–25 kJ/mol per bond. The flexible model prints a higher number, around −39 kJ/mol, because its potential energy <em>includes</em> the bond and angle energy of the vibrating molecules. Notice also the cost: the rigid run needed 4× fewer steps per picosecond, and ASE handled the constraints with the same <code>Langevin</code> class as before.</p>
+
+  <div id="lab-box"></div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">SPC/E uses larger charges than SPC (−0.8476 vs −0.82). What is the physical reason?</p>
+    <ol class="choices">
+      <li>The larger charges make the model more accurate for water vapour.</li>
+      <li>They give the molecule the larger average dipole it has in the liquid, as a mean-field stand-in for polarisation.</li>
+      <li>They compensate for using a cutoff in the Lennard-Jones term.</li>
+    </ol>
+    <div class="explain">A free water molecule has a dipole of 1.85 D, but in the liquid the electric field of its neighbours polarises it to roughly 2.4–3 D. A fixed-charge model cannot respond to its environment, so SPC/E bakes an average liquid-phase dipole (2.35 D) into the charges. The cost is that the model overbinds in the gas phase and the polarisation energy must be subtracted when computing the heat of vaporisation.</div>
+  </div>
+
+  <details class="exercise">
+    <summary>Exercise 2 — Rigid versus flexible in the browser</summary>
+    <p>In the water-box lab run SPC/E (rigid, 2 fs) and SPC/Fw (flexible, 0.5 fs) with 64 molecules and let each run for about 3 ps. Compare the first peak of $g_\mathrm{OO}(r)$, the mean dipole moment and the number of hydrogen bonds per molecule. Then switch to SPC/E with 27 molecules and watch the temperature trace: how do the fluctuations change with system size?</p>
+    <details class="reveal">
+      <summary>What you should see</summary>
+      <p>Both models put the first oxygen–oxygen peak at 2.77 Å (the O···O hydrogen-bond distance). Our runs gave a height of about 2.9 for SPC/E and a lower, broader peak of about 2.5 for SPC/Fw (rigid water is more sharply structured). SPC/E’s mean dipole is exactly 2.35 D because the molecule is rigid; SPC/Fw’s average is about 2.4 D, larger than the 2.19 D of its gas-phase geometry, because the molecule stretches and bends in the electric field of its neighbours: a flexible model polarises a little by itself. The number of hydrogen bonds <em>donated</em> per molecule is about 1.8 for SPC/E and 1.6 for SPC/Fw (3.2–3.6 counting both donating and accepting), as expected for a tetrahedral network. For temperature fluctuations, the canonical estimate is $\sqrt{2/N_f}$ with $N_f$ degrees of freedom: about 11 % for 27 rigid molecules ($N_f = 159$) and 5 % for 125 ($N_f = 747$).</p>
+    </details>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section class="step">
+  <hr>
+  <p>End of Module 9. We built a water model from its parts:</p>
+  <ul>
+    <li><strong>Bonded terms</strong> (bond stretch and angle bend) and the time-step limit they impose through the fastest vibration.</li>
+    <li><strong>Non-bonded terms</strong>: Lennard-Jones on oxygen and partial charges, with all intramolecular pairs excluded.</li>
+    <li>The <strong>SPC family</strong>: rigid SPC and SPC/E, flexible SPC/Fw; constraints (SHAKE/RATTLE/SETTLE).</li>
+    <li>A custom ASE <code>Calculator</code> and a vectorised constraint, used to run liquid water at 300 K.</li>
+  </ul>
+
+  <div class="takeaways">
+    <h2 data-toc="Key takeaways">📝 Key Takeaways</h2>
+    <ul>
+      <li>A molecular force field adds <strong>bonded terms</strong> (bonds, angles, dihedrals) to the non-bonded Lennard-Jones and Coulomb terms; non-bonded interactions inside a molecule are excluded.</li>
+      <li>The stiffest bond sets the time step: an O–H stretch has a period of about 9 fs, so flexible water needs 0.5–1 fs steps; <strong>rigid water</strong> (constraints) can use 2 fs.</li>
+      <li>SPC, SPC/E and SPC/Fw all use partial charges on O and H plus Lennard-Jones on O; SPC/E’s larger charges mimic liquid-phase polarisation.</li>
+      <li>In ASE, a force field is any <code>Calculator</code>; constraints are objects attached to the <code>Atoms</code>; the dynamics code is unchanged from Module 8.</li>
+    </ul>
+  </div>
+
+  <h3>References</h3>
+  <ol class="refs">
+    <li>[1] H. J. C. Berendsen, J. P. M. Postma, W. F. van Gunsteren, J. Hermans, “Interaction models for water in relation to protein hydration”, in <em>Intermolecular Forces</em>, ed. B. Pullman, Reidel, Dordrecht (1981), pp. 331–342 (book chapter, no DOI).</li>
+    <li>[2] H. J. C. Berendsen, J. R. Grigera, T. P. Straatsma, “The missing term in effective pair potentials”, <em>J. Phys. Chem.</em> <strong>91</strong>, 6269 (1987). <a href="https://doi.org/10.1021/j100308a038" target="_blank" rel="noopener">doi:10.1021/j100308a038</a></li>
+    <li>[3] Y. Wu, H. L. Tepper, G. A. Voth, “Flexible simple point-charge water model with improved liquid-state properties”, <em>J. Chem. Phys.</em> <strong>124</strong>, 024503 (2006). <a href="https://doi.org/10.1063/1.2136877" target="_blank" rel="noopener">doi:10.1063/1.2136877</a></li>
+    <li>[4] J.-P. Ryckaert, G. Ciccotti, H. J. C. Berendsen, “Numerical integration of the Cartesian equations of motion of a system with constraints: molecular dynamics of n-alkanes”, <em>J. Comput. Phys.</em> <strong>23</strong>, 327 (1977). <a href="https://doi.org/10.1016/0021-9991(77)90098-5" target="_blank" rel="noopener">doi:10.1016/0021-9991(77)90098-5</a></li>
+    <li>[5] H. C. Andersen, “Rattle: a ‘velocity’ version of the SHAKE algorithm for molecular dynamics calculations”, <em>J. Comput. Phys.</em> <strong>52</strong>, 24 (1983). <a href="https://doi.org/10.1016/0021-9991(83)90014-1" target="_blank" rel="noopener">doi:10.1016/0021-9991(83)90014-1</a></li>
+    <li>[6] S. Miyamoto, P. A. Kollman, “SETTLE: an analytical version of the SHAKE and RATTLE algorithm for rigid water models”, <em>J. Comput. Chem.</em> <strong>13</strong>, 952 (1992). <a href="https://doi.org/10.1002/jcc.540130805" target="_blank" rel="noopener">doi:10.1002/jcc.540130805</a></li>
+    <li>[7] G. Bussi, D. Donadio, M. Parrinello, “Canonical sampling through velocity rescaling”, <em>J. Chem. Phys.</em> <strong>126</strong>, 014101 (2007) (the thermostat used in the browser labs). <a href="https://doi.org/10.1063/1.2408420" target="_blank" rel="noopener">doi:10.1063/1.2408420</a></li>
+  </ol>
+
+  <h3>What to study next</h3>
+  <p>SPC, SPC/E and SPC/Fw are three of dozens of water models. <a href="10-water-models.html">Module 10 — The Water-Model Zoo</a> surveys the TIP family, flexible, polarisable and quantum models and explains where their parameters come from.</p>
+</section>
+
+</article>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+<script src="assets/js/physics.js"></script>
+<script src="assets/js/core.js"></script>
+<script src="assets/js/water.js"></script>
+<script>
+(function () {
+  "use strict";
+  const P = MD.phys, W = MD.water;
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const KCAL = 4.184, C_CM_FS = 2.99792458e-5;                   // cm/fs
+  const MU = (W.MO * W.MH) / (W.MO + W.MH);                       // O–H reduced mass (amu)
+
+  /** Radix-2 FFT power spectrum of a Hann-windowed real series (length must be a power of two). */
+  function fftPower(x) {
+    const N = x.length, re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) re[i] = x[i] * 0.5 * (1 - Math.cos((2 * Math.PI * i) / (N - 1)));
+    for (let i = 1, j = 0; i < N; i++) {
+      let bit = N >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { const t = re[i]; re[i] = re[j]; re[j] = t; }
+    }
+    for (let len = 2; len <= N; len <<= 1) {
+      const ang = (-2 * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang), h = len >> 1;
+      for (let i = 0; i < N; i += len) {
+        let cr = 1, ci = 0;
+        for (let k = 0; k < h; k++) {
+          const a = i + k, b = a + h;
+          const vr = re[b] * cr - im[b] * ci, vi = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - vr; im[b] = im[a] - vi; re[a] += vr; im[a] += vi;
+          const nc = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nc;
+        }
+      }
+    }
+    const out = new Float64Array(N >> 1);
+    for (let k = 0; k < out.length; k++) out[k] = re[k] * re[k] + im[k] * im[k];
+    return out;
+  }
+
+  // ================================================================ Lab 1: an O–H bond
+  MD.lab("#lab-bond", {
+    title: "An O–H bond as a spring: frequency and time step",
+    intro: "<p>Two atoms (O and H, reduced mass 0.949 amu) joined by a bond are stretched by an initial displacement and released from rest. The page integrates the motion with Velocity Verlet and shows the bond length and the energy error. The potential is harmonic, $\\tfrac12 k_b (r-r_0)^2$, or a Morse curve with the <em>same curvature</em> at the minimum and a well depth of 500 kJ/mol (illustrative, close to the O–H bond energy). Raise the time step until the integration fails.</p>",
+    controls: [
+      { type: "range", id: "kb", label: "Force constant k_b (kcal/mol/Å²)", min: 300, max: 1400, step: 1, value: 1059, fmt: (v) => `${v.toFixed(0)} (SPC/Fw: 1059.162)` },
+      { type: "select", id: "dt", label: "Time step (fs)", value: 1, options: [0.25, 0.5, 1, 2, 2.5, 3, 4, 6, 8] },
+      { type: "range", id: "amp", label: "Initial stretch (Å)", min: 0.02, max: 0.4, step: 0.01, value: 0.1 },
+      { type: "select", id: "pot", label: "Potential", value: "harm", options: [{ value: "harm", label: "harmonic ½k(r − r₀)²" }, { value: "morse", label: "Morse (same curvature, D = 500 kJ/mol)" }] },
+    ],
+    cols: 2,
+    panels: [{ id: "r", kind: "plot" }, { id: "e", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+    run(p, lab) {
+      const k = p.kb * KCAL, D = 500, a = Math.sqrt(k / (2 * D)), r0 = 1.012;
+      const V = (x) => (p.pot === "morse" ? D * (1 - Math.exp(-a * x)) ** 2 : 0.5 * k * x * x);
+      const F = (x) => (p.pot === "morse" ? -2 * D * a * Math.exp(-a * x) * (1 - Math.exp(-a * x)) : -k * x);
+      const dt = p.dt / W.TU_FS, n = Math.ceil(300 / p.dt);
+      let x = p.amp, v = 0, f = F(x);
+      const t = [0], rr = [r0 + x], E = [V(x)];
+      const E0 = V(x);
+      for (let i = 0; i < n; i++) {
+        v += (0.5 * dt * f) / MU; x += dt * v; f = F(x); v += (0.5 * dt * f) / MU;
+        t.push((i + 1) * p.dt); rr.push(r0 + x); E.push(V(x) + 0.5 * MU * v * v);
+        if (!isFinite(x) || Math.abs(x) > 5) break;
+      }
+      const dE = E.map((e) => e - E0);
+      const omega = Math.sqrt(k / MU) / 100;                 // rad/fs
+      const period = (2 * Math.PI) / omega, wn = omega / (2 * Math.PI * C_CM_FS), dtMax = 2 / omega;
+      const blown = !isFinite(x) || Math.abs(x) > 5;
+      lab.plot("r", [{ x: t, y: rr, name: "r(t)", color: "s1" }], {
+        title: { text: "Bond length" }, xaxis: { title: { text: "t (fs)" } },
+        yaxis: { title: { text: "r (Å)" }, range: blown ? undefined : [r0 - 0.45, r0 + 0.45] }, margin: { t: 40 },
+      });
+      lab.plot("e", [{ x: t, y: dE, name: "E(t) − E(0)", color: "s2" }], {
+        title: { text: "Energy error" }, xaxis: { title: { text: "t (fs)" } },
+        yaxis: { title: { text: "E(t) − E(0)  (kJ/mol)" }, range: blown ? undefined : [-Math.max(0.5, 1.2 * Math.max(...dE.map(Math.abs).filter(isFinite))), Math.max(0.5, 1.2 * Math.max(...dE.map(Math.abs).filter(isFinite)))] }, margin: { t: 40 },
+      });
+      const err = Math.max(...dE.map(Math.abs).filter(isFinite)) / Math.max(E0, 1e-9);
+      lab.readouts("ro", [
+        { k: "Vibration period", v: `${period.toFixed(2)} fs` },
+        { k: "Wavenumber", v: `${wn.toFixed(0)} cm⁻¹` },
+        { k: "Steps per period", v: (period / p.dt).toFixed(1), cls: period / p.dt < 10 ? "bad" : "good" },
+        { k: "Stability limit 2/ω", v: `${dtMax.toFixed(2)} fs` },
+        { k: "Largest energy error / E(0)", v: blown ? "blew up" : `${(100 * err).toFixed(2)} %`, cls: blown || err > 0.01 ? "bad" : "good" },
+      ]);
+    },
+    foot: "<p><strong>What to try.</strong> (1) At the default settings the period is 9.2 fs. The energy error is 0.7 % at 0.25 fs, 2.9 % at 0.5 fs and 12 % at 1 fs: it grows as the square of the time step. (2) Make the time step 2.5 fs: the run stays bounded (the limit is $2/\\omega \\approx 2.9$ fs) but the energy error is 70 %. At 3 fs and above the integration explodes. (3) Stretch the bond by 0.4 Å with the Morse potential: the oscillation becomes asymmetric and slower than the harmonic frequency, because a real bond is softer on the stretching side. (4) Halve $k_b$ and note the period grows by $\\sqrt2$.</p>",
+  });
+
+  // ================================================================ Lab 2: flexible monomer
+  (function () {
+    const par = W.models.spcfw, kb = par.kb, kt = par.ktheta, r0 = par.rOH, t0 = (par.theta * Math.PI) / 180;
+    const m = [W.MO, W.MH, W.MH], NS = 4096;
+    function geometry(r1, r2, th) {
+      const sh = Math.sin(th / 2), ch = Math.cos(th / 2);
+      return Float64Array.from([0, 0, 0, r1 * sh, r1 * ch, 0, -r2 * sh, r2 * ch, 0]);
+    }
+    function forces(pos, f) {
+      f.fill(0);
+      const v1 = [pos[3] - pos[0], pos[4] - pos[1], pos[5] - pos[2]], v2 = [pos[6] - pos[0], pos[7] - pos[1], pos[8] - pos[2]];
+      const r1 = Math.hypot(...v1), r2 = Math.hypot(...v2);
+      const e1 = v1.map((x) => x / r1), e2 = v2.map((x) => x / r2);
+      const f1 = -kb * (r1 - r0), f2 = -kb * (r2 - r0);
+      for (let k = 0; k < 3; k++) { f[3 + k] += f1 * e1[k]; f[k] -= f1 * e1[k]; f[6 + k] += f2 * e2[k]; f[k] -= f2 * e2[k]; }
+      let c = clamp(e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2], -0.999999, 0.999999);
+      const th = Math.acos(c), s = Math.sqrt(1 - c * c), pref = (kt * (th - t0)) / s;
+      for (let k = 0; k < 3; k++) {
+        const g1 = (pref * (e2[k] - c * e1[k])) / r1, g2 = (pref * (e1[k] - c * e2[k])) / r2;
+        f[3 + k] += g1; f[6 + k] += g2; f[k] -= g1 + g2;
+      }
+    }
+    function internals(pos) {
+      const v1 = [pos[3] - pos[0], pos[4] - pos[1], pos[5] - pos[2]], v2 = [pos[6] - pos[0], pos[7] - pos[1], pos[8] - pos[2]];
+      const r1 = Math.hypot(...v1), r2 = Math.hypot(...v2);
+      return [r1, r2, Math.acos(clamp((v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]) / (r1 * r2), -1, 1))];
+    }
+    function peak(S, lo, hi, dnu) {   // parabolic interpolation of the strongest bin in [lo, hi] cm⁻¹
+      let k0 = Math.round(lo / dnu), k1 = Math.min(S.length - 2, Math.round(hi / dnu)), best = k0;
+      for (let k = k0; k <= k1; k++) if (S[k] > S[best]) best = k;
+      const a = Math.log(S[best - 1] + 1e-300), b = Math.log(S[best] + 1e-300), c = Math.log(S[best + 1] + 1e-300);
+      const d = (0.5 * (a - c)) / (a - 2 * b + c);
+      return { nu: (best + (isFinite(d) ? d : 0)) * dnu, h: S[best] };
+    }
+    MD.lab("#lab-monomer", {
+      title: "Vibrations of a flexible H₂O molecule: Fourier transform of an MD run",
+      intro: "<p>One SPC/Fw molecule (the bond and angle terms above, no neighbours) is displaced in one of the vibrational coordinates and released. The page integrates 4096 Velocity Verlet steps, records the symmetric combination $r_1 + r_2$, the antisymmetric combination $r_1 - r_2$ and the angle $\\theta$, and Fourier transforms each. Peaks appear at the vibrational frequencies; the dotted lines are the frequencies that ASE’s <code>Vibrations</code> printed above.</p>",
+      controls: [
+        { type: "select", id: "mode", label: "Initial displacement", value: "all", options: [{ value: "sym", label: "symmetric stretch (both bonds longer)" }, { value: "asym", label: "asymmetric stretch (one longer, one shorter)" }, { value: "bend", label: "bend (opened angle)" }, { value: "all", label: "a mixture of all three" }] },
+        { type: "range", id: "amp", label: "Displacement (Å; bend: Å ÷ r₀ in rad)", min: 0.01, max: 0.12, step: 0.01, value: 0.04 },
+        { type: "select", id: "dt", label: "Time step (fs)", value: 0.5, options: [0.1, 0.25, 0.5, 1, 2] },
+      ],
+      cols: 2,
+      panels: [{ id: "tr", kind: "plot" }, { id: "th", kind: "plot" }, { id: "sp", kind: "plot", span: true }, { id: "ro", kind: "readouts", span: true }],
+      run(p, lab) {
+        const a = p.amp, dtU = p.dt / W.TU_FS;
+        let r1 = r0, r2 = r0, th = t0;
+        if (p.mode === "sym") { r1 += a; r2 += a; }
+        else if (p.mode === "asym") { r1 += a; r2 -= a; }
+        else if (p.mode === "bend") th += a / r0;
+        else { r1 += a; r2 -= 0.6 * a; th += (0.6 * a) / r0; }
+        const pos = geometry(r1, r2, th), vel = new Float64Array(9), f = new Float64Array(9);
+        forces(pos, f);
+        const t = new Float64Array(NS), s1 = new Float64Array(NS), s2 = new Float64Array(NS), s3 = new Float64Array(NS), R1 = [], R2 = [], TH = [], T = [];
+        for (let i = 0; i < NS; i++) {
+          const q = internals(pos);
+          t[i] = i * p.dt; s1[i] = q[0] + q[1] - 2 * r0; s2[i] = q[0] - q[1]; s3[i] = q[2] - t0;
+          if (i * p.dt <= 100) { T.push(t[i]); R1.push(q[0]); R2.push(q[1]); TH.push((q[2] * 180) / Math.PI); }
+          for (let j = 0; j < 9; j++) vel[j] += (0.5 * dtU * f[j]) / m[(j / 3) | 0];
+          for (let j = 0; j < 9; j++) pos[j] += dtU * vel[j];
+          forces(pos, f);
+          for (let j = 0; j < 9; j++) vel[j] += (0.5 * dtU * f[j]) / m[(j / 3) | 0];
+        }
+        lab.plot("tr", [{ x: T, y: R1, name: "r₁", color: "s1" }, { x: T, y: R2, name: "r₂", color: "s2" }], {
+          title: { text: "O–H bond lengths, first 100 fs" }, xaxis: { title: { text: "t (fs)" } }, yaxis: { title: { text: "r (Å)" } }, legend: { y: 1.14 }, margin: { t: 64 },
+        });
+        lab.plot("th", [{ x: T, y: TH, name: "θ", color: "s3" }], {
+          title: { text: "H–O–H angle, first 100 fs" }, xaxis: { title: { text: "t (fs)" } }, yaxis: { title: { text: "θ (degrees)" } }, margin: { t: 40 },
+        });
+        const dnu = 1 / (NS * p.dt * C_CM_FS);
+        const S = [fftPower(s1), fftPower(s2), fftPower(s3)], nu = [], norm = [];
+        for (let k = 0; k < S[0].length; k++) nu.push(k * dnu);
+        for (const s of S) { const mx = Math.max(...s) || 1; norm.push(Array.from(s, (v) => v / mx)); }
+        const kmax = Math.floor(5000 / dnu);
+        const sl = (a) => a.slice(0, kmax);
+        lab.plot("sp", [
+          { x: sl(nu), y: sl(norm[0]), name: "r₁ + r₂ (symmetric stretch)", color: "s1" },
+          { x: sl(nu), y: sl(norm[1]), name: "r₁ − r₂ (asymmetric stretch)", color: "s2" },
+          { x: sl(nu), y: sl(norm[2]), name: "θ (bend)", color: "s3" },
+        ], {
+          title: { text: "Power spectrum of the internal coordinates (each normalised to its own maximum)" },
+          xaxis: { title: { text: "Wavenumber (cm⁻¹)" }, range: [0, 5000] }, yaxis: { title: { text: "Normalised power" }, type: "log", range: [-4, 0.2] },
+          shapes: [1371, 3587, 3671].map((x) => ({ type: "line", x0: x, x1: x, yref: "paper", y0: 0, y1: 1, line: { color: "ink-3", dash: "dot", width: 1 } })),
+          legend: { y: 1.16 }, margin: { t: 70 },
+        });
+        const bend = peak(S[2], 800, 2400, dnu), sym = peak(S[0], 3000, 4400, dnu), asym = peak(S[1], 3000, 4400, dnu);
+        lab.readouts("ro", [
+          { k: "Resolution of the spectrum", v: `${dnu.toFixed(1)} cm⁻¹ (4096 steps = ${((NS * p.dt) / 1000).toFixed(2)} ps)` },
+          { k: "Bend (peak of the θ series)", v: `${bend.nu.toFixed(0)} cm⁻¹ · ASE Vibrations: 1371` },
+          { k: "Symmetric stretch (peak of r₁ + r₂)", v: `${sym.nu.toFixed(0)} cm⁻¹ · ASE: 3587` },
+          { k: "Asymmetric stretch (peak of r₁ − r₂)", v: `${asym.nu.toFixed(0)} cm⁻¹ · ASE: 3671` },
+        ]);
+      },
+      foot: "<p><strong>What to try.</strong> (1) Choose <em>asymmetric stretch</em>: the red curve (r₁ − r₂) has one strong peak near 3670 cm⁻¹ and the other two series have almost nothing. Choose <em>symmetric stretch</em>: the blue curve peaks near 3590 cm⁻¹ and a weak bend peak appears in the angle series, because the stretch and the bend are coupled through the geometry. (2) The three peaks agree with ASE’s analytic normal modes to within the spectral resolution plus a small anharmonic shift (the amplitude is finite). (3) Increase the displacement to 0.12 Å: the peaks shift by a few cm⁻¹, the effect of anharmonicity. (4) Set the time step to 2 fs: the spectrum is wrong, the 9 fs stretch is badly sampled.</p>",
+    });
+  })();
+
+  // ================================================================ Lab 3: a box of water
+  (function () {
+    const NRELAX = 500;
+    let sim = null, view = null, frame = 0, built = {};
+
+    function makeViewer(lab, id, redraw) {
+      const cv = lab.panel(id), v = { yaw: 0.6, pitch: 0.35, spin: 0.004 };
+      cv.style.touchAction = "pan-y";
+      let drag = null;
+      cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; try { cv.setPointerCapture(e.pointerId); } catch (err) { /* */ } cv.style.cursor = "grabbing"; });
+      cv.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        v.yaw += (e.clientX - drag.x) * 0.01; v.pitch = clamp(v.pitch + (e.clientY - drag.y) * 0.01, -1.45, 1.45);
+        drag = { x: e.clientX, y: e.clientY }; redraw();
+      });
+      const end = () => { drag = null; cv.style.cursor = ""; };
+      cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+      v.tick = () => { if (!drag) v.yaw += v.spin; };
+      return v;
+    }
+    function drawWater(lab, view, s, label) {
+      const { ctx, w, h } = lab.canvas("cv");
+      ctx.clearRect(0, 0, w, h);
+      const L = s.L, c = L / 2, R = 0.87 * L, D = 3.4 * L;
+      const cy = Math.cos(view.yaw), sy = Math.sin(view.yaw), cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
+      const f = (0.46 * Math.min(w, h) * (D - R)) / R, out = [0, 0, 0, 0];
+      const pr = (x, y, z) => {
+        x -= c; y -= c; z -= c;
+        const x1 = x * cy + z * sy, z1 = -x * sy + z * cy, y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp, k = f / (D - z2);
+        out[0] = w / 2 + x1 * k; out[1] = h / 2 - y2 * k; out[2] = z2; out[3] = k; return out;
+      };
+      const corners = [];
+      for (let i = 0; i < 8; i++) { const q = pr((i & 1) * L, ((i >> 1) & 1) * L, ((i >> 2) & 1) * L); corners.push([q[0], q[1]]); }
+      ctx.strokeStyle = MD.css("--axis"); ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) for (const b of [1, 2, 4]) if (!(i & b)) { ctx.moveTo(corners[i][0], corners[i][1]); ctx.lineTo(corners[i | b][0], corners[i | b][1]); }
+      ctx.stroke();
+      const n = 3 * s.N, X = new Float64Array(n), Y = new Float64Array(n), Z = new Float64Array(n), K = new Float64Array(n), order = [];
+      for (let i = 0; i < n; i++) { pr(s.pos[3 * i], s.pos[3 * i + 1], s.pos[3 * i + 2]); X[i] = out[0]; Y[i] = out[1]; Z[i] = out[2]; K[i] = out[3]; order.push(i); }
+      order.sort((a, b) => Z[a] - Z[b]);
+      const colO = MD.color("s8"), colH = MD.css("--surface-3"), ink = MD.css("--ink-3");
+      ctx.lineWidth = 2; ctx.strokeStyle = ink;
+      for (let m = 0; m < s.N; m++) for (const hh of [1, 2]) {
+        const a = 3 * m, b = 3 * m + hh, t = clamp((Z[a] + R) / (2 * R), 0, 1);
+        ctx.globalAlpha = 0.25 + 0.6 * t;
+        ctx.beginPath(); ctx.moveTo(X[a], Y[a]); ctx.lineTo(X[b], Y[b]); ctx.stroke();
+      }
+      for (const i of order) {
+        if (!isFinite(X[i]) || !isFinite(Y[i])) continue;
+        const isO = i % 3 === 0, t = clamp((Z[i] + R) / (2 * R), 0, 1), r = Math.max(1.5, (isO ? 0.78 : 0.4) * K[i]);
+        ctx.globalAlpha = 0.3 + 0.7 * t; ctx.fillStyle = isO ? colO : colH;
+        ctx.beginPath(); ctx.arc(X[i], Y[i], r, 0, 2 * Math.PI); ctx.fill();
+        if (!isO) { ctx.strokeStyle = ink; ctx.lineWidth = 1; ctx.stroke(); ctx.lineWidth = 2; }
+      }
+      ctx.globalAlpha = 1; ctx.fillStyle = MD.css("--ink-3"); ctx.font = "12px system-ui, sans-serif";
+      ctx.fillText(label, 10, h - 10); ctx.fillText("drag to rotate", w - 92, 18);
+    }
+
+    function build(p) {
+      const rng = P.rng(2024), s = W.create({ model: p.model, N: p.N, rho: 0.997, rc: 9 });
+      W.lattice(s, rng); W.initVelocities(s, p.T, rng);
+      sim = { s, rng, i: 0, phase: "relax", status: "ready", t: [], E: [], Tk: [], rdf: W.rdfOO(100, s.L / 2), tEq: 1000, blown: false, hb: [], dip: [] };
+      built = { model: p.model, N: p.N };
+    }
+    function advance(p, spf) {
+      const s = sim.s, tau = 0.5;
+      for (let n = 0; n < spf && sim.status === "running"; n++) {
+        if (sim.phase === "relax") {
+          if (!W.relaxStep(s, sim.rng, p.T, sim.i, NRELAX)) { sim.status = "blown"; return; }
+          if (++sim.i >= NRELAX) { sim.phase = "run"; sim.i = 0; s.time = 0; s.step = 0; }
+        } else {
+          if (!W.step(s, sim.rng, { T: p.T, tauPs: tau })) { sim.status = "blown"; return; }
+          sim.i++;
+          if (sim.i % 10 === 0) {
+            sim.t.push((s.step * s.dtFs) / 1000); sim.E.push(W.epot(s) / s.N); sim.Tk.push(W.temperature(s));
+            if (sim.t.length > 3000) { sim.t.shift(); sim.E.shift(); sim.Tk.shift(); }
+          }
+          if (sim.i % 25 === 0 && s.step * s.dtFs >= sim.tEq) { sim.rdf.add(s); sim.hb.push(W.hbonds(s)); sim.dip.push(W.meanDipole(s)); }
+        }
+      }
+    }
+    function draw(lab) {
+      const s = sim.s;
+      drawWater(lab, view, s, `${s.N} ${s.par.name} molecules · L = ${s.L.toFixed(2)} Å · ${sim.phase === "relax" ? "relaxing the lattice…" : "dynamics at " + lab.p.T + " K"}`);
+    }
+    function report(lab) {
+      const s = sim.s, p = lab.p;
+      const ts = sim.t, mean = (a) => (a.length ? P.mean(a) : NaN);
+      lab.plot("e", [{ x: ts, y: sim.E, name: "E_pot / N", color: "s1" }], {
+        title: { text: "Potential energy per molecule" }, xaxis: { title: { text: "t (ps)" } }, yaxis: { title: { text: "kJ/mol" } }, margin: { t: 40 },
+      });
+      lab.plot("t", [{ x: ts, y: sim.Tk, name: "T", color: "s2" }], {
+        title: { text: "Instantaneous temperature" }, xaxis: { title: { text: "t (ps)" } }, yaxis: { title: { text: "K" } },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: p.T, y1: p.T, line: { color: "ink-3", dash: "dash", width: 1 } }], margin: { t: 40 },
+      });
+      const tr = [];
+      let an = null;
+      if (sim.rdf.frames) {
+        const g = sim.rdf.result();
+        tr.push({ x: g.r, y: g.g, name: `${sim.rdf.frames} frames`, color: "s1" });
+        let k = 0; for (let i = 1; i < g.g.length; i++) if (g.g[i] > g.g[k]) k = i;
+        an = { r: g.r[k], h: g.g[k] };
+      }
+      lab.plot("g", tr, {
+        title: { text: "O–O radial distribution function (after 1 ps)" }, xaxis: { title: { text: "r (Å)" }, range: [0, s.L / 2] }, yaxis: { title: { text: "g_OO(r)" }, rangemode: "tozero" },
+        shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: "ink-3", dash: "dash", width: 1 } }], margin: { t: 40 },
+      });
+      const Ep = ts.length > 20 ? mean(sim.E.slice(Math.floor(sim.E.length / 2))) : NaN;
+      lab.readouts("ro", [
+        { k: "Run", v: sim.status === "blown" ? "blew up" : sim.phase === "relax" ? `relaxing ${sim.i} / ${NRELAX}` : `${((s.step * s.dtFs) / 1000).toFixed(2)} ps (Δt = ${s.dtFs} fs)`, cls: sim.status === "blown" ? "bad" : "" },
+        { k: "⟨E_pot⟩ / molecule (second half)", v: isFinite(Ep) ? `${Ep.toFixed(1)} kJ/mol` : "—" },
+        { k: "⟨T⟩ (second half)", v: ts.length > 20 ? `${mean(sim.Tk.slice(Math.floor(sim.Tk.length / 2))).toFixed(0)} K` : "—" },
+        { k: "First g_OO peak", v: an ? `${an.r.toFixed(2)} Å, height ${an.h.toFixed(2)}` : "—" },
+        { k: "Mean molecular dipole", v: sim.dip.length ? `${mean(sim.dip).toFixed(2)} D` : "—" },
+        { k: "H-bonds donated per molecule", v: sim.hb.length ? mean(sim.hb).toFixed(2) : "—" },
+      ]);
+    }
+    MD.lab("#lab-box", {
+      title: "A box of liquid water in your browser",
+      intro: "<p>The same models, the same Ewald sum and the same constraints as the ASE run above, but with an even smaller box. The lattice (60 candidate orientations per molecule) is relaxed for 500 steps, and then Velocity Verlet dynamics with a velocity-rescaling thermostat at the chosen temperature runs at 0.997 g/cm³. After 1 ps, $g_\\mathrm{OO}(r)$, the dipole and the hydrogen-bond count are averaged. Rigid models use SHAKE/RATTLE with a 2 fs time step, SPC/Fw uses 0.5 fs.</p>",
+      controls: [
+        { type: "select", id: "model", label: "Model", value: "spce", options: [{ value: "spce", label: "SPC/E (rigid, 2 fs)" }, { value: "spc", label: "SPC (rigid, 2 fs)" }, { value: "spcfw", label: "SPC/Fw (flexible, 0.5 fs)" }] },
+        { type: "select", id: "N", label: "Number of molecules", value: 64, options: [27, 64, 125] },
+        { type: "range", id: "T", label: "Temperature (K)", min: 250, max: 400, step: 5, value: 300 },
+        { type: "range", id: "spf", label: "MD steps per animation frame", min: 1, max: 20, step: 1, value: 4 },
+        { type: "buttons", items: [{ id: "play", label: "Run / pause" }, { id: "reset", label: "Reset", secondary: true }] },
+      ],
+      cols: 2,
+      panels: [{ id: "cv", kind: "canvas", aspect: 1.1 }, { id: "g", kind: "plot" }, { id: "e", kind: "plot" }, { id: "t", kind: "plot" }, { id: "ro", kind: "readouts", span: true }],
+      init(lab) {
+        view = makeViewer(lab, "cv", () => draw(lab));
+        build(lab.p);
+        lab.anim = lab.loop(() => {
+          advance(lab.p, lab.p.spf); view.tick(); draw(lab);
+          const over = sim.status === "blown";
+          if (++frame % 6 === 0 || over) report(lab);
+          if (over) return false;
+        });
+        whenHidden(lab.root, () => { if (lab.anim.running) { sim.status = "paused"; lab.anim.stop(); } });
+      },
+      run(p, lab) {
+        if (p.model !== built.model || p.N !== built.N) { lab.anim.stop(); build(p); }
+        draw(lab); report(lab);
+      },
+      onButton(id, p, lab) {
+        if (id === "play") {
+          if (lab.anim.running) { sim.status = "paused"; lab.anim.stop(); return; }
+          if (sim.status === "blown") build(p);
+          sim.status = "running"; lab.anim.start();
+        }
+        if (id === "reset") { lab.anim.stop(); build(p); draw(lab); report(lab); }
+      },
+      foot: "<p><strong>What to try.</strong> (1) Press <em>Run</em> with SPC/E and 64 molecules. During the 500 relaxation steps the potential energy falls from about −20 to −45 kJ/mol per molecule as hydrogen bonds form; after that it fluctuates around −45 kJ/mol while $T$ fluctuates around 300 K. (2) After a few picoseconds $g_\\mathrm{OO}(r)$ shows a first peak near 2.75 Å (height ≈ 3, the hydrogen-bonded neighbours), a shallow minimum near 3.4 Å and a weak second shell near 4.5 Å. Compare it with the LJ liquid of Module 8: water’s first shell holds about 4 neighbours, not 12. (3) Switch to the flexible model and compare the dipole and the energy. (4) Heat to 400 K: the first peak lowers and the hydrogen-bond count falls.</p>",
+    });
+    function whenHidden(el, fn) {
+      if (!("IntersectionObserver" in window)) return;
+      new IntersectionObserver((es) => { if (!es[0].isIntersecting) fn(); }).observe(el);
+    }
+  })();
+})();
+</script>
+</body>
+</html>
